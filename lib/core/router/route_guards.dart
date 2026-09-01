@@ -20,10 +20,10 @@ abstract final class RouteGuards {
         location.startsWith('${RoutePaths.orderDocument}/');
     final isPublic = isSplash || isLogin || isOnboarding || isDocument;
 
-    // Session restoration — stay on splash, except public document links.
+    // Session restoration — preserve the browser URL during bootstrap so a
+    // refresh on /hub/settings (etc.) does not bounce through splash → home.
     if (auth.isBootstrapping) {
-      if (isDocument) return null;
-      return isSplash ? null : RoutePaths.splash;
+      return null;
     }
 
     // Auth / provisioning in flight — keep user on the public entry screen.

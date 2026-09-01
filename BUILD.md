@@ -74,7 +74,36 @@ flutter build web --release --dart-define-from-file=.env.release
 
 Output: `build/web/`
 
-Path-based URLs are enabled (`/sello/...`, `/hub/...`). `vercel.json` rewrites unknown paths to `index.html` so a refresh on a nested route does not 404. Deploy is not part of this step.
+Path-based URLs are enabled (`/sello/...`, `/hub/...`). Root `vercel.json` rewrites unknown paths to `index.html` so a refresh on a nested route does not 404. Do not put a second `vercel.json` under `web/` — Flutter copies that folder into `build/web/` and it conflicts with the project config.
+
+### Vercel (GitHub production)
+
+Connect `ayraudhaya-cyber/sello`. Root `vercel.json` already sets:
+
+| Setting | Value |
+| --- | --- |
+| Framework Preset | Other |
+| Build Command | `bash scripts/vercel_build.sh` |
+| Output Directory | `build/web` |
+| Install Command | `echo Skipping npm install` |
+
+Leave those fields in the Vercel dashboard empty (or matching the table) so they do not override the repo.
+
+The build script installs Flutter **3.47.2**, runs `flutter build web --release`, and passes only:
+
+```bash
+--dart-define=SUPABASE_URL=...
+--dart-define=SUPABASE_ANON_KEY=...
+```
+
+Set these **Vercel Project Environment Variables** (Production). They are public client values, not server secrets:
+
+| Variable | Required |
+| --- | --- |
+| `SUPABASE_URL` | Yes |
+| `SUPABASE_ANON_KEY` | Yes |
+
+Do **not** set `DX_*`, `TEXTLK_API_TOKEN`, or `SUPABASE_SERVICE_ROLE_KEY` on Vercel. Do **not** use `--dart-define-from-file=.env` for this build. Optional local override: `FLUTTER_VERSION` (defaults to 3.47.2).
 
 If the app will be served from a subpath, add `--base-href=/your-subpath/`.
 

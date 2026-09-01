@@ -1,7 +1,7 @@
 name: sello
 description: B2B Sales Order Management for wholesalers and distributors.
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.3+4
 
 environment:
   sdk: ^3.12.2
@@ -14,8 +14,23 @@ dependencies:
   go_router: ^15.1.2
   supabase_flutter: ^2.16.0
   google_fonts: ^6.2.1
-  flutter_dotenv: ^5.2.1
+  flutter_web_plugins:
+    sdk: flutter
   equatable: ^2.0.7
+  image_picker: ^1.1.2
+  intl: ^0.20.2
+  image: ^4.9.1
+  crop_your_image: ^2.0.0
+  http: ^1.2.2
+  geolocator: ^14.0.3
+  connectivity_plus: ^7.3.1
+  shared_preferences: ^2.5.5
+  path_provider: ^2.1.6
+  uuid: ^4.6.0
+  lottie: ^3.5.1
+  web: ^1.1.1
+  url_launcher: ^6.3.1
+  package_info_plus: ^10.2.1
 
 dev_dependencies:
   flutter_test:
@@ -39,6 +54,16 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
   assets:
-    - .env
-    - .env.example
     - assets/brand/
+    - assets/animations/location_route.json
+  fonts:
+    - family: Google Sans Flex
+      fonts:
+        - asset: assets/fonts/GoogleSansFlex-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/GoogleSansFlex-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/GoogleSansFlex-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/GoogleSansFlex-Bold.ttf
+          weight: 700

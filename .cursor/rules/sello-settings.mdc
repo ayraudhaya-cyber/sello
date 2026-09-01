@@ -1,0 +1,32 @@
+---
+description: Sello Settings UI — grouping, scanability, progressive disclosure, and consistent save actions
+globs: lib/features/hub/settings/**
+alwaysApply: false
+---
+
+# Sello Settings UI
+
+Business, Branding, and Product Details are the **Settings design reference**. Apply this to every settings tab and any new settings screen. Do not invent a parallel visual system.
+
+Core principle: **do not reduce capability; reduce cognitive load.**
+
+## Layout
+
+- Group related settings into `SettingsGroupCard`s (heading + short description).
+- Pair related controls with `SettingsTwoUp` / `SettingsTwoColumn` on wide screens; stack below 640px.
+- Use `SettingsCompactField` (label → optional info hint → control). Do not repeat the same label inside the control. Secondary explanations go on `SelloInfoHint`, not under the label. Never use the hint/helper to say “Optional”. Mark required fields with `required: true` (pinkish `*` after the label). Optional fields stay unlabeled.
+- Use `SettingsSubgroup` for clusters inside a card. `SettingsExpandable` for reserved or advanced options. `SettingsActionBar` for Save / Discard — sticky full-width footer, only when the page has a draft. Auto-save pages (e.g. personal inbox prefs) have no save bar.
+- One contextual reset per page/section (e.g. Reset to Sello theme), never per field.
+
+Hierarchy: **card title → short explanation → setting label (required `*` if needed; info hint only for real help) → control.** Keep validation, warnings, required messages, and live status visible under the control.
+
+## Behaviour
+
+- Keep common settings visible. Hide advanced/future options behind progressive disclosure.
+- Compact cards and controls; comfortable tap targets. Restrained `outlinePanel` borders. No decorative dashboards.
+- Reuse `lib/features/hub/settings/presentation/widgets/settings_chrome.dart`. Match Sello typography, radii, colour, and motion.
+- Do not force every tab into the same skeleton. Reliability (status + lists) and Product Details (search + enable cards) may differ if they stay easier to scan.
+
+## Safety
+
+Presentation only unless the user asks otherwise: no business logic, permissions, entitlements, database, branding implementation, or default theme changes. Keep existing settings and tests working.

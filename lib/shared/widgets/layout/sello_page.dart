@@ -5,20 +5,29 @@ import 'package:sello/shared/widgets/cards/sello_card.dart';
 import 'package:sello/shared/widgets/states/sello_empty_state.dart';
 
 /// Consistent page header for feature screens.
+///
+/// Hierarchy is purely typographic: an optional uppercase eyebrow, a tight
+/// display-weight title, and a measured subtitle in secondary text.
 class SelloSectionHeader extends StatelessWidget {
   const SelloSectionHeader({
     super.key,
     required this.title,
+    this.eyebrow,
     this.subtitle,
     this.action,
   });
 
   final String title;
+  final String? eyebrow;
   final String? subtitle;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = context.isMobile
+        ? context.texts.headlineMedium
+        : context.texts.headlineLarge;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -26,13 +35,23 @@ class SelloSectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: context.texts.headlineMedium),
+              if (eyebrow != null) ...[
+                Text(eyebrow!.toUpperCase(), style: AppTypography.eyebrow),
+                const SizedBox(height: AppSpacing.xs),
+              ],
+              Text(
+                title,
+                style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  subtitle!,
-                  style: context.texts.bodyMedium?.copyWith(
-                    color: context.selloColors.textSecondary,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: Text(
+                    subtitle!,
+                    style: context.texts.bodyMedium?.copyWith(
+                      color: context.selloColors.textSecondary,
+                    ),
                   ),
                 ),
               ],
@@ -62,6 +81,9 @@ class SelloPageContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final gutter = context.pagePadding;
+    final vertical = context.isMobile ? AppSpacing.lg : AppSpacing.xl;
+
     final content = Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -69,7 +91,15 @@ class SelloPageContainer extends StatelessWidget {
           maxWidth: maxWidth ?? context.contentMaxWidth,
         ),
         child: Padding(
-          padding: padding ?? EdgeInsets.all(context.pagePadding),
+          // Extra bottom padding keeps the last card clear of the viewport
+          // edge when a page scrolls.
+          padding: padding ??
+              EdgeInsets.fromLTRB(
+                gutter,
+                vertical,
+                gutter,
+                vertical + AppSpacing.lg,
+              ),
           child: child,
         ),
       ),
@@ -140,7 +170,6 @@ class SelloPlaceholderPage extends StatelessWidget {
           SelloSectionHeader(title: title, subtitle: description),
           const SizedBox(height: AppSpacing.xl),
           SelloCard(
-            elevation: SelloCardElevation.soft,
             child: SelloEmptyState(
               title: 'Module foundation ready',
               message:

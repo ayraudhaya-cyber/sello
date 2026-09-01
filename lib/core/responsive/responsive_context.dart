@@ -21,10 +21,15 @@ extension ResponsiveContext on BuildContext {
       };
 
   /// Max content width for readable desktop layouts.
+  ///
+  /// Wide monitors get a larger canvas so dashboards stop feeling stranded
+  /// in the middle of the screen, while page gutters keep content centered
+  /// and away from the window edges.
   double get contentMaxWidth => switch (windowSize) {
         AppWindowSize.mobile => double.infinity,
-        AppWindowSize.tablet => 960,
-        AppWindowSize.desktop => 1280,
+        AppWindowSize.tablet => 1040,
+        AppWindowSize.desktop =>
+          AppBreakpoints.isWideDesktop(screenWidth) ? 1520 : 1360,
       };
 
   T responsiveValue<T>({

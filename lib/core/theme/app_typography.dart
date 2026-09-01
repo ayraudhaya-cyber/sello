@@ -1,32 +1,43 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:sello/core/theme/app_colors.dart';
 
-/// Plus Jakarta Sans typography system (loaded via google_fonts).
+/// Google Sans Flex — matched to the owner dashboard HTML.
 abstract final class AppTypography {
-  static String get fontFamily => GoogleFonts.plusJakartaSans().fontFamily!;
+  static const String fontFamily = 'Google Sans Flex';
 
-  static TextTheme get textTheme {
-    final base = GoogleFonts.plusJakartaSansTextTheme();
+  static TextTheme? _textTheme;
+
+  static TextTheme get textTheme => _textTheme ??= _buildTextTheme();
+
+  static TextTheme _buildTextTheme() {
+    TextStyle base(double size, FontWeight weight, double tracking,
+        {double height = 1.45}) {
+      return TextStyle(
+        fontFamily: fontFamily,
+        fontSize: size,
+        fontWeight: weight,
+        letterSpacing: tracking,
+        height: height,
+        color: AppColors.textPrimary,
+      );
+    }
+
     return TextTheme(
-      displayLarge: _display(base.displayLarge, 40, FontWeight.w600, -0.5),
-      displayMedium: _display(base.displayMedium, 32, FontWeight.w600, -0.4),
-      displaySmall: _display(base.displaySmall, 28, FontWeight.w600, -0.3),
-      headlineLarge: _style(base.headlineLarge, 24, FontWeight.w600, -0.2),
-      headlineMedium: _style(base.headlineMedium, 20, FontWeight.w600, -0.15),
-      headlineSmall: _style(base.headlineSmall, 18, FontWeight.w600, -0.1),
-      titleLarge: _style(base.titleLarge, 18, FontWeight.w600, -0.1),
-      titleMedium: _style(base.titleMedium, 16, FontWeight.w600, -0.05),
-      titleSmall: _style(base.titleSmall, 14, FontWeight.w600, 0),
-      bodyLarge: _style(base.bodyLarge, 16, FontWeight.w400, 0.1),
-      bodyMedium: _style(base.bodyMedium, 14, FontWeight.w400, 0.1),
-      bodySmall: _style(base.bodySmall, 12, FontWeight.w400, 0.15),
-      labelLarge: _style(base.labelLarge, 14, FontWeight.w600, 0.1),
-      labelMedium: _style(base.labelMedium, 12, FontWeight.w600, 0.2),
-      labelSmall: _style(base.labelSmall, 11, FontWeight.w500, 0.3),
-    ).apply(
-      bodyColor: AppColors.textPrimary,
-      displayColor: AppColors.textPrimary,
+      displayLarge: base(40, FontWeight.w700, -0.03 * 40, height: 1.15),
+      displayMedium: base(32, FontWeight.w600, -0.03 * 32, height: 1.2),
+      displaySmall: base(28, FontWeight.w600, -0.03 * 28, height: 1.2),
+      headlineLarge: base(24, FontWeight.w600, -0.02 * 24, height: 1.3),
+      headlineMedium: base(20, FontWeight.w600, -0.02 * 20, height: 1.3),
+      headlineSmall: base(18, FontWeight.w600, -0.02 * 18, height: 1.35),
+      titleLarge: base(18, FontWeight.w600, -0.02 * 18, height: 1.35),
+      titleMedium: base(16, FontWeight.w600, -0.01 * 16, height: 1.4),
+      titleSmall: base(14, FontWeight.w600, -0.01 * 14, height: 1.35),
+      bodyLarge: base(16, FontWeight.w400, 0, height: 1.5),
+      bodyMedium: base(14, FontWeight.w400, 0, height: 1.5),
+      bodySmall: base(12.5, FontWeight.w400, 0, height: 1.45),
+      labelLarge: base(14, FontWeight.w600, 0, height: 1.3),
+      labelMedium: base(12.5, FontWeight.w600, 0, height: 1.3),
+      labelSmall: base(10.5, FontWeight.w600, 0.05 * 10.5, height: 1.25),
     );
   }
 
@@ -39,36 +50,62 @@ abstract final class AppTypography {
         color: AppColors.textSecondary,
       );
   static TextStyle get button => textTheme.labelLarge!.copyWith(
-        letterSpacing: 0.2,
+        letterSpacing: 0,
       );
 
-  static TextStyle _display(
-    TextStyle? base,
-    double size,
-    FontWeight weight,
-    double spacing,
-  ) {
-    return (base ?? const TextStyle()).copyWith(
-      fontSize: size,
-      fontWeight: weight,
-      height: 1.2,
-      letterSpacing: spacing,
-      color: AppColors.textPrimary,
-    );
-  }
+  /// KPI / meta uppercase labels — 10.5 / w600 / 0.05em.
+  static TextStyle get eyebrow => textTheme.labelSmall!.copyWith(
+        color: AppColors.textFaint,
+        letterSpacing: 0.05 * 10.5,
+        fontWeight: FontWeight.w600,
+      );
 
-  static TextStyle _style(
-    TextStyle? base,
-    double size,
-    FontWeight weight,
-    double spacing,
-  ) {
-    return (base ?? const TextStyle()).copyWith(
-      fontSize: size,
-      fontWeight: weight,
-      height: 1.45,
-      letterSpacing: spacing,
-      color: AppColors.textPrimary,
+  /// Chart / hero card label — 10.5 / w700 / 0.14em (Business Performance).
+  static TextStyle get heroEyebrow => const TextStyle(
+        fontFamily: fontFamily,
+        fontSize: 10.5,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.14 * 10.5,
+        height: 1.25,
+        color: AppColors.textFaint,
+      );
+
+  /// Dashboard section card title — 18 / w600.
+  static TextStyle get sectionTitle => textTheme.titleLarge!;
+
+  /// Form dialog title — 22 / w600 (Add Product SoT).
+  static TextStyle get dialogTitle => const TextStyle(
+        fontFamily: fontFamily,
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.02 * 22,
+        height: 1.15,
+        color: AppColors.textPrimary,
+      );
+
+  static TextStyle get fieldLabel => textTheme.labelLarge!.copyWith(
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.w600,
+      );
+
+  static TextStyle get helper => textTheme.bodySmall!.copyWith(
+        color: AppColors.textTertiary,
+      );
+
+  /// KPI value — HTML 25px / w500 / −0.02em
+  static TextStyle get metric => const TextStyle(
+        fontFamily: fontFamily,
+        fontSize: 25,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.02 * 25,
+        height: 1.15,
+        color: AppColors.textPrimary,
+        fontFeatures: [FontFeature.tabularFigures()],
+      );
+
+  static TextStyle numeric(TextStyle? base) {
+    return (base ?? textTheme.bodyMedium!).copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
     );
   }
 }

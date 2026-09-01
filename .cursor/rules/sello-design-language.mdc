@@ -1,0 +1,49 @@
+---
+description: Official Sello Design Language — Product domain is the reference for all future UI
+alwaysApply: true
+---
+
+# Sello Design Language
+
+The **Product domain** (Dashboard, Product List, Add/Edit, Details, photos, filters, cards, forms, tables, toasts, Settings Phase 1) plus prior conversation refinements is the **official design language**. Treat it as the default for every future screen unless the user explicitly overrides it.
+
+## Philosophy
+
+Sello is a **Business Operating System**, not an admin panel or POS.
+
+Calm · premium · approachable · minimal · intelligent · spacious · refined.
+
+One cohesive product — never invent a parallel visual system. Prefer extending existing shared widgets (`lib/shared/widgets/`, theme tokens) over new one-off patterns. Do not regress to generic Material defaults.
+
+## Visual
+
+Soft surfaces, subtle canvas gradients, generous whitespace, rounded cards (`AppRadius`), soft shadows (`AppShadows`), light borders (`outlinePanel`), calm purple accents, limited color. Avoid visual noise, harsh shadows, heavy outlines, decorative clutter.
+
+## Hierarchy
+
+1. **Inform** → 2. **Guide** → 3. **Allow action**.  
+Ask: *What decision is the business owner making?* Every block should inform, help decide, or complete an action.
+
+Typography: closed roles per surface (title / subtitle / section+divider / label / value) — spacing and dividers carry hierarchy more than many font sizes. Product Details is the model.
+
+## Components (reuse first)
+
+| Pattern | Behavior |
+|---------|----------|
+| Cards | Generous padding, consistent radius/elevation/spacing |
+| Buttons | Shared heights/radii; primary obvious, secondary quiet |
+| Forms | Logical groups, labels above; required fields get a pinkish soft-red `*` after the label (`SelloFieldLabel` / `required: true` on `SelloTextField`, `SelloDropdown`, `SettingsCompactField`); optional fields have no marker, tooltip, or “Optional” copy. `SelloInfoHint` is only for real explanations. Keep validation/errors visible; preserve draft data |
+| Tables | Clean rows, generous spacing, minimal borders, clear alignment |
+| Dialogs | Guided workflow, balanced layout, clear primary; detail vs edit patterns from Products |
+| Dropdowns | Desktop: anchored popup (never cover field). Mobile: bottom sheet |
+| Toasts | Desktop top-right content-sized; mobile bottom safe-area. Use `SelloSnackbars` / `SelloToastHost` |
+| Empty/loading | `SelloEmptyState`, skeletons / progressive load — avoid blocking overlays |
+| Media | Immediate preview; optimize/upload in background |
+
+## Interaction
+
+Reduce friction. Prefer background work + progressive updates + instant feedback (filters, toasts). Archive over hard delete; confirm destructive actions. Match existing motion (`AppDurations` / `AppCurves`).
+
+## Before shipping a screen
+
+Check spacing, type, cards, interactions, color, motion, loading, empty states, responsiveness, and a11y against Products/Dashboard. Proactively suggest refinements that improve consistency without inventing new languages.

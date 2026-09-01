@@ -1,11 +1,11 @@
 {
-    "name": "sello",
-    "short_name": "sello",
+    "name": "Sello",
+    "short_name": "Sello",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#ECEDFB",
+    "theme_color": "#6C4FF2",
+    "description": "Sello — sales order management for wholesalers and distributors.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

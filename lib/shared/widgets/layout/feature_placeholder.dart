@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:sello/shared/widgets/layout/app_page_scaffold.dart';
-import 'package:sello/shared/widgets/states/sello_empty_state.dart';
+import 'package:sello/features/hub/shared/hub_feature_page.dart';
 
 /// Shared placeholder for undeveloped feature routes.
 class FeaturePlaceholderScaffold extends StatelessWidget {
@@ -17,16 +16,10 @@ class FeaturePlaceholderScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppPageScaffold(
+    return HubFeaturePage(
       title: title,
-      subtitle: description,
-      body: SelloEmptyState(
-        title: 'Module foundation ready',
-        message:
-            'Business features for this area will be implemented in a later phase.',
-        icon: icon,
-        tone: EmptyStateTone.brand,
-      ),
+      description: description,
+      icon: icon,
     );
   }
 }

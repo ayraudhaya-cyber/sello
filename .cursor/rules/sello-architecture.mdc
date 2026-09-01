@@ -1,0 +1,77 @@
+---
+description: Sello long-term workspace architecture, roles, permissions, and design philosophy
+alwaysApply: true
+---
+
+# Sello product architecture
+
+## Development strategy (project direction)
+
+For the foreseeable future, **prioritize complete business domains for the shared Owner/Manager (Hub) workspace.**
+
+Each domain must simultaneously establish the **shared business logic and data model** that the future Sales Representative workspace will consume.
+
+When implementing a new domain:
+
+1. Build the **complete Owner/Manager experience** (list, create/edit, view workspace, search/filters, status/archive philosophy, design language).
+2. **Verify** the shared architecture naturally supports the future Sales Representative experience (same repositories, models, calculations, inventory/payment side-effects) — do not invent Hub-only data paths.
+3. Implement **only the shared business logic required today** (models, repositories, providers, RPCs, permissions seams).
+4. **Do not fully build the Sales Representative UI** unless the user specifically requests it. Lightweight stubs or existing shells are enough until then.
+
+The Sales Representative application will later become a **lightweight presentation layer** on top of already established domains. This minimizes duplicate work and keeps one platform with multiple workspaces — not separate apps.
+
+## Roles & workspaces
+
+- **Owner** — primary app and source of truth. Build every business management feature here first (Dashboard, Customers, Products, Inventory, Orders, Payments, Schedule, Reports, Employees, Attendance, Settings, future modules).
+- **Manager** — **same** Owner workspace/pages/layouts/components. Differences are **permissions only** (e.g. hide Billing, Subscription, Ownership, permission management). Never fork screens for Manager.
+- **Sales Representative** — **separate** field-sales mobile/tablet experience (visits, catalog, gallery/zoom, quotes, orders, offline-first). Optimize for speed and simplicity, not administration. Prefer deferring full Sales UI until Hub domains + shared logic are solid.
+
+## Feature placement
+
+1. Default: shared **Owner/Manager (Hub)** workspace — build this to completion first.
+2. Use dedicated **Sales Rep (Sello)** UX only with a strong field-sales reason **and** an explicit request (or when validating a shared-domain seam that needs a thin consumer).
+3. Prefer **permission-aware** enable/hide over role-specific duplicated pages or components. Build once; configure with permissions.
+
+## Shared business domains
+
+Core domains (Products, Customers, Orders, …) live as **shared layers**:
+
+- Models + repositories under `lib/shared` / `lib/data`
+- Repository providers under `lib/data/providers` (never under `features/hub`)
+- Shared presentation under `lib/features/<domain>/` only when Hub and Sales truly need the same workspace UI
+- Hub **manages**; Sales will later **consume** (lookup / catalog / field create) — active-only lists where appropriate; no config/edit surfaces unless permissions allow
+- **Products** support tenant-configurable Product Details: core commerce columns stay on `products`; industry specs live in `products.attributes` (jsonb). Companies enable fields via `company_product_fields` against `product_field_definitions`, ordered by `sort_order`. Hub Settings → Product Details controls enable/required/list/catalog placement; editor, details, and Sales catalog consume `productFieldConfigProvider`.
+- **Orders** connect Customers + Products + Inventory + Payments: drafts do not move stock; completing an order decrements branch inventory via `adjust_inventory`, records settlement in the payments ledger for cash/card/bank/wallet (including wallet deduction), and updates customer purchase / outstanding signals. Soft-archive via `archive_order`. Shared `OrderRepository` + `OrderEditorDialog` / `OrderDetailsDialog` power Hub and Sales (mobile uses a stepped create flow). Future seams: visit / GPS / offline client id / signature path on `orders`. Completing a sale also prepares an **order confirmation** (`OrderConfirmationDispatcher`): opaque `/d/<token>` document link, in-app Owner/Manager inbox via `BusinessEvents.orderCompleted`, WhatsApp device prefills, and automatic SMS via the `send-outbound-sms` Edge Function (Text.lk). The Text.lk API token is a server secret only — never in Flutter, `.env`, or the APK. Tenant Sender ID lives on `company_settings.sms_sender_id` and is what Text.lk receives as `sender_id` for every SMS (orders, collections, Test SMS). Tenants cannot change it unless `company_settings.sms_sender_id_editable` is enabled server-side (default false). New Owners may optionally verify a registered Sender ID during `/setup`: the client sends a candidate to `send-outbound-sms` (`purpose=verify_sender`); it is saved only after Text.lk accepts, via service-role `activate_verified_sms_sender_id`. Skipping leaves `sms_sender_id` empty. Sello operators may still set it in SQL. Tenant matrix is `company_settings.outbound_notification_policies` (Settings → Notifications); do not add WhatsApp Business API until requested. Reuse the same dispatcher/ledger pattern for collection acknowledgements, invoices, and receipts — do not fork per screen. Outbound delivery never updates financial balances. A failed SMS must never roll back an order or collection.
+- **Payments** is the financial ledger against Orders/Customers: collections update outstanding/wallet and order `payment_status`; refunds are status-only until a reverse path ships. Tenant setting `collection_approval_required` (default off) makes Sales Rep collections `pending` until Owner/Manager `approve_collection` / `reject_collection` — balances apply exactly once on approve; rejected rows stay for audit. When pending, `CollectionAcknowledgementDispatcher` may prepare owner/manager WhatsApp share intents, automatic SMS, and a `/d/<token>` acknowledgement (Pending Review copy only) — never implies balances were updated.
+- **Inventory** is the stock source of truth: `inventory.quantity` + `reserved_quantity` (Available = on-hand − reserved) + append-only `stock_movements`; sales and manual adjustments go through `adjust_inventory`. Hub Inventory workspace covers valuation, low/out filters, recent movements, and per-product history. Sales consumes availability only — no adjust surfaces.
+- **Employees** is the people / identity foundation: company directory, roles, employment status, permission profiles, activity events, and future assignment seams (`employee_assignments`). Shared `EmployeeRepository` powers Hub management and future Sales identity / self-service.
+- **Suppliers** is the procurement foundation (Hub-only): vendor directory, payable balances, lead times, and `products.preferred_supplier_id` for sourcing. Shared `SupplierRepository` prepares future Purchase Orders, GRN, and supplier payments — not part of the Sales workspace.
+- **Field visits (Sales day)** distinguish **planned** vs **unplanned** stops and three day modes (manager-planned, rep-planned, dynamic). Home progress is only shown when a real visit plan exists; dynamic days show activity counts instead. Navigation/routing is external (Maps) — Sello tracks who to visit, not optimized routes. Shared `SalesDaySnapshot` / `FieldVisitStop` models prepare Hub assignment + Sales check-in later.
+- **Sales Home Primary Operational Card** is permission-aware: `OperationalSummaryResolver` swaps the fourth summary card (e.g. Outstanding Collections vs Today’s Sales / Follow-ups / Low Stock) from company financial visibility + Sales permission without changing layout.
+- **Order & Invoice Policies** (`financial_visibility_policies`) use reusable `FinancialVisibilityPolicy` (`never` | `internal_only` | `customer_copy`) per financial field (outstanding first; wallet/credit reserved). Customer documents must call `FinancialVisibility.showOnCustomerDocuments`; Sales uses `salesCanViewOutstandingBalances`.
+
+Sales must not import Hub feature modules for domain data or shared workspace UI.
+
+## Schedule
+
+Schedule is the **business calendar** (not only employee shifts). Prefer integrating dated events here (visits, deliveries, PO arrivals, invoice dues, payments, leave, follow-ups, reminders) instead of isolated reminder systems.
+
+## Design
+
+Follow **Sello Design Language** (`.cursor/rules/sello-design-language.mdc`). Product domain screens are the reference. Reuse shared widgets; one cohesive Business OS — not a traditional POS or generic Material admin look.
+
+Required vs optional fields: required gets a soft-red asterisk after the label (`SelloFieldLabel.required` / `required: true` on shared inputs). Optional fields have no marker, tooltip, or “Optional” copy. `SelloInfoHint` is for real explanations only.
+
+## Releases
+
+Installed version/build comes from `pubspec.yaml` via `package_info_plus`. Latest available version comes from the public `sello_app_release.payload` JSON (`schema_version` 2: `apps.sales_rep` and `apps.owner_manager`). APKs set `SELLO_RELEASE_APP`; otherwise the signed-in `UserRole` maps Sales vs Hub. Settings → About and Sales Profile can check manually. Optional updates are dismissible; required updates (`minimum.enforced`) block the app. Do not add APK download/install or a GitHub release pipeline until requested.
+
+Newly provisioned **Owners** are guided through a short first-time workspace setup (`/setup`) until `company_settings.owner_setup_completed` is true. Existing tenants are marked complete and are not forced through it. Sales Reps and Managers never see this flow.
+
+## Self-service signup
+
+Public `/onboarding` creates an Auth user (Owner-to-be) with `pending_business` metadata. After email verification, `complete_business_onboarding` creates **one** company + `company_settings` + Head Office + Owner `employees` row for `auth.uid()`. Signup cannot choose a company ID or a Manager/Sales role.
+
+New self-service tenants are **invite-only**. Approvals live in `sello_tenant_invites` (SQL Editor). The client cannot insert or approve rows. `sello_signup_is_allowed` is the activation check — later replace it with an active-subscription test. Existing employees skip this gate.
+
+Do **not** add Stripe, plan selection, or checkout until requested. New companies stay active via existing `companies.plan` / `subscription_status` defaults. Future billing should sit between email verification and `complete_business_onboarding` — do not invent a second tenant-create path.

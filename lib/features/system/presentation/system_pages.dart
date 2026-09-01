@@ -1,50 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:sello/core/constants/app_assets.dart';
-import 'package:sello/core/constants/app_constants.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/shared/providers/branding_provider.dart';
+import 'package:sello/shared/widgets/branding/branded_logo.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
 
 /// Cold-start splash while session bootstrap runs.
-class SplashPage extends StatelessWidget {
+class SplashPage extends ConsumerWidget {
   const SplashPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: AppShadows.level2,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.asset(
-                AppAssets.logo,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              AppConstants.appName,
-              style: context.texts.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            const SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-          ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branding = ref.watch(brandingProvider);
+    final branded =
+        branding.hasCustomLogo || branding.hasCustomNavBackground;
+
+    if (!branded) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: BrandedLaunchLockup(showProgress: true),
+        ),
+      );
+    }
+
+    return const Scaffold(
+      body: BrandedDarkSurface(
+        expand: true,
+        child: Center(
+          child: BrandedLaunchLockup(
+            showProgress: true,
+            lightOnDark: true,
+            clientLogoSize: 64,
+          ),
         ),
       ),
     );
@@ -145,7 +134,7 @@ class AppErrorPage extends StatelessWidget {
                     if (onRetry != null)
                       SelloButton(
                         label: 'Retry',
-                        variant: SelloButtonVariant.gradient,
+                        variant: SelloButtonVariant.primary,
                         onPressed: onRetry,
                       ),
                   ],
@@ -177,7 +166,7 @@ class NotFoundPage extends StatelessWidget {
                 Text(
                   '404',
                   style: context.texts.displayMedium?.copyWith(
-                    color: AppColors.primary,
+                    color: context.brandAccent,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -194,7 +183,7 @@ class NotFoundPage extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xl),
                 SelloButton(
                   label: 'Back to app',
-                  variant: SelloButtonVariant.gradient,
+                  variant: SelloButtonVariant.primary,
                   onPressed: () {
                     if (context.canPop()) {
                       context.pop();

@@ -14,9 +14,9 @@ abstract final class SupabaseService {
 
   static bool get isInitialized => _initialized;
 
-  /// Initializes Supabase using [SupabaseConfig] from dotenv.
+  /// Initializes Supabase using compile-time [SupabaseConfig] dart-defines.
   ///
-  /// Must be called after `dotenv.load(...)` and before `runApp`.
+  /// Must be called before [runApp].
   static Future<void> initialize() async {
     if (_initialized) {
       debugPrint('SupabaseService: already initialized — skipping.');
@@ -25,15 +25,19 @@ abstract final class SupabaseService {
 
     if (!SupabaseConfig.isConfigured) {
       throw StateError(
-        'Supabase is not configured. '
-        'Copy `.env.example` to `.env` and set SUPABASE_URL and '
-        'SUPABASE_PUBLISHABLE_KEY.',
+        'Supabase is not configured. Pass SUPABASE_URL and '
+        'SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY) with '
+        '--dart-define or --dart-define-from-file (see BUILD.md).',
       );
     }
 
     await Supabase.initialize(
       url: SupabaseConfig.url,
       publishableKey: SupabaseConfig.publishableKey,
+      authOptions: FlutterAuthClientOptions(
+        authFlowType: kIsWeb ? AuthFlowType.pkce : AuthFlowType.implicit,
+        detectSessionInUri: true,
+      ),
     );
 
     _initialized = true;

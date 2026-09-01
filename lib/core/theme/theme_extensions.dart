@@ -20,10 +20,16 @@ class SelloColors extends ThemeExtension<SelloColors> {
     required this.infoContainer,
     required this.textSecondary,
     required this.textTertiary,
+    required this.textFaint,
     required this.surfaceMuted,
+    required this.surfaceHover,
+    required this.veil,
+    required this.surfaceSelected,
+    required this.outlineSubtle,
     required this.brandViolet,
     required this.brandIndigo,
     required this.primaryGradient,
+    required this.navRail,
   });
 
   final Color success;
@@ -37,10 +43,16 @@ class SelloColors extends ThemeExtension<SelloColors> {
   final Color infoContainer;
   final Color textSecondary;
   final Color textTertiary;
+  final Color textFaint;
   final Color surfaceMuted;
+  final Color surfaceHover;
+  final Color veil;
+  final Color surfaceSelected;
+  final Color outlineSubtle;
   final Color brandViolet;
   final Color brandIndigo;
   final LinearGradient primaryGradient;
+  final LinearGradient navRail;
 
   static const SelloColors light = SelloColors(
     success: AppColors.success,
@@ -54,10 +66,16 @@ class SelloColors extends ThemeExtension<SelloColors> {
     infoContainer: AppColors.infoContainer,
     textSecondary: AppColors.textSecondary,
     textTertiary: AppColors.textTertiary,
+    textFaint: AppColors.textFaint,
     surfaceMuted: AppColors.surfaceMuted,
+    surfaceHover: AppColors.surfaceHover,
+    veil: AppColors.veil,
+    surfaceSelected: AppColors.surfaceSelected,
+    outlineSubtle: AppColors.outlineSubtle,
     brandViolet: AppColors.brandViolet,
     brandIndigo: AppColors.brandIndigo,
     primaryGradient: AppGradients.primary,
+    navRail: AppGradients.navRail,
   );
 
   /// Architectural placeholder — dark palette not implemented yet.
@@ -76,10 +94,16 @@ class SelloColors extends ThemeExtension<SelloColors> {
     Color? infoContainer,
     Color? textSecondary,
     Color? textTertiary,
+    Color? textFaint,
     Color? surfaceMuted,
+    Color? surfaceHover,
+    Color? veil,
+    Color? surfaceSelected,
+    Color? outlineSubtle,
     Color? brandViolet,
     Color? brandIndigo,
     LinearGradient? primaryGradient,
+    LinearGradient? navRail,
   }) {
     return SelloColors(
       success: success ?? this.success,
@@ -93,10 +117,16 @@ class SelloColors extends ThemeExtension<SelloColors> {
       infoContainer: infoContainer ?? this.infoContainer,
       textSecondary: textSecondary ?? this.textSecondary,
       textTertiary: textTertiary ?? this.textTertiary,
+      textFaint: textFaint ?? this.textFaint,
       surfaceMuted: surfaceMuted ?? this.surfaceMuted,
+      surfaceHover: surfaceHover ?? this.surfaceHover,
+      veil: veil ?? this.veil,
+      surfaceSelected: surfaceSelected ?? this.surfaceSelected,
+      outlineSubtle: outlineSubtle ?? this.outlineSubtle,
       brandViolet: brandViolet ?? this.brandViolet,
       brandIndigo: brandIndigo ?? this.brandIndigo,
       primaryGradient: primaryGradient ?? this.primaryGradient,
+      navRail: navRail ?? this.navRail,
     );
   }
 
@@ -117,11 +147,17 @@ class SelloColors extends ThemeExtension<SelloColors> {
       infoContainer: Color.lerp(infoContainer, other.infoContainer, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
+      textFaint: Color.lerp(textFaint, other.textFaint, t)!,
       surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
+      surfaceHover: Color.lerp(surfaceHover, other.surfaceHover, t)!,
+      veil: Color.lerp(veil, other.veil, t)!,
+      surfaceSelected: Color.lerp(surfaceSelected, other.surfaceSelected, t)!,
+      outlineSubtle: Color.lerp(outlineSubtle, other.outlineSubtle, t)!,
       brandViolet: Color.lerp(brandViolet, other.brandViolet, t)!,
       brandIndigo: Color.lerp(brandIndigo, other.brandIndigo, t)!,
       primaryGradient:
           LinearGradient.lerp(primaryGradient, other.primaryGradient, t)!,
+      navRail: LinearGradient.lerp(navRail, other.navRail, t)!,
     );
   }
 }
@@ -197,4 +233,15 @@ extension SelloThemeX on BuildContext {
   SelloMetrics get selloMetrics => theme.extension<SelloMetrics>()!;
   List<BoxShadow> get elevation1 => AppShadows.level1;
   List<BoxShadow> get elevation2 => AppShadows.level2;
+
+  /// Primary interactive accent — Sello purple, or the client brand colour.
+  Color get brandAccent => colors.primary;
+  Color get onBrandAccent => colors.onPrimary;
+  Color get brandAccentContainer => colors.primaryContainer;
+  Color get onBrandAccentContainer => colors.onPrimaryContainer;
+
+  /// Soft mid tint of [brandAccent] (selected chip borders, quiet fills).
+  Color get brandMid => selloColors.brandViolet == AppColors.brandViolet
+      ? AppColors.primaryMid
+      : Color.lerp(colors.primary, Colors.white, 0.62)!;
 }

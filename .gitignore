@@ -23,6 +23,9 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
+# Machine-specific editor paths (Flutter SDK, browser, PATH)
+.vscode/settings.json
+
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
@@ -39,6 +42,14 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Named release APK copies (script output)
+/dist/
+
+# Local APKs / installers left in the repo root
+*.apk
+*.aab
+*.ipa
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
@@ -47,3 +58,13 @@ app.*.map.json
 # Local secrets
 .env
 .env.local
+.env.release
+
+# Android signing (never commit keystores or passwords)
+*.jks
+*.keystore
+key.properties
+android/key.properties
+
+# Supabase CLI local linkage (project/org ids, not source)
+supabase/.temp/

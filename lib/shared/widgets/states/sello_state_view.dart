@@ -81,7 +81,7 @@ class SelloStateView extends StatelessWidget {
 
     final accent = variant == SelloStateVariant.error
         ? AppColors.error
-        : AppColors.primary;
+        : context.brandAccent;
 
     return Center(
       child: Padding(
@@ -126,7 +126,7 @@ class SelloStateView extends StatelessWidget {
                 SelloButton(
                   label: actionLabel!,
                   onPressed: onAction,
-                  variant: SelloButtonVariant.gradient,
+                  variant: SelloButtonVariant.primary,
                 ),
               ],
             ],

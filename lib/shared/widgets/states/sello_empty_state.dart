@@ -31,7 +31,7 @@ class SelloEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final (Color accent, Color? fill, Gradient? gradient) = switch (tone) {
       EmptyStateTone.brand => (
-          AppColors.primary,
+          context.brandAccent,
           null,
           AppGradients.primarySoft,
         ),
@@ -51,21 +51,22 @@ class SelloEmptyState extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
+          constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 76,
-                height: 76,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: fill,
+                  color: fill ?? accent.withValues(alpha: 0.07),
                   gradient: gradient,
-                  borderRadius: AppRadius.cardAll,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(color: accent.withValues(alpha: 0.1)),
                 ),
-                child: Icon(icon, size: 34, color: accent),
+                child: Icon(icon, size: 28, color: accent),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.mdPlus),
               Text(
                 title,
                 textAlign: TextAlign.center,
@@ -91,7 +92,7 @@ class SelloEmptyState extends StatelessWidget {
                     SelloButton(
                       label: actionLabel!,
                       onPressed: onAction,
-                      variant: SelloButtonVariant.gradient,
+                      variant: SelloButtonVariant.primary,
                     ),
                     if (secondaryActionLabel != null &&
                         onSecondaryAction != null)

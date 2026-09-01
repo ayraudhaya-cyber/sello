@@ -1,0 +1,75 @@
+-- =============================================================================
+-- 042 — Per-app release manifest (schema_version 2)
+--
+-- Keeps the single public.sello_app_release row. Evolves payload so
+-- sales_rep and owner_manager each have latest / minimum / platforms.
+-- =============================================================================
+
+insert into public.sello_app_release (id, payload)
+values (
+  1,
+  '{
+    "schema_version": 2,
+    "app": "sello",
+    "apps": {
+      "sales_rep": {
+        "latest": {
+          "version": "1.0.2",
+          "build": 3,
+          "released_at": "2026-08-18",
+          "notes": "Testing the update flow."
+        },
+        "minimum": {
+          "version": "1.0.0",
+          "build": 1,
+          "enforced": false
+        },
+        "platforms": {
+          "android": {
+            "destination_kind": "apk",
+            "destination_url": "https://cashro.pro/sello-updates/sales-rep/sello-sales-rep.apk"
+          },
+          "ios": {
+            "destination_kind": "testflight",
+            "destination_url": ""
+          },
+          "web": {
+            "destination_kind": "web",
+            "destination_url": ""
+          }
+        }
+      },
+      "owner_manager": {
+        "latest": {
+          "version": "1.0.0",
+          "build": 1,
+          "released_at": "2026-08-18",
+          "notes": ""
+        },
+        "minimum": {
+          "version": "1.0.0",
+          "build": 1,
+          "enforced": false
+        },
+        "platforms": {
+          "android": {
+            "destination_kind": "apk",
+            "destination_url": "https://cashro.pro/sello-updates/owner-manager/sello-owner-manager.apk"
+          },
+          "ios": {
+            "destination_kind": "testflight",
+            "destination_url": ""
+          },
+          "web": {
+            "destination_kind": "web",
+            "destination_url": ""
+          }
+        }
+      }
+    }
+  }'::jsonb
+)
+on conflict (id) do update
+set
+  payload = excluded.payload,
+  updated_at = timezone('utc', now());

@@ -105,21 +105,21 @@ Domain, data, and application layers are shared so Hub and mobile never duplicat
 
 ## Getting started
 
+Build and run instructions, including dart-define Supabase config, live in [BUILD.md](BUILD.md).
+
 ### Prerequisites
 
 - Flutter SDK (stable) — this project targets Dart `^3.12.2`
-- A Supabase project (URL and anon key will be wired during foundation setup)
+- A Supabase project URL and anon (publishable) key
 
 ### Run locally
 
 ```bash
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=.env
 ```
 
-Choose an Android emulator/device or Windows desktop target as needed.
-
-> The app is still the default Flutter template until Phase 1 (foundation) is approved and implemented. See [ROADMAP.md](ROADMAP.md).
+Choose an Android emulator/device, Chrome, or another target as needed. Copy `.env.example` to `.env` first and fill in real values. Never commit `.env`.
 
 ---
 
@@ -140,5 +140,6 @@ Choose an Android emulator/device or Windows desktop target as needed.
 | Document | Purpose |
 |----------|---------|
 | [README.md](README.md) | Product overview and developer entry point |
+| [BUILD.md](BUILD.md) | Local run and private-testing build commands |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Technical architecture and conventions |
 | [ROADMAP.md](ROADMAP.md) | Delivery phases and scope gates |

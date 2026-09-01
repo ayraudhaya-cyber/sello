@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>sello</string>
+	<string>Sello</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Sello uses the camera so you can photograph products and attach images to your catalog.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Sello uses your location to record where customer visits take place and to suggest nearby areas during your sales day.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Sello accesses your photo library so you can choose existing images for products and other business records.</string>
 </dict>
 </plist>

@@ -1,0 +1,2 @@
+[functions.send-outbound-sms]
+verify_jwt = true

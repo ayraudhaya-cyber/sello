@@ -93,6 +93,8 @@ class DevExperienceConfig {
   }
 
   static String _maybeEnv(String key) {
+    // kReleaseMode is a compile-time constant: dart2js/AOT can drop the
+    // fromEnvironment reads (and any DX dart-defines) from product builds.
     if (kReleaseMode) return '';
     return switch (key) {
       'DX_OWNER_EMAIL' => const String.fromEnvironment('DX_OWNER_EMAIL'),

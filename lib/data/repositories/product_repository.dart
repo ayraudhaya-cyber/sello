@@ -70,7 +70,9 @@ class ProductRepository {
       is_primary
     ),
     inventory (
+      branch_id,
       quantity,
+      reserved_quantity,
       reorder_level
     )
   ''';
@@ -98,6 +100,7 @@ class ProductRepository {
     String search = '',
     String? categoryId,
     bool? isActive,
+    String? branchId,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -127,7 +130,10 @@ class ProductRepository {
       final list = response as List;
       final items = <ProductSummary>[];
       for (final row in list) {
-        final item = ProductSummary.fromQueryRow(Map<String, dynamic>.from(row));
+        final item = ProductSummary.fromQueryRow(
+          Map<String, dynamic>.from(row),
+          branchId: branchId,
+        );
         if (item.imageStoragePath != null && item.imageStoragePath!.isNotEmpty) {
           try {
             final imageUrl =

@@ -228,6 +228,62 @@ abstract final class BusinessEvents {
     excludeEmployeeId: excludeEmployeeId,
   );
 
+  static BusinessEvent orderPlaced({
+    required String orderId,
+    required String customerName,
+    String? excludeEmployeeId,
+  }) => BusinessEvent(
+    category: NotificationCategory.orders,
+    type: NotificationTypes.orderPlaced,
+    title: 'New order received',
+    summary: 'Order from $customerName is ready for fulfillment.',
+    body: 'Order from $customerName is ready for fulfillment.',
+    priority: NotificationPriority.normal,
+    referenceType: 'order',
+    referenceId: orderId,
+    routeHint: '${RoutePaths.hubOrders}?id=$orderId',
+    excludeEmployeeId: excludeEmployeeId,
+  );
+
+  static BusinessEvent orderInsufficientStock({
+    required String orderId,
+    required String customerName,
+    String? excludeEmployeeId,
+  }) => BusinessEvent(
+    category: NotificationCategory.orders,
+    type: NotificationTypes.orderInsufficientStock,
+    title: 'Order waiting for stock',
+    summary:
+        'Order from $customerName cannot be fully fulfilled with current stock.',
+    body:
+        'Order from $customerName cannot be fully fulfilled with current stock.',
+    priority: NotificationPriority.high,
+    referenceType: 'order',
+    referenceId: orderId,
+    routeHint: '${RoutePaths.hubOrders}?id=$orderId',
+    excludeEmployeeId: excludeEmployeeId,
+  );
+
+  static BusinessEvent orderPartiallyDelivered({
+    required String orderId,
+    required String customerName,
+    required num remainingItems,
+    String? excludeEmployeeId,
+  }) => BusinessEvent(
+    category: NotificationCategory.orders,
+    type: NotificationTypes.orderPartiallyDelivered,
+    title: 'Order partially delivered',
+    summary:
+        'Order from $customerName was partially delivered. $remainingItems items remain.',
+    body:
+        'Order from $customerName was partially delivered. $remainingItems items remain.',
+    priority: NotificationPriority.normal,
+    referenceType: 'order',
+    referenceId: orderId,
+    routeHint: '${RoutePaths.hubOrders}?id=$orderId',
+    excludeEmployeeId: excludeEmployeeId,
+  );
+
   static BusinessEvent orderCompleted({
     required String orderId,
     required String orderNumber,
@@ -346,6 +402,23 @@ abstract final class BusinessEvents {
     referenceType: 'product',
     referenceId: productId,
     routeHint: RoutePaths.hubInventory,
+    emitNotification: false,
+    logActivity: true,
+  );
+
+  static BusinessEvent negativeStock({
+    required String productId,
+    required String productName,
+  }) => BusinessEvent(
+    category: NotificationCategory.inventory,
+    type: NotificationTypes.negativeStock,
+    title: 'Negative stock',
+    summary: '$productName is now below zero stock.',
+    body: '$productName is now below zero stock.',
+    priority: NotificationPriority.high,
+    referenceType: 'product',
+    referenceId: productId,
+    routeHint: RoutePaths.hubInventory,
   );
 
   static BusinessEvent outOfStock({
@@ -361,6 +434,8 @@ abstract final class BusinessEvents {
     referenceType: 'product',
     referenceId: productId,
     routeHint: RoutePaths.hubInventory,
+    emitNotification: false,
+    logActivity: true,
   );
 
   static BusinessEvent lowStock({
@@ -376,6 +451,8 @@ abstract final class BusinessEvents {
     referenceType: 'product',
     referenceId: productId,
     routeHint: RoutePaths.hubInventory,
+    emitNotification: false,
+    logActivity: true,
   );
 
   // —— Schedule / Visits ——————————————————————————————————————

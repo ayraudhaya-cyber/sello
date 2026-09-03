@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
+import 'package:sello/services/orders/order_stock_policy.dart';
 import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/utils/formatters.dart';
+import 'package:sello/features/orders/presentation/widgets/product_quantity_control.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
 /// Lightweight basket review. Returns `true` when the rep continues to checkout.
@@ -101,6 +103,17 @@ class _VisitBasketSheetState extends State<_VisitBasketSheet> {
                     return _BasketLine(
                       line: line,
                       currencySymbol: widget.currencySymbol,
+                      maxQuantity: editor?.maxQuantityForProduct(line.productId),
+                      onStockLimitReached: () {
+                        final max =
+                            editor?.maxQuantityForProduct(line.productId);
+                        if (max != null && context.mounted) {
+                          SelloSnackbars.warning(
+                            context,
+                            OrderStockPolicy.onlyAvailableMessage(max),
+                          );
+                        }
+                      },
                       onQuantity: (qty) {
                         editor?.setLineQuantity(line.productId, qty);
                         _refresh();
@@ -163,12 +176,16 @@ class _BasketLine extends StatelessWidget {
     required this.currencySymbol,
     required this.onQuantity,
     required this.onRemove,
+    this.maxQuantity,
+    this.onStockLimitReached,
   });
 
   final OrderLineDraft line;
   final String currencySymbol;
   final ValueChanged<num> onQuantity;
   final VoidCallback onRemove;
+  final num? maxQuantity;
+  final VoidCallback? onStockLimitReached;
 
   @override
   Widget build(BuildContext context) {
@@ -208,65 +225,23 @@ class _BasketLine extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _QtyControl(
+          ProductQuantityControl(
             value: line.quantity,
-            onChanged: onQuantity,
-          ),
-          IconButton(
-            onPressed: onRemove,
-            tooltip: 'Remove',
-            icon: const Icon(Icons.close_rounded, size: 20),
-            color: AppColors.textFaint,
+            allowZero: true,
+            showRemove: true,
+            maxQuantity: maxQuantity,
+            onIncreaseBlocked: onStockLimitReached,
+            onChanged: (qty) {
+              if (qty < 1) {
+                onRemove();
+              } else {
+                onQuantity(qty);
+              }
+            },
+            onRemove: onRemove,
+            compact: true,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _QtyControl extends StatelessWidget {
-  const _QtyControl({
-    required this.value,
-    required this.onChanged,
-  });
-
-  final num value;
-  final ValueChanged<num> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _hit(Icons.remove_rounded, () => onChanged(value - 1)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Text(
-            SelloFormatters.quantity(value),
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        _hit(Icons.add_rounded, () => onChanged(value + 1)),
-      ],
-    );
-  }
-
-  Widget _hit(IconData icon, VoidCallback onTap) {
-    return Material(
-      color: AppColors.surfaceMuted,
-      borderRadius: BorderRadius.circular(AppRadius.button),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, size: 20, color: AppColors.textSecondary),
-        ),
       ),
     );
   }

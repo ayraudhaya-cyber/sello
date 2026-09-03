@@ -646,124 +646,39 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _Metric(
-        label: 'Team members',
-        value: '${stats.total}',
-        icon: Icons.groups_outlined,
-        accent: context.brandAccent,
-        soft: context.brandAccentContainer,
-      ),
-      _Metric(
-        label: 'Active',
-        value: '${stats.active}',
-        icon: Icons.check_circle_outline,
-        accent: AppColors.success,
-        soft: AppColors.successContainer,
-      ),
-      _Metric(
-        label: 'Sales representatives',
-        value: '${stats.salesRepresentatives}',
-        icon: Icons.storefront_outlined,
-        accent: AppColors.inventory,
-        soft: context.brandAccentContainer,
-      ),
-      _Metric(
-        label: 'Managers',
-        value: '${stats.managers}',
-        icon: Icons.manage_accounts_outlined,
-        accent: AppColors.finance,
-        soft: AppColors.warningContainer,
-      ),
-      _Metric(
-        label: 'Inactive',
-        value: '${stats.inactive}',
-        icon: Icons.person_off_outlined,
-        accent: AppColors.textSecondary,
-        soft: AppColors.veil,
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      );
-    }
-
-    return Row(
+    return SelloStatCardGrid(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) const SizedBox(width: AppSpacing.sm),
-        ],
+        SelloStatCard(
+          label: 'Team members',
+          value: '${stats.total}',
+          icon: Icons.groups_outlined,
+          tone: context.brandAccent,
+        ),
+        SelloStatCard(
+          label: 'Active',
+          value: '${stats.active}',
+          icon: Icons.check_circle_outline,
+          tone: AppColors.success,
+        ),
+        SelloStatCard(
+          label: 'Sales representatives',
+          value: '${stats.salesRepresentatives}',
+          icon: Icons.storefront_outlined,
+          tone: AppColors.inventory,
+        ),
+        SelloStatCard(
+          label: 'Managers',
+          value: '${stats.managers}',
+          icon: Icons.manage_accounts_outlined,
+          tone: AppColors.finance,
+        ),
+        SelloStatCard(
+          label: 'Inactive',
+          value: '${stats.inactive}',
+          icon: Icons.person_off_outlined,
+          tone: AppColors.textSecondary,
+        ),
       ],
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accent,
-    required this.soft,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color accent;
-  final Color soft;
-
-  @override
-  Widget build(BuildContext context) {
-    return SelloCard(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: soft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: accent),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

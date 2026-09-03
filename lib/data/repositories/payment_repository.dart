@@ -310,9 +310,9 @@ class PaymentRepository {
     try {
       final rows = await _client
           .from('orders')
-          .select('id, order_number, total, ordered_at, payment_status')
+          .select('id, order_number, total, ordered_at, payment_status, status')
           .eq('customer_id', customerId)
-          .eq('status', 'completed')
+          .inFilter('status', ['placed', 'partially_delivered', 'completed'])
           .isFilter('deleted_at', null)
           .inFilter('payment_status', ['unpaid', 'partial'])
           .order('ordered_at');

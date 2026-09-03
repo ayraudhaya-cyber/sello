@@ -25,6 +25,8 @@ class SelloTextField extends StatelessWidget {
     this.required = false,
     this.inputFormatters,
     this.autovalidateMode = AutovalidateMode.onUserInteraction,
+    this.focusNode,
+    this.onFieldSubmitted,
   });
 
   final TextEditingController? controller;
@@ -50,6 +52,8 @@ class SelloTextField extends StatelessWidget {
   final bool required;
   final List<TextInputFormatter>? inputFormatters;
   final AutovalidateMode autovalidateMode;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onFieldSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -58,10 +62,12 @@ class SelloTextField extends StatelessWidget {
 
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: obscureText,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       onChanged: onChanged,
+      onFieldSubmitted: onFieldSubmitted,
       validator: validator,
       enabled: enabled,
       autofillHints: autofillHints,

@@ -9,7 +9,15 @@ import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/models/payment_status.dart';
 
-enum OrderStatusFilter { all, draft, completed, cancelled }
+enum OrderStatusFilter {
+  all,
+  draft,
+  openFulfillment,
+  placed,
+  partiallyDelivered,
+  completed,
+  cancelled,
+}
 
 enum OrderPaymentFilter { all, unpaid, partial, paid }
 
@@ -165,7 +173,16 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
           OrderStatusFilter.all => null,
           OrderStatusFilter.draft => const [
               OrderStatus.draft,
-              OrderStatus.submitted,
+              OrderStatus.placed,
+              OrderStatus.partiallyDelivered,
+            ],
+          OrderStatusFilter.openFulfillment => const [
+              OrderStatus.placed,
+              OrderStatus.partiallyDelivered,
+            ],
+          OrderStatusFilter.placed => const [OrderStatus.placed],
+          OrderStatusFilter.partiallyDelivered => const [
+              OrderStatus.partiallyDelivered,
             ],
           OrderStatusFilter.completed => const [OrderStatus.completed],
           OrderStatusFilter.cancelled => const [OrderStatus.cancelled],
@@ -238,7 +255,8 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
 
   Future<OrderMutationResult> saveOrder(
     OrderUpsertInput input, {
-    required bool complete,
+    bool complete = false,
+    bool place = false,
   }) async {
     final session = ref.read(currentSessionProvider);
     if (session == null) {
@@ -259,6 +277,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         branchId: branchId,
         employeeId: session.employee.id,
         complete: complete,
+        place: place,
       );
       await loadOrders(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
@@ -303,6 +322,49 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return OrderMutationResult.fail(failure.message);
+    }
+  }
+
+  Future<String?> fulfillOrderItems({
+    required String orderId,
+    required List<({String orderItemId, num quantity})> lines,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.fulfillOrderItems(orderId: orderId, lines: lines);
+      await loadOrders(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  /// Deliver every remaining unit (fulfillment finish; does not settle payment).
+  Future<String?> fulfillAllRemaining(OrderSummary order) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.completeOrder(order.id);
+      await loadOrders(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> cancelOrderRemaining(String orderId) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.cancelOrderRemaining(orderId: orderId);
+      await loadOrders(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
     }
   }
 

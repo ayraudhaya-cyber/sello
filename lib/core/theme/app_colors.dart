@@ -12,6 +12,8 @@ abstract final class AppColors {
   static const Color primary = Color(0xFF6C4FF2);
   static const Color onPrimary = Color(0xFFFFFFFF);
   static const Color primaryContainer = Color(0xFFEFE9FE);
+  /// Flat auth shell canvas (sign-in / sign-up).
+  static const Color authCanvas = Color(0xFF5837D2);
   static const Color onPrimaryContainer = Color(0xFF2C1D7A);
 
   // Surfaces

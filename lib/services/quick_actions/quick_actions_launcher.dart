@@ -175,10 +175,16 @@ abstract final class QuickActionsLauncher {
 
     final saved = await ref
         .read(hubOrdersProvider.notifier)
-        .saveOrder(result.input, complete: result.complete);
+        .saveOrder(
+          result.input,
+          complete: result.complete,
+          place: result.place,
+        );
     if (!context.mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(context, saved.error!);
+    } else if (result.place) {
+      SelloSnackbars.success(context, 'Order submitted.');
     } else if (result.complete) {
       await presentOrderConfirmation(
         context,

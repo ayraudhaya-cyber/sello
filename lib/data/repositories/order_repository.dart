@@ -111,6 +111,8 @@ class OrderRepository {
       id,
       product_id,
       quantity,
+      delivered_quantity,
+      cancelled_quantity,
       unit_price,
       discount,
       discount_type,
@@ -273,7 +275,8 @@ class OrderRepository {
         );
         switch (status) {
           case OrderStatus.draft:
-          case OrderStatus.submitted:
+          case OrderStatus.placed:
+          case OrderStatus.partiallyDelivered:
             draft++;
           case OrderStatus.completed:
             completed++;
@@ -293,6 +296,269 @@ class OrderRepository {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  /// Open fulfillment demand + orders currently blocked by available stock.
+  ///
+  /// "Waiting for stock" uses **current** available qty vs remaining demand —
+  /// not a historical snapshot of stock at order time.
+  Future<FulfillmentAttentionCounts> fetchFulfillmentAttention() async {
+    try {
+      final orderRows = await _client
+          .from('orders')
+          .select('id, branch_id, status')
+          .inFilter('status', [
+            OrderStatus.placed.dbValue,
+            OrderStatus.partiallyDelivered.dbValue,
+          ])
+          .isFilter('deleted_at', null);
+
+      var placed = 0;
+      var partiallyDelivered = 0;
+      final orderMeta = <String, ({String branchId, OrderStatus status})>{};
+
+      for (final raw in orderRows as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final id = map['id'] as String?;
+        final branchId = map['branch_id'] as String?;
+        if (id == null || branchId == null) continue;
+        final status = OrderStatus.fromDb(map['status'] as String?);
+        orderMeta[id] = (branchId: branchId, status: status);
+        switch (status) {
+          case OrderStatus.placed:
+            placed++;
+          case OrderStatus.partiallyDelivered:
+            partiallyDelivered++;
+          case OrderStatus.draft:
+          case OrderStatus.completed:
+          case OrderStatus.cancelled:
+            break;
+        }
+      }
+
+      if (orderMeta.isEmpty) {
+        return const FulfillmentAttentionCounts();
+      }
+
+      final itemRows = await _client
+          .from('order_items')
+          .select(
+            'order_id, product_id, quantity, delivered_quantity, cancelled_quantity',
+          )
+          .inFilter('order_id', orderMeta.keys.toList());
+
+      final productIds = <String>{};
+      final remainingByOrder =
+          <String, List<({String productId, num remaining})>>{};
+
+      for (final raw in itemRows as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final orderId = map['order_id'] as String?;
+        final productId = map['product_id'] as String?;
+        if (orderId == null || productId == null) continue;
+        if (!orderMeta.containsKey(orderId)) continue;
+
+        final ordered = _asNum(map['quantity']);
+        final delivered = _asNum(map['delivered_quantity']);
+        final cancelled = _asNum(map['cancelled_quantity']);
+        final remaining = ordered - delivered - cancelled;
+        if (remaining <= 0) continue;
+
+        productIds.add(productId);
+        remainingByOrder
+            .putIfAbsent(orderId, () => [])
+            .add((productId: productId, remaining: remaining));
+      }
+
+      if (productIds.isEmpty) {
+        return FulfillmentAttentionCounts(
+          placed: placed,
+          partiallyDelivered: partiallyDelivered,
+        );
+      }
+
+      final invRows = await _client
+          .from('inventory')
+          .select('branch_id, product_id, quantity, reserved_quantity')
+          .inFilter('product_id', productIds.toList());
+
+      final available = <String, num>{};
+      for (final raw in invRows as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final branchId = map['branch_id'] as String?;
+        final productId = map['product_id'] as String?;
+        if (branchId == null || productId == null) continue;
+        final qty = _asNum(map['quantity']);
+        final reserved = _asNum(map['reserved_quantity']);
+        final avail = qty - reserved;
+        available['$branchId|$productId'] = avail < 0 ? 0 : avail;
+      }
+
+      var waitingPlaced = 0;
+      var waitingPartial = 0;
+      for (final entry in orderMeta.entries) {
+        final lines = remainingByOrder[entry.key];
+        if (lines == null || lines.isEmpty) continue;
+        final branchId = entry.value.branchId;
+        var blocked = false;
+        for (final line in lines) {
+          final avail = available['$branchId|${line.productId}'] ?? 0;
+          if (line.remaining > avail) {
+            blocked = true;
+            break;
+          }
+        }
+        if (!blocked) continue;
+        switch (entry.value.status) {
+          case OrderStatus.placed:
+            waitingPlaced++;
+          case OrderStatus.partiallyDelivered:
+            waitingPartial++;
+          case OrderStatus.draft:
+          case OrderStatus.completed:
+          case OrderStatus.cancelled:
+            break;
+        }
+      }
+
+      return FulfillmentAttentionCounts(
+        placed: placed,
+        partiallyDelivered: partiallyDelivered,
+        waitingPlaced: waitingPlaced,
+        waitingPartial: waitingPartial,
+      );
+    } on PostgrestException catch (error) {
+      if (error.message.toLowerCase().contains('reserved_quantity')) {
+        return _fetchFulfillmentAttentionWithoutReserved();
+      }
+      throw ProvisioningFailure(error.message);
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  Future<FulfillmentAttentionCounts>
+      _fetchFulfillmentAttentionWithoutReserved() async {
+    final orderRows = await _client
+        .from('orders')
+        .select('id, branch_id, status')
+        .inFilter('status', [
+          OrderStatus.placed.dbValue,
+          OrderStatus.partiallyDelivered.dbValue,
+        ])
+        .isFilter('deleted_at', null);
+
+    var placed = 0;
+    var partiallyDelivered = 0;
+    final orderMeta = <String, ({String branchId, OrderStatus status})>{};
+
+    for (final raw in orderRows as List) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      final id = map['id'] as String?;
+      final branchId = map['branch_id'] as String?;
+      if (id == null || branchId == null) continue;
+      final status = OrderStatus.fromDb(map['status'] as String?);
+      orderMeta[id] = (branchId: branchId, status: status);
+      switch (status) {
+        case OrderStatus.placed:
+          placed++;
+        case OrderStatus.partiallyDelivered:
+          partiallyDelivered++;
+        case OrderStatus.draft:
+        case OrderStatus.completed:
+        case OrderStatus.cancelled:
+          break;
+      }
+    }
+
+    if (orderMeta.isEmpty) {
+      return const FulfillmentAttentionCounts();
+    }
+
+    final itemRows = await _client
+        .from('order_items')
+        .select(
+          'order_id, product_id, quantity, delivered_quantity, cancelled_quantity',
+        )
+        .inFilter('order_id', orderMeta.keys.toList());
+
+    final productIds = <String>{};
+    final remainingByOrder =
+        <String, List<({String productId, num remaining})>>{};
+
+    for (final raw in itemRows as List) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      final orderId = map['order_id'] as String?;
+      final productId = map['product_id'] as String?;
+      if (orderId == null || productId == null) continue;
+      if (!orderMeta.containsKey(orderId)) continue;
+      final ordered = _asNum(map['quantity']);
+      final delivered = _asNum(map['delivered_quantity']);
+      final cancelled = _asNum(map['cancelled_quantity']);
+      final remaining = ordered - delivered - cancelled;
+      if (remaining <= 0) continue;
+      productIds.add(productId);
+      remainingByOrder
+          .putIfAbsent(orderId, () => [])
+          .add((productId: productId, remaining: remaining));
+    }
+
+    if (productIds.isEmpty) {
+      return FulfillmentAttentionCounts(
+        placed: placed,
+        partiallyDelivered: partiallyDelivered,
+      );
+    }
+
+    final invRows = await _client
+        .from('inventory')
+        .select('branch_id, product_id, quantity')
+        .inFilter('product_id', productIds.toList());
+
+    final available = <String, num>{};
+    for (final raw in invRows as List) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      final branchId = map['branch_id'] as String?;
+      final productId = map['product_id'] as String?;
+      if (branchId == null || productId == null) continue;
+      final qty = _asNum(map['quantity']);
+      available['$branchId|$productId'] = qty < 0 ? 0 : qty;
+    }
+
+    var waitingPlaced = 0;
+    var waitingPartial = 0;
+    for (final entry in orderMeta.entries) {
+      final lines = remainingByOrder[entry.key];
+      if (lines == null || lines.isEmpty) continue;
+      final branchId = entry.value.branchId;
+      var blocked = false;
+      for (final line in lines) {
+        final avail = available['$branchId|${line.productId}'] ?? 0;
+        if (line.remaining > avail) {
+          blocked = true;
+          break;
+        }
+      }
+      if (!blocked) continue;
+      switch (entry.value.status) {
+        case OrderStatus.placed:
+          waitingPlaced++;
+        case OrderStatus.partiallyDelivered:
+          waitingPartial++;
+        case OrderStatus.draft:
+        case OrderStatus.completed:
+        case OrderStatus.cancelled:
+          break;
+      }
+    }
+
+    return FulfillmentAttentionCounts(
+      placed: placed,
+      partiallyDelivered: partiallyDelivered,
+      waitingPlaced: waitingPlaced,
+      waitingPartial: waitingPartial,
+    );
   }
 
   Future<List<SalesRepOption>> fetchSalesReps() async {
@@ -532,6 +798,7 @@ class OrderRepository {
     required String branchId,
     required String employeeId,
     bool complete = false,
+    bool place = false,
   }) async {
     if (input.lines.isEmpty) {
       throw const ValidationFailure('Add at least one product to the order.');
@@ -581,11 +848,10 @@ class OrderRepository {
           throw const ValidationFailure('Order not found.');
         }
         final status = OrderStatus.fromDb(existing['status'] as String?);
-        if (status == OrderStatus.completed) {
-          throw const ValidationFailure('Completed orders cannot be edited.');
-        }
-        if (status == OrderStatus.cancelled) {
-          throw const ValidationFailure('Cancelled orders cannot be edited.');
+        if (status != OrderStatus.draft) {
+          throw const ValidationFailure(
+            'Only draft orders can be edited. Place or cancel remaining to change fulfillment.',
+          );
         }
 
         await _client.from('orders').update({
@@ -621,7 +887,9 @@ class OrderRepository {
       await _client.from('order_items').insert(lineRows);
 
       OrderConfirmationOutcome? confirmation;
-      if (complete) {
+      if (place) {
+        await placeOrder(orderId);
+      } else if (complete) {
         confirmation = await completeOrder(
           orderId,
           companyId: companyId,
@@ -629,7 +897,7 @@ class OrderRepository {
         );
       }
 
-      if (isNew) {
+      if (isNew && !place && !complete) {
         final detail = await fetchById(orderId);
         final orderNumber = detail?.summary.orderNumber ?? orderId;
         final customerName = detail?.summary.customerName ?? 'a customer';
@@ -644,6 +912,7 @@ class OrderRepository {
           ),
         );
       }
+      // place_sales_order emits order_placed (+ insufficient-stock) transactionally.
 
       return OrderSaveResult(orderId: orderId, confirmation: confirmation);
     } on PostgrestException catch (error) {
@@ -704,6 +973,75 @@ class OrderRepository {
     }
   }
 
+  /// Record demand without inventory movement or payment settlement.
+  Future<void> placeOrder(String orderId) async {
+    try {
+      await _client.rpc('place_sales_order', params: {
+        'p_order_id': orderId,
+      });
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Deliver line quantities and deduct inventory for those quantities only.
+  Future<void> fulfillOrderItems({
+    required String orderId,
+    required List<({String orderItemId, num quantity})> lines,
+  }) async {
+    if (lines.isEmpty) {
+      throw const ValidationFailure('Provide at least one fulfillment line.');
+    }
+    try {
+      await _client.rpc('fulfill_order_items', params: {
+        'p_order_id': orderId,
+        'p_lines': [
+          for (final line in lines)
+            {
+              'order_item_id': line.orderItemId,
+              'quantity': line.quantity,
+            },
+        ],
+      });
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Cancel outstanding remaining quantity (no inventory impact).
+  ///
+  /// When [lines] is null, cancels all remaining on the order.
+  Future<void> cancelOrderRemaining({
+    required String orderId,
+    List<({String orderItemId, num quantity})>? lines,
+  }) async {
+    try {
+      await _client.rpc('cancel_order_remaining', params: {
+        'p_order_id': orderId,
+        'p_lines': lines == null
+            ? null
+            : [
+                for (final line in lines)
+                  {
+                    'order_item_id': line.orderItemId,
+                    'quantity': line.quantity,
+                  },
+              ],
+      });
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
   Future<void> cancelOrder({
     required String orderId,
     required String employeeId,
@@ -726,11 +1064,21 @@ class OrderRepository {
       }
       if (status == OrderStatus.cancelled) return;
 
-      await _client.from('orders').update({
-        'status': OrderStatus.cancelled.dbValue,
-        'cancelled_at': DateTime.now().toUtc().toIso8601String(),
-        'updated_by': employeeId,
-      }).eq('id', orderId);
+      if (status == OrderStatus.placed ||
+          status == OrderStatus.partiallyDelivered) {
+        await cancelOrderRemaining(orderId: orderId);
+        final after = await fetchById(orderId);
+        // Only emit cancelled when demand was closed with no deliveries.
+        if (after?.summary.status != OrderStatus.cancelled) {
+          return;
+        }
+      } else {
+        await _client.from('orders').update({
+          'status': OrderStatus.cancelled.dbValue,
+          'cancelled_at': DateTime.now().toUtc().toIso8601String(),
+          'updated_by': employeeId,
+        }).eq('id', orderId);
+      }
 
       final resolvedCompanyId =
           companyId ?? existing['company_id'] as String?;
@@ -785,9 +1133,12 @@ class OrderRepository {
 
   static String _mapOrderError(String message) {
     final lower = message.toLowerCase();
+    if (lower.contains('not enough stock for')) {
+      return message;
+    }
     if (lower.contains('inventory_quantity_non_negative') ||
         lower.contains('not enough stock') ||
-        lower.contains('quantity')) {
+        lower.contains('insufficient stock')) {
       return 'Not enough stock at this branch to complete the order.';
     }
     if (lower.contains('insufficient wallet')) {

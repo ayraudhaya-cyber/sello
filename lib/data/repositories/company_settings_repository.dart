@@ -27,6 +27,7 @@ class CompanySettingsRepository {
     default_product_status,
     allow_negative_stock,
     enable_low_stock_alert,
+    allow_orders_above_available_stock,
     sales_reps_can_view_outstanding_balances,
     financial_visibility_policies,
     collection_approval_required,
@@ -110,6 +111,8 @@ class CompanySettingsRepository {
                 CompanySettings.defaults.allowNegativeStock,
             'enable_low_stock_alert':
                 CompanySettings.defaults.enableLowStockAlert,
+            'allow_orders_above_available_stock':
+                CompanySettings.defaults.allowOrdersAboveAvailableStock,
             'sales_reps_can_view_outstanding_balances':
                 CompanySettings.defaults.salesRepsCanViewOutstandingBalances,
             'financial_visibility_policies':

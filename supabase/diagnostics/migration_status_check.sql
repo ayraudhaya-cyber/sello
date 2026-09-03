@@ -302,7 +302,21 @@ with checks as (
       )),
     -- 035
     ('035_company_settings_admin_view',
-      to_regclass('public.company_settings_admin') is not null)
+      to_regclass('public.company_settings_admin') is not null),
+    -- 058
+    ('058_employee_login_invite',
+      exists (
+        select 1 from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname = 'prepare_employee_login_invite'
+      )
+      and exists (
+        select 1 from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname = 'link_employee_auth_user'
+      ))
   ) as t(migration, applied)
 )
 select

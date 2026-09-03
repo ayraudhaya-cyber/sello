@@ -565,149 +565,49 @@ class _PaymentsSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _MetricCard(
-        label: 'Collected today',
-        value: SelloFormatters.currency(
-          stats.collectedToday,
-          symbol: currencySymbol,
-        ),
-        hint: 'Completed receipts',
-        icon: Icons.payments_outlined,
-        accent: AppColors.success,
-        soft: AppColors.successContainer,
-      ),
-      _MetricCard(
-        label: 'Outstanding',
-        value: SelloFormatters.currency(
-          stats.outstandingReceivables,
-          symbol: currencySymbol,
-        ),
-        hint: 'Customer receivables',
-        icon: Icons.account_balance_wallet_outlined,
-        accent: AppColors.finance,
-        soft: context.brandAccentContainer,
-      ),
-      _MetricCard(
-        label: 'Wallet issued',
-        value: SelloFormatters.currency(
-          stats.walletIssued,
-          symbol: currencySymbol,
-        ),
-        hint: 'Store credit on accounts',
-        icon: Icons.savings_outlined,
-        accent: context.brandAccent,
-        soft: context.brandAccentContainer,
-      ),
-      _MetricCard(
-        label: 'Pending credit',
-        value: SelloFormatters.currency(
-          stats.pendingCredit,
-          symbol: currencySymbol,
-        ),
-        hint: 'Credit customers owing',
-        icon: Icons.credit_score_outlined,
-        accent: AppColors.warning,
-        soft: AppColors.warningContainer,
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      );
-    }
-
-    return Row(
+    return SelloStatCardGrid(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) const SizedBox(width: AppSpacing.md),
-        ],
+        SelloStatCard(
+          label: 'Collected today',
+          value: SelloFormatters.currency(
+            stats.collectedToday,
+            symbol: currencySymbol,
+          ),
+          hint: 'Completed receipts',
+          icon: Icons.payments_outlined,
+          tone: AppColors.success,
+        ),
+        SelloStatCard(
+          label: 'Outstanding',
+          value: SelloFormatters.currency(
+            stats.outstandingReceivables,
+            symbol: currencySymbol,
+          ),
+          hint: 'Customer receivables',
+          icon: Icons.account_balance_wallet_outlined,
+          tone: AppColors.finance,
+        ),
+        SelloStatCard(
+          label: 'Wallet issued',
+          value: SelloFormatters.currency(
+            stats.walletIssued,
+            symbol: currencySymbol,
+          ),
+          hint: 'Store credit on accounts',
+          icon: Icons.savings_outlined,
+          tone: context.brandAccent,
+        ),
+        SelloStatCard(
+          label: 'Pending credit',
+          value: SelloFormatters.currency(
+            stats.pendingCredit,
+            symbol: currencySymbol,
+          ),
+          hint: 'Credit customers owing',
+          icon: Icons.credit_score_outlined,
+          tone: AppColors.warning,
+        ),
       ],
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.hint,
-    required this.icon,
-    required this.accent,
-    required this.soft,
-  });
-
-  final String label;
-  final String value;
-  final String hint;
-  final IconData icon;
-  final Color accent;
-  final Color soft;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 92),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: AppRadius.panelAll,
-        border: Border.all(color: AppColors.outlinePanel),
-        boxShadow: AppShadows.panel,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: soft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 22, color: accent),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label.toUpperCase(), style: AppTypography.eyebrow),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.numeric(
-                    const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.03 * 22,
-                      height: 1.1,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                Text(
-                  hint,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

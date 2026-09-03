@@ -45,6 +45,7 @@ class _DevExperienceBootstrapState
 
 /// Opens the DX tools panel as a standard dialog (uses navigator Overlay).
 Future<void> showDevExperienceDialog(BuildContext context) {
+  if (kReleaseMode) return Future<void>.value();
   return showDialog<void>(
     context: context,
     barrierDismissible: true,

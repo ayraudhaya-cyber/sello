@@ -33,6 +33,7 @@ class ProductSummary extends Equatable {
     required this.sellingPrice,
     required this.costPrice,
     required this.currentStockQuantity,
+    this.availableStockQuantity,
     required this.isActive,
     this.categoryId,
     this.categoryName,
@@ -63,6 +64,10 @@ class ProductSummary extends Equatable {
   final num costPrice;
   final num sellingPrice;
   final num currentStockQuantity;
+
+  /// Branch-filtered sellable quantity (on-hand minus reserved) when inventory is joined.
+  final num? availableStockQuantity;
+
   final num? reorderLevel;
   /// Primary sourcing partner — V1 single preferred; multi via product_suppliers later.
   final String? preferredSupplierId;
@@ -103,6 +108,7 @@ class ProductSummary extends Equatable {
       costPrice: costPrice,
       sellingPrice: sellingPrice,
       currentStockQuantity: currentStockQuantity,
+      availableStockQuantity: availableStockQuantity,
       reorderLevel: reorderLevel,
       preferredSupplierId: preferredSupplierId,
       preferredSupplierName: preferredSupplierName,
@@ -115,7 +121,10 @@ class ProductSummary extends Equatable {
     );
   }
 
-  factory ProductSummary.fromQueryRow(Map<String, dynamic> json) {
+  factory ProductSummary.fromQueryRow(
+    Map<String, dynamic> json, {
+    String? branchId,
+  }) {
     final category = json['categories'];
     final images = (json['product_images'] as List?) ?? const [];
     final inventory = (json['inventory'] as List?) ?? const [];
@@ -139,10 +148,23 @@ class ProductSummary extends Equatable {
     }
 
     num totalStock = 0;
+    num totalAvailable = 0;
+    bool hasInventoryRow = false;
     num? reorderLevel;
     for (final item in inventory) {
       if (item is! Map) continue;
-      totalStock += _numValue(item['quantity']);
+      final itemBranch = item['branch_id'] as String?;
+      if (branchId != null &&
+          itemBranch != null &&
+          itemBranch != branchId) {
+        continue;
+      }
+      hasInventoryRow = true;
+      final qty = _numValue(item['quantity']);
+      final reserved = _numValue(item['reserved_quantity']);
+      totalStock += qty;
+      final available = qty - reserved;
+      totalAvailable += available < 0 ? 0 : available;
       final value = item['reorder_level'];
       if (value != null) {
         reorderLevel = (reorderLevel ?? 0) + _numValue(value);
@@ -170,6 +192,7 @@ class ProductSummary extends Equatable {
       costPrice: _numValue(json['cost_price']),
       sellingPrice: _numValue(json['selling_price']),
       currentStockQuantity: totalStock,
+      availableStockQuantity: hasInventoryRow ? totalAvailable : null,
       reorderLevel: reorderLevel,
       preferredSupplierId: json['preferred_supplier_id'] as String?,
       preferredSupplierName: preferredName,
@@ -196,6 +219,7 @@ class ProductSummary extends Equatable {
         costPrice,
         sellingPrice,
         currentStockQuantity,
+        availableStockQuantity,
         reorderLevel,
         preferredSupplierId,
         preferredSupplierName,

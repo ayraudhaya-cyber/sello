@@ -494,84 +494,34 @@ class _ScheduleSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _MetricCard(label: 'Today', value: '${stats.today}', tone: AppColors.ops),
-      _MetricCard(
-        label: 'Scheduled',
-        value: '${stats.scheduled}',
-        tone: AppColors.info,
-      ),
-      _MetricCard(
-        label: 'Completed',
-        value: '${stats.completed}',
-        tone: AppColors.success,
-      ),
-      _MetricCard(
-        label: 'Missed',
-        value: '${stats.missed}',
-        tone: AppColors.attention,
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.sm,
-        children: [
-          for (final card in cards)
-            SizedBox(width: (MediaQuery.sizeOf(context).width - 56) / 2, child: card),
-        ],
-      );
-    }
-
-    return Row(
+    return SelloStatCardGrid(
+      gap: AppSpacing.sm,
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.sm),
-          Expanded(child: cards[i]),
-        ],
+        SelloStatCard(
+          label: 'Today',
+          value: '${stats.today}',
+          icon: Icons.today_outlined,
+          tone: AppColors.ops,
+        ),
+        SelloStatCard(
+          label: 'Scheduled',
+          value: '${stats.scheduled}',
+          icon: Icons.event_outlined,
+          tone: AppColors.info,
+        ),
+        SelloStatCard(
+          label: 'Completed',
+          value: '${stats.completed}',
+          icon: Icons.check_circle_outline_rounded,
+          tone: AppColors.success,
+        ),
+        SelloStatCard(
+          label: 'Missed',
+          value: '${stats.missed}',
+          icon: Icons.event_busy_outlined,
+          tone: AppColors.attention,
+        ),
       ],
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.tone,
-  });
-
-  final String label;
-  final String value;
-  final Color tone;
-
-  @override
-  Widget build(BuildContext context) {
-    return SelloCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              color: AppColors.textSecondary,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
-              color: tone,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

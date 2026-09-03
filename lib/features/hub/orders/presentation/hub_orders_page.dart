@@ -11,6 +11,7 @@ import 'package:sello/features/hub/settings/application/hub_settings_provider.da
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
+import 'package:sello/features/orders/presentation/order_fulfillment_dialog.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/payment_status.dart';
@@ -65,16 +66,22 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     final saved = await ref.read(hubOrdersProvider.notifier).saveOrder(
           result.input,
           complete: result.complete,
+          place: result.place,
         );
     if (!mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(context, saved.error!);
     } else if (result.complete) {
-      await presentOrderConfirmation(
-        context,
-        saved.confirmation,
-        completed: true,
-      );
+      SelloSnackbars.success(context, 'Order fulfilled.');
+      if (saved.confirmation != null) {
+        await presentOrderConfirmation(
+          context,
+          saved.confirmation,
+          completed: true,
+        );
+      }
+    } else if (result.place) {
+      SelloSnackbars.success(context, 'Order placed.');
     } else {
       SelloSnackbars.success(
         context,
@@ -97,6 +104,7 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       builder: (context) => OrderDetailsDialog(
         detail: detail,
         currencySymbol: _currencySymbol(),
+        completeLabel: 'Fulfill all',
         onEdit: detail.summary.isEditable
             ? () {
                 Navigator.of(context).pop();
@@ -106,10 +114,29 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         onComplete: detail.summary.isEditable
             ? () async {
                 Navigator.of(context).pop();
-                await _complete(detail.summary);
+                await _fulfillAll(detail.summary, fromDraft: true);
               }
             : null,
-        onCancelOrder: detail.summary.isEditable
+        onFulfill: detail.summary.status.canFulfill
+            ? () async {
+                Navigator.of(context).pop();
+                await _recordDelivery(detail);
+              }
+            : null,
+        onFulfillAll: detail.summary.status.canFulfill
+            ? () async {
+                Navigator.of(context).pop();
+                await _fulfillAll(detail.summary);
+              }
+            : null,
+        onCancelRemaining: detail.summary.status.canFulfill
+            ? () async {
+                Navigator.of(context).pop();
+                await _cancelRemaining(detail.summary);
+              }
+            : null,
+        onCancelOrder: detail.summary.isEditable ||
+                detail.summary.status == OrderStatus.placed
             ? () async {
                 Navigator.of(context).pop();
                 await _cancel(detail.summary);
@@ -124,6 +151,95 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
             : null,
       ),
     );
+  }
+
+  Future<void> _recordDelivery(OrderDetail detail) async {
+    final result = await OrderFulfillmentDialog.show(
+      context: context,
+      detail: detail,
+      currencySymbol: _currencySymbol(),
+    );
+    if (result == null || !mounted) return;
+
+    final error = await ref.read(hubOrdersProvider.notifier).fulfillOrderItems(
+          orderId: detail.summary.id,
+          lines: result.lines,
+        );
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+      // Re-open details so the Owner can adjust and retry.
+      await _openDetails(detail.summary);
+    } else {
+      SelloSnackbars.success(context, 'Delivery recorded.');
+      await _openDetails(detail.summary);
+    }
+  }
+
+  Future<void> _fulfillAll(
+    OrderSummary order, {
+    bool fromDraft = false,
+  }) async {
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: fromDraft ? 'Fulfill all?' : 'Fulfill all remaining?',
+      message: fromDraft
+          ? '${order.orderNumber} will be placed and all quantities delivered. '
+              'Stock will be reduced for every line. Payment is not settled automatically.'
+          : '${order.orderNumber}: deliver every remaining unit now. '
+              'Stock will be reduced only for remaining quantities. Payment is not settled automatically.',
+      confirmLabel: 'Fulfill all',
+      cancelLabel: 'Back',
+    );
+    if (confirmed != true || !mounted) return;
+
+    if (fromDraft) {
+      final saved =
+          await ref.read(hubOrdersProvider.notifier).completeExisting(order);
+      if (!mounted) return;
+      if (!saved.isOk) {
+        SelloSnackbars.error(
+          context,
+          saved.error ?? 'Unable to fulfill this order.',
+        );
+      } else {
+        SelloSnackbars.success(context, 'Order fulfilled.');
+      }
+      return;
+    }
+
+    final error =
+        await ref.read(hubOrdersProvider.notifier).fulfillAllRemaining(order);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+    } else {
+      SelloSnackbars.success(context, 'Order fulfilled.');
+    }
+  }
+
+  Future<void> _cancelRemaining(OrderSummary order) async {
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: 'Cancel remaining?',
+      message:
+          'Close unmet quantities on ${order.orderNumber}. '
+          'Already delivered quantities stay recorded. Stock is not changed for cancelled units.',
+      confirmLabel: 'Cancel remaining',
+      cancelLabel: 'Keep open',
+      destructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+
+    final error = await ref
+        .read(hubOrdersProvider.notifier)
+        .cancelOrderRemaining(order.id);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+    } else {
+      SelloSnackbars.success(context, 'Remaining quantities cancelled.');
+    }
   }
 
   Future<void> _archive(OrderSummary order) async {
@@ -149,41 +265,16 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     }
   }
 
-  Future<void> _complete(OrderSummary order) async {
-    final confirmed = await showSelloDialog(
-      context: context,
-      title: 'Complete order?',
-      message:
-          '${order.orderNumber} will be marked completed and stock will be '
-          'reduced for each line. This cannot be undone from Orders Phase 1.',
-      confirmLabel: 'Complete order',
-      cancelLabel: 'Keep draft',
-    );
-    if (confirmed != true || !mounted) return;
-
-    final saved =
-        await ref.read(hubOrdersProvider.notifier).completeExisting(order);
-    if (!mounted) return;
-    if (!saved.isOk) {
-      SelloSnackbars.error(context, saved.error!);
-    } else {
-      await presentOrderConfirmation(
-        context,
-        saved.confirmation,
-        completed: true,
-      );
-    }
-  }
-
   Future<void> _cancel(OrderSummary order) async {
     final confirmed = await showSelloDialog(
       context: context,
       title: 'Cancel order?',
-      message:
-          '${order.orderNumber} will be cancelled. Draft and cancelled orders '
-          'never reduce inventory.',
+      message: order.status == OrderStatus.placed
+          ? '${order.orderNumber} will be cancelled. No inventory will change.'
+          : '${order.orderNumber} will be cancelled. Draft and cancelled orders '
+              'never reduce inventory.',
       confirmLabel: 'Cancel order',
-      cancelLabel: 'Keep draft',
+      cancelLabel: 'Keep',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
@@ -452,7 +543,8 @@ Widget _statusBadge(OrderStatus status) {
     label: status.label,
     tone: switch (status) {
       OrderStatus.draft => SelloStatusTone.neutral,
-      OrderStatus.submitted => SelloStatusTone.info,
+      OrderStatus.placed => SelloStatusTone.info,
+      OrderStatus.partiallyDelivered => SelloStatusTone.warning,
       OrderStatus.completed => SelloStatusTone.success,
       OrderStatus.cancelled => SelloStatusTone.danger,
     },
@@ -507,7 +599,19 @@ class _OrdersToolbar extends StatelessWidget {
           DropdownMenuItem(value: OrderStatusFilter.all, child: Text('All')),
           DropdownMenuItem(
             value: OrderStatusFilter.draft,
-            child: Text('Draft'),
+            child: Text('Open'),
+          ),
+          DropdownMenuItem(
+            value: OrderStatusFilter.openFulfillment,
+            child: Text('For fulfillment'),
+          ),
+          DropdownMenuItem(
+            value: OrderStatusFilter.placed,
+            child: Text('Placed'),
+          ),
+          DropdownMenuItem(
+            value: OrderStatusFilter.partiallyDelivered,
+            child: Text('Partially delivered'),
           ),
           DropdownMenuItem(
             value: OrderStatusFilter.completed,
@@ -675,135 +779,37 @@ class _OrdersSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _MetricCard(
-        label: 'Total',
-        value: '${counts.total}',
-        hint: 'All orders',
-        icon: Icons.receipt_long_outlined,
-        accent: context.brandAccent,
-        soft: context.brandAccentContainer,
-      ),
-      _MetricCard(
-        label: 'Draft',
-        value: '${counts.draft}',
-        hint: 'Not completed',
-        icon: Icons.edit_note_rounded,
-        accent: AppColors.textTertiary,
-        soft: AppColors.surfaceMuted,
-      ),
-      _MetricCard(
-        label: 'Completed',
-        value: '${counts.completed}',
-        hint: 'Stock applied',
-        icon: Icons.check_circle_outline_rounded,
-        accent: AppColors.success,
-        soft: AppColors.successContainer,
-      ),
-      _MetricCard(
-        label: 'Cancelled',
-        value: '${counts.cancelled}',
-        hint: 'No stock impact',
-        icon: Icons.cancel_outlined,
-        accent: AppColors.error,
-        soft: AppColors.errorContainer,
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      );
-    }
-
-    return Row(
+    return SelloStatCardGrid(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) const SizedBox(width: AppSpacing.md),
-        ],
+        SelloStatCard(
+          label: 'Total',
+          value: '${counts.total}',
+          hint: 'All orders',
+          icon: Icons.receipt_long_outlined,
+          tone: context.brandAccent,
+        ),
+        SelloStatCard(
+          label: 'Open',
+          value: '${counts.draft}',
+          hint: 'Draft, placed, partial',
+          icon: Icons.edit_note_rounded,
+          tone: AppColors.textTertiary,
+        ),
+        SelloStatCard(
+          label: 'Completed',
+          value: '${counts.completed}',
+          hint: 'Fulfillment finished',
+          icon: Icons.check_circle_outline_rounded,
+          tone: AppColors.success,
+        ),
+        SelloStatCard(
+          label: 'Cancelled',
+          value: '${counts.cancelled}',
+          hint: 'No stock impact',
+          icon: Icons.cancel_outlined,
+          tone: AppColors.error,
+        ),
       ],
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.hint,
-    required this.icon,
-    required this.accent,
-    required this.soft,
-  });
-
-  final String label;
-  final String value;
-  final String hint;
-  final IconData icon;
-  final Color accent;
-  final Color soft;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 92),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: AppRadius.panelAll,
-        border: Border.all(color: AppColors.outlinePanel),
-        boxShadow: AppShadows.panel,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: soft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 22, color: accent),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label.toUpperCase(), style: AppTypography.eyebrow),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  value,
-                  style: AppTypography.numeric(
-                    const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.03 * 28,
-                      height: 1.1,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                Text(
-                  hint,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

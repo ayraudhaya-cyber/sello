@@ -281,6 +281,7 @@ class InventoryDashboardStats {
     required this.lowStock,
     required this.outOfStock,
     required this.recentlyUpdated,
+    this.negativeStock = 0,
     this.stockValue = 0,
     this.recentMovements = 0,
   });
@@ -288,6 +289,9 @@ class InventoryDashboardStats {
   final int totalItems;
   final int lowStock;
   final int outOfStock;
+
+  /// Active products with physical on-hand `quantity < 0`.
+  final int negativeStock;
   final int recentlyUpdated;
   final num stockValue;
   /// Movements in the last 7 days (branch-scoped when provided).

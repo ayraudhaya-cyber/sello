@@ -68,80 +68,59 @@ class _BusinessOnboardingPageState
     final awaitingEmail = auth.awaitingEmailConfirmation;
 
     final width = MediaQuery.sizeOf(context).width;
-    final horizontalPadding = width < 360 ? AppSpacing.md : AppSpacing.lg;
     final cardPadding = width < 360 ? AppSpacing.md : AppSpacing.lg;
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppGradients.heroWash),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: horizontalPadding,
-                  vertical: AppSpacing.lg,
+      body: AuthShellLayout(
+        maxCardWidth: 480,
+        cardPadding: EdgeInsets.all(cardPadding),
+        child: awaitingEmail
+            ? _EmailConfirmationSuccess(
+                email: auth.pendingEmail ?? draft.email,
+                loading: loading,
+                infoMessage: auth.infoMessage,
+                errorMessage: auth.errorMessage,
+                onResend: _resendEmail,
+                onBackToSignIn: _backToSignIn,
+              )
+            : _SignupForm(
+                formKey: _formKey,
+                nameController: _nameController,
+                emailController: _emailController,
+                passwordController: _passwordController,
+                confirmController: _confirmController,
+                businessNameController: _businessNameController,
+                obscurePassword: _obscurePassword,
+                obscureConfirm: _obscureConfirm,
+                onTogglePassword: () => setState(
+                  () => _obscurePassword = !_obscurePassword,
                 ),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                child: SelloCard(
-                  elevation: SelloCardElevation.raised,
-                  padding: EdgeInsets.all(cardPadding),
-                  child: awaitingEmail
-                      ? _EmailConfirmationSuccess(
-                          email: auth.pendingEmail ?? draft.email,
-                          loading: loading,
-                          infoMessage: auth.infoMessage,
-                          errorMessage: auth.errorMessage,
-                          onResend: _resendEmail,
-                          onBackToSignIn: _backToSignIn,
-                        )
-                      : _SignupForm(
-                          formKey: _formKey,
-                          nameController: _nameController,
-                          emailController: _emailController,
-                          passwordController: _passwordController,
-                          confirmController: _confirmController,
-                          businessNameController: _businessNameController,
-                          obscurePassword: _obscurePassword,
-                          obscureConfirm: _obscureConfirm,
-                          onTogglePassword: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                          onToggleConfirm: () => setState(
-                            () => _obscureConfirm = !_obscureConfirm,
-                          ),
-                          loading: loading,
-                          fieldError: draft.fieldError,
-                          errorMessage: draft.errorMessage ?? auth.errorMessage,
-                          inviteRequired: draft.inviteRequired ||
-                              SignupInvitePolicy.isInviteGateError(
-                                draft.errorMessage ?? auth.errorMessage ?? '',
-                              ),
-                          infoMessage: auth.requiresOnboarding
-                              ? auth.infoMessage
-                              : null,
-                          onNameChanged: (v) =>
-                              ref.read(onboardingProvider.notifier).updateFullName(v),
-                          onEmailChanged: (v) =>
-                              ref.read(onboardingProvider.notifier).updateEmail(v),
-                          onPasswordChanged: (v) =>
-                              ref.read(onboardingProvider.notifier).updatePassword(v),
-                          onConfirmChanged: (v) => ref
-                              .read(onboardingProvider.notifier)
-                              .updateConfirmPassword(v),
-                          onBusinessNameChanged: (v) => ref
-                              .read(onboardingProvider.notifier)
-                              .updateBusinessName(v),
-                          onSubmit: loading ? null : _submit,
-                          onSignIn: loading ? null : _backToSignIn,
-                        ),
+                onToggleConfirm: () => setState(
+                  () => _obscureConfirm = !_obscureConfirm,
                 ),
+                loading: loading,
+                fieldError: draft.fieldError,
+                errorMessage: draft.errorMessage ?? auth.errorMessage,
+                inviteRequired: draft.inviteRequired ||
+                    SignupInvitePolicy.isInviteGateError(
+                      draft.errorMessage ?? auth.errorMessage ?? '',
+                    ),
+                infoMessage: auth.requiresOnboarding ? auth.infoMessage : null,
+                onNameChanged: (v) =>
+                    ref.read(onboardingProvider.notifier).updateFullName(v),
+                onEmailChanged: (v) =>
+                    ref.read(onboardingProvider.notifier).updateEmail(v),
+                onPasswordChanged: (v) =>
+                    ref.read(onboardingProvider.notifier).updatePassword(v),
+                onConfirmChanged: (v) => ref
+                    .read(onboardingProvider.notifier)
+                    .updateConfirmPassword(v),
+                onBusinessNameChanged: (v) => ref
+                    .read(onboardingProvider.notifier)
+                    .updateBusinessName(v),
+                onSubmit: loading ? null : _submit,
+                onSignIn: loading ? null : _backToSignIn,
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -326,9 +305,9 @@ class _SignupForm extends StatelessWidget {
             onPressed: onSubmit,
           ),
           const SizedBox(height: AppSpacing.sm),
-          TextButton(
+          AuthTextLink(
+            label: 'Already have an account? Sign in',
             onPressed: onSignIn,
-            child: const Text('Already have an account? Sign in'),
           ),
         ],
       ),

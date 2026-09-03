@@ -23,6 +23,10 @@ class OrderDetailsDialog extends ConsumerWidget {
     required this.currencySymbol,
     this.onEdit,
     this.onComplete,
+    this.completeLabel = 'Complete order',
+    this.onFulfill,
+    this.onFulfillAll,
+    this.onCancelRemaining,
     this.onCancelOrder,
     this.onArchive,
     this.readOnly = false,
@@ -32,6 +36,10 @@ class OrderDetailsDialog extends ConsumerWidget {
   final String currencySymbol;
   final VoidCallback? onEdit;
   final VoidCallback? onComplete;
+  final String completeLabel;
+  final VoidCallback? onFulfill;
+  final VoidCallback? onFulfillAll;
+  final VoidCallback? onCancelRemaining;
   final VoidCallback? onCancelOrder;
   final VoidCallback? onArchive;
   final bool readOnly;
@@ -44,11 +52,21 @@ class OrderDetailsDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isMobile = context.isMobile;
     final dash = '—';
-    final canManage = !readOnly && order.isEditable;
+    final canManageDraft = !readOnly && order.isEditable;
+    final canFulfill = !readOnly &&
+        order.status.canFulfill &&
+        onFulfill != null;
     final canArchive = !readOnly &&
         onArchive != null &&
         (order.status == OrderStatus.completed ||
             order.status == OrderStatus.cancelled);
+    final totalOrdered = detail.lines.fold<num>(0, (s, l) => s + l.quantity);
+    final totalDelivered =
+        detail.lines.fold<num>(0, (s, l) => s + l.deliveredQuantity);
+    final totalRemaining =
+        detail.lines.fold<num>(0, (s, l) => s + l.remainingQuantity);
+    final totalCancelled =
+        detail.lines.fold<num>(0, (s, l) => s + l.cancelledQuantity);
     final fieldConfig = ref.watch(productFieldConfigProvider).valueOrNull ??
         ProductFieldConfig(fields: []);
 
@@ -135,6 +153,63 @@ class OrderDetailsDialog extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: _sectionGap),
+          if (!order.isDraft) ...[
+            _Section(
+              label: 'Fulfillment',
+              child: Column(
+                children: [
+                  SelloFormRow(
+                    left: _Field(
+                      label: 'Ordered',
+                      value: SelloFormatters.quantity(totalOrdered),
+                    ),
+                    right: _Field(
+                      label: 'Delivered',
+                      value: SelloFormatters.quantity(totalDelivered),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SelloFormRow(
+                    left: _Field(
+                      label: 'Remaining',
+                      value: SelloFormatters.quantity(totalRemaining),
+                    ),
+                    right: _Field(
+                      label: 'Cancelled',
+                      value: totalCancelled > 0
+                          ? SelloFormatters.quantity(totalCancelled)
+                          : dash,
+                      mutedEmpty: totalCancelled <= 0,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SelloFormRow(
+                    left: _Field(
+                      label: 'Order date',
+                      value: SelloFormatters.date(order.orderedAt),
+                    ),
+                    right: _Field(
+                      label: 'Payment',
+                      value: order.paymentStatus.label,
+                    ),
+                  ),
+                  if (canFulfill && onFulfillAll != null) ...[
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelloButton(
+                        label: 'Fulfill all remaining',
+                        variant: SelloButtonVariant.outline,
+                        size: SelloButtonSize.small,
+                        onPressed: onFulfillAll,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: _sectionGap),
+          ],
           _Section(
             label: 'Products',
             child: detail.lines.isEmpty
@@ -150,6 +225,7 @@ class OrderDetailsDialog extends ConsumerWidget {
                           line: detail.lines[i],
                           currencySymbol: currencySymbol,
                           catalogFields: fieldConfig.forCatalog,
+                          showFulfillment: !order.isDraft,
                         ),
                       ],
                     ],
@@ -251,29 +327,39 @@ class OrderDetailsDialog extends ConsumerWidget {
           ),
         ],
       ),
-      footer: canManage
+      footer: canManageDraft
           ? SelloDialogFooter(
               destructiveLabel: 'Cancel order',
               onDestructive: onCancelOrder,
               cancelLabel: 'Edit draft',
               cancelVariant: SelloButtonVariant.outline,
               onCancel: onEdit,
-              primaryLabel: 'Complete order',
+              primaryLabel: completeLabel,
               onPrimary: onComplete,
             )
-          : SelloDialogFooter(
-              destructiveLabel: canArchive ? 'Archive' : null,
-              onDestructive: canArchive ? onArchive : null,
-              cancelLabel: 'Close',
-              cancelVariant: SelloButtonVariant.outline,
-              onCancel: () => Navigator.of(context).maybePop(),
-              primaryLabel: order.isEditable && onEdit != null
-                  ? 'Edit draft'
-                  : 'Done',
-              onPrimary: order.isEditable && onEdit != null
-                  ? onEdit
-                  : () => Navigator.of(context).maybePop(),
-            ),
+          : canFulfill
+              ? SelloDialogFooter(
+                  destructiveLabel: totalDelivered > 0
+                      ? 'Cancel remaining'
+                      : 'Cancel order',
+                  onDestructive: totalDelivered > 0
+                      ? onCancelRemaining
+                      : onCancelOrder,
+                  cancelLabel: 'Close',
+                  cancelVariant: SelloButtonVariant.outline,
+                  onCancel: () => Navigator.of(context).maybePop(),
+                  primaryLabel: 'Record delivery',
+                  onPrimary: onFulfill,
+                )
+              : SelloDialogFooter(
+                  destructiveLabel: canArchive ? 'Archive' : null,
+                  onDestructive: canArchive ? onArchive : null,
+                  cancelLabel: 'Close',
+                  cancelVariant: SelloButtonVariant.outline,
+                  onCancel: () => Navigator.of(context).maybePop(),
+                  primaryLabel: 'Done',
+                  onPrimary: () => Navigator.of(context).maybePop(),
+                ),
     );
   }
 }
@@ -307,7 +393,8 @@ class _OrderHero extends StatelessWidget {
               label: order.status.label,
               tone: switch (order.status) {
                 OrderStatus.draft => SelloStatusTone.neutral,
-                OrderStatus.submitted => SelloStatusTone.info,
+                OrderStatus.placed => SelloStatusTone.info,
+                OrderStatus.partiallyDelivered => SelloStatusTone.warning,
                 OrderStatus.completed => SelloStatusTone.success,
                 OrderStatus.cancelled => SelloStatusTone.danger,
               },
@@ -496,11 +583,13 @@ class _LineRow extends StatelessWidget {
     required this.line,
     required this.currencySymbol,
     required this.catalogFields,
+    this.showFulfillment = false,
   });
 
   final OrderLineItem line;
   final String currencySymbol;
   final List<CompanyProductField> catalogFields;
+  final bool showFulfillment;
 
   String? _specLine() {
     final parts = <String>[];
@@ -549,6 +638,15 @@ class _LineRow extends StatelessWidget {
                 '$discount',
                 style: _Type.label.copyWith(color: AppColors.textSecondary),
               ),
+              if (showFulfillment) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${SelloFormatters.quantity(line.deliveredQuantity)} delivered · '
+                  '${SelloFormatters.quantity(line.remainingQuantity)} remaining'
+                  '${line.cancelledQuantity > 0 ? ' · ${SelloFormatters.quantity(line.cancelledQuantity)} cancelled' : ''}',
+                  style: _Type.label.copyWith(color: AppColors.textFaint),
+                ),
+              ],
               if (specs != null) ...[
                 const SizedBox(height: 4),
                 Text(

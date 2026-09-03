@@ -638,129 +638,30 @@ class _CustomersSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _SummaryMetricCard(
-        label: 'Total',
-        value: '$totalCount',
-        hint: 'Visible on this page',
-        icon: Icons.people_outline_rounded,
-        accent: context.brandAccent,
-        soft: context.brandAccentContainer,
-      ),
-      _SummaryMetricCard(
-        label: 'Active',
-        value: '$activeCount',
-        hint: 'Ready for sales',
-        icon: Icons.check_circle_outline_rounded,
-        accent: AppColors.success,
-        soft: AppColors.successContainer,
-      ),
-      _SummaryMetricCard(
-        label: 'Archived',
-        value: '$archivedCount',
-        hint: 'Hidden from new sales',
-        icon: Icons.archive_outlined,
-        accent: AppColors.textTertiary,
-        soft: AppColors.surfaceMuted,
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      );
-    }
-
-    return Row(
+    return SelloStatCardGrid(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) const SizedBox(width: AppSpacing.md),
-        ],
+        SelloStatCard(
+          label: 'Total',
+          value: '$totalCount',
+          hint: 'Visible on this page',
+          icon: Icons.people_outline_rounded,
+          tone: context.brandAccent,
+        ),
+        SelloStatCard(
+          label: 'Active',
+          value: '$activeCount',
+          hint: 'Ready for sales',
+          icon: Icons.check_circle_outline_rounded,
+          tone: AppColors.success,
+        ),
+        SelloStatCard(
+          label: 'Archived',
+          value: '$archivedCount',
+          hint: 'Hidden from new sales',
+          icon: Icons.archive_outlined,
+          tone: AppColors.textTertiary,
+        ),
       ],
-    );
-  }
-}
-
-class _SummaryMetricCard extends StatelessWidget {
-  const _SummaryMetricCard({
-    required this.label,
-    required this.value,
-    required this.hint,
-    required this.icon,
-    required this.accent,
-    required this.soft,
-  });
-
-  final String label;
-  final String value;
-  final String hint;
-  final IconData icon;
-  final Color accent;
-  final Color soft;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 92),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: AppRadius.panelAll,
-        border: Border.all(color: AppColors.outlinePanel),
-        boxShadow: AppShadows.panel,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: soft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 22, color: accent),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(label.toUpperCase(), style: AppTypography.eyebrow),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  value,
-                  style: AppTypography.numeric(
-                    const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.03 * 28,
-                      height: 1.1,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  hint,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

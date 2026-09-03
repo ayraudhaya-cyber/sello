@@ -140,17 +140,28 @@ Future<bool?> showSelloDialog({
           AppSpacing.lg,
         ),
         actions: [
-          SelloButton(
-            label: cancelLabel,
-            variant: SelloButtonVariant.outline,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          SelloButton(
-            label: confirmLabel,
-            variant: destructive
-                ? SelloButtonVariant.danger
-                : SelloButtonVariant.primary,
-            onPressed: () => Navigator.of(context).pop(true),
+          Row(
+            children: [
+              Expanded(
+                child: SelloButton(
+                  label: cancelLabel,
+                  variant: SelloButtonVariant.outline,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(false),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: SelloButton(
+                  label: confirmLabel,
+                  variant: destructive
+                      ? SelloButtonVariant.danger
+                      : SelloButtonVariant.primary,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+              ),
+            ],
           ),
         ],
       );

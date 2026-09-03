@@ -86,10 +86,13 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     final saved = await ref.read(selloOrdersProvider.notifier).saveOrder(
           result.input,
           complete: result.complete,
+          place: result.place,
         );
     if (!mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(context, saved.error!);
+    } else if (result.place) {
+      SelloSnackbars.success(context, 'Order submitted.');
     } else if (result.complete) {
       await presentOrderConfirmation(
         context,
@@ -121,9 +124,10 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
             ? () async {
                 final nav = Navigator.of(context);
                 nav.pop();
-                await _complete(detail.summary);
+                await _submitDraft(detail.summary);
               }
             : null,
+        completeLabel: 'Submit order',
         onCancelOrder: detail.summary.isEditable
             ? () async {
                 final nav = Navigator.of(context);
@@ -143,28 +147,24 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     );
   }
 
-  Future<void> _complete(OrderSummary order) async {
+  Future<void> _submitDraft(OrderSummary order) async {
     final confirmed = await showSelloDialog(
       context: context,
-      title: 'Complete order?',
+      title: 'Submit order?',
       message:
-          '${order.orderNumber} will be completed and stock will be reduced.',
-      confirmLabel: 'Complete order',
+          '${order.orderNumber} will be placed for fulfillment. Stock will not be reduced yet.',
+      confirmLabel: 'Submit order',
       cancelLabel: 'Keep draft',
     );
     if (confirmed != true || !mounted) return;
 
     final saved =
-        await ref.read(selloOrdersProvider.notifier).completeExisting(order);
+        await ref.read(selloOrdersProvider.notifier).placeExisting(order);
     if (!mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(context, saved.error!);
     } else {
-      await presentOrderConfirmation(
-        context,
-        saved.confirmation,
-        completed: true,
-      );
+      SelloSnackbars.success(context, 'Order submitted.');
     }
   }
 

@@ -91,8 +91,7 @@ class OrderSummary extends Equatable {
   final DateTime? cancelledAt;
 
   bool get isDraft => status == OrderStatus.draft;
-  bool get isEditable =>
-      status == OrderStatus.draft || status == OrderStatus.submitted;
+  bool get isEditable => status == OrderStatus.draft;
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
     return OrderSummary(
@@ -135,6 +134,8 @@ class OrderLineItem extends Equatable {
     required this.quantity,
     required this.unitPrice,
     required this.lineTotal,
+    this.deliveredQuantity = 0,
+    this.cancelledQuantity = 0,
     this.productName,
     this.productSku,
     this.imageUrl,
@@ -146,7 +147,12 @@ class OrderLineItem extends Equatable {
 
   final String id;
   final String productId;
+  /// Ordered / requested quantity (customer demand).
   final num quantity;
+  /// Cumulative quantity actually fulfilled (inventory deducted).
+  final num deliveredQuantity;
+  /// Cumulative quantity closed without delivery.
+  final num cancelledQuantity;
   final num unitPrice;
   final num lineTotal;
   final String? productName;
@@ -156,6 +162,12 @@ class OrderLineItem extends Equatable {
   final String? discountType;
   final String? productBrand;
   final Map<String, String> productAttributes;
+
+  /// Outstanding quantity still open for delivery or cancel.
+  num get remainingQuantity {
+    final value = quantity - deliveredQuantity - cancelledQuantity;
+    return value < 0 ? 0 : value;
+  }
 
   factory OrderLineItem.fromJson(Map<String, dynamic> json) {
     final products = json['products'];
@@ -181,6 +193,8 @@ class OrderLineItem extends Equatable {
       id: json['id'] as String,
       productId: json['product_id'] as String,
       quantity: _numValue(json['quantity']),
+      deliveredQuantity: _numValue(json['delivered_quantity']),
+      cancelledQuantity: _numValue(json['cancelled_quantity']),
       unitPrice: _numValue(json['unit_price']),
       lineTotal: _numValue(json['line_total']),
       productName: _embedName(json['products'], 'name'),
@@ -194,7 +208,14 @@ class OrderLineItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, productId, quantity, lineTotal];
+  List<Object?> get props => [
+        id,
+        productId,
+        quantity,
+        deliveredQuantity,
+        cancelledQuantity,
+        lineTotal,
+      ];
 }
 
 class OrderDetail extends Equatable {
@@ -232,6 +253,21 @@ class OrderCounts {
   final int draft;
   final int completed;
   final int cancelled;
+}
+
+/// Open fulfillment demand counts for Hub Needs Attention.
+class FulfillmentAttentionCounts {
+  const FulfillmentAttentionCounts({
+    this.placed = 0,
+    this.partiallyDelivered = 0,
+    this.waitingPlaced = 0,
+    this.waitingPartial = 0,
+  });
+
+  final int placed;
+  final int partiallyDelivered;
+  final int waitingPlaced;
+  final int waitingPartial;
 }
 
 class SalesRepOption {

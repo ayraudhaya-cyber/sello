@@ -636,7 +636,7 @@ void main() {
             reason: 'provider_error',
           ),
         ),
-        'Text.lk did not accept the message. Check the Sender ID.',
+        'The SMS provider did not accept the message. Check the Sender ID.',
       );
       expect(
         OutboundSmsTest.feedback(
@@ -674,6 +674,16 @@ void main() {
   });
 
   group('onboarding Sender ID verification', () {
+    test('tenant-facing copy does not name the SMS provider', () {
+      expect(OutboundSmsVerify.title, 'Set up SMS notifications');
+      expect(OutboundSmsVerify.explanation.toLowerCase(), isNot(contains('text.lk')));
+      expect(OutboundSmsVerify.rejectedMessage.toLowerCase(), isNot(contains('text.lk')));
+      expect(
+        OutboundSmsVerify.explanation,
+        contains('Sender ID registered for your business'),
+      );
+    });
+
     test('Sender ID can be entered during onboarding', () {
       expect(SmsSenderId.tryParse('AcmeCo'), 'AcmeCo');
       final json = OutboundSmsVerify.requestJson(

@@ -105,7 +105,16 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
     try {
       final result = await _repo.fetchOrders(
         search: state.search,
-        status: state.showAllStatuses ? null : state.statusFilter,
+        statuses: state.showAllStatuses
+            ? null
+            : switch (state.statusFilter) {
+                OrderStatus.draft => const [
+                    OrderStatus.draft,
+                    OrderStatus.placed,
+                    OrderStatus.partiallyDelivered,
+                  ],
+                _ => [state.statusFilter],
+              },
         employeeId: session?.employee.id,
         page: page,
         pageSize: state.pageSize,
@@ -144,7 +153,8 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
 
   Future<OrderMutationResult> saveOrder(
     OrderUpsertInput input, {
-    required bool complete,
+    bool complete = false,
+    bool place = false,
     /// Visit finish already navigates away — skip the orders-list round trip.
     bool reloadList = true,
   }) async {
@@ -152,7 +162,7 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
     if (session == null) {
       return const OrderMutationResult.fail('No active session found.');
     }
-    final branchId = session.branch?.id;
+    final branchId = session.branch?.id ?? session.employee.branchId;
     if (branchId == null || branchId.isEmpty) {
       return const OrderMutationResult.fail(
         'Your account needs a branch before creating orders.',
@@ -167,12 +177,26 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
         branchId: branchId,
         employeeId: session.employee.id,
         complete: complete,
+        place: place,
       );
       if (reloadList) {
         await loadOrders(showLoading: false);
       }
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: saved.confirmation);
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return OrderMutationResult.fail(failure.message);
+    }
+  }
+
+  Future<OrderMutationResult> placeExisting(OrderSummary order) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.placeOrder(order.id);
+      await loadOrders(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return const OrderMutationResult.ok();
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return OrderMutationResult.fail(failure.message);

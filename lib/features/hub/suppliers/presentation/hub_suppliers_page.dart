@@ -529,108 +529,27 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _Metric(
-        label: 'Total suppliers',
-        value: '${stats.total}',
-        icon: Icons.local_shipping_outlined,
-        accent: context.brandAccent,
-        soft: context.brandAccentContainer,
-      ),
-      _Metric(
-        label: 'Active',
-        value: '${stats.active}',
-        icon: Icons.check_circle_outline,
-        accent: AppColors.success,
-        soft: AppColors.successContainer,
-      ),
-      _Metric(
-        label: 'Recently added',
-        value: '${stats.recentlyAdded}',
-        icon: Icons.fiber_new_rounded,
-        accent: AppColors.inventory,
-        soft: context.brandAccentContainer,
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      );
-    }
-
-    return Row(
+    return SelloStatCardGrid(
       children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          Expanded(child: cards[i]),
-          if (i < cards.length - 1) const SizedBox(width: AppSpacing.md),
-        ],
+        SelloStatCard(
+          label: 'Total suppliers',
+          value: '${stats.total}',
+          icon: Icons.local_shipping_outlined,
+          tone: context.brandAccent,
+        ),
+        SelloStatCard(
+          label: 'Active',
+          value: '${stats.active}',
+          icon: Icons.check_circle_outline,
+          tone: AppColors.success,
+        ),
+        SelloStatCard(
+          label: 'Recently added',
+          value: '${stats.recentlyAdded}',
+          icon: Icons.fiber_new_rounded,
+          tone: AppColors.inventory,
+        ),
       ],
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accent,
-    required this.soft,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color accent;
-  final Color soft;
-
-  @override
-  Widget build(BuildContext context) {
-    return SelloCard(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: soft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: accent),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

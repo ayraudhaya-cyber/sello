@@ -115,6 +115,8 @@ class InventoryRepository {
           query = query.eq('products.is_active', false);
         case StockStatusFilter.outOfStock:
           query = query.eq('products.is_active', true).lte('quantity', 0);
+        case StockStatusFilter.negativeStock:
+          query = query.eq('products.is_active', true).lt('quantity', 0);
         case StockStatusFilter.recentlyUpdated:
           final cutoff = DateTime.now()
               .toUtc()
@@ -160,6 +162,7 @@ class InventoryRepository {
           StockStatusFilter.all => true,
           StockStatusFilter.archived => !item.isActive,
           StockStatusFilter.outOfStock => item.isActive && item.quantity <= 0,
+          StockStatusFilter.negativeStock => item.isActive && item.quantity < 0,
           StockStatusFilter.lowStock => item.isActive && item.isLowStock,
           StockStatusFilter.inStock =>
             item.isActive && item.stockStatus == StockStatus.healthy,
@@ -234,6 +237,7 @@ class InventoryRepository {
         StockStatusFilter.all => true,
         StockStatusFilter.archived => !item.isActive,
         StockStatusFilter.outOfStock => item.isActive && item.quantity <= 0,
+        StockStatusFilter.negativeStock => item.isActive && item.quantity < 0,
         StockStatusFilter.lowStock => item.isActive && item.isLowStock,
         StockStatusFilter.inStock =>
           item.isActive && item.stockStatus == StockStatus.healthy,
@@ -295,6 +299,7 @@ class InventoryRepository {
       var total = 0;
       var low = 0;
       var out = 0;
+      var negative = 0;
       var recent = 0;
       num stockValue = 0;
 
@@ -313,7 +318,10 @@ class InventoryRepository {
         final reorder = map['reorder_level'] == null
             ? null
             : _asNum(map['reorder_level']);
-        if (qty <= 0) {
+        if (qty < 0) {
+          negative++;
+          out++;
+        } else if (qty <= 0) {
           out++;
         } else if (reorder != null && qty <= reorder) {
           low++;
@@ -343,6 +351,7 @@ class InventoryRepository {
         totalItems: total,
         lowStock: low,
         outOfStock: out,
+        negativeStock: negative,
         recentlyUpdated: recent,
         stockValue: stockValue,
         recentMovements: recentMovements,
@@ -374,6 +383,7 @@ class InventoryRepository {
     var total = 0;
     var low = 0;
     var out = 0;
+    var negative = 0;
     var recent = 0;
     num stockValue = 0;
     for (final row in rows as List) {
@@ -386,7 +396,10 @@ class InventoryRepository {
       stockValue += qty * cost;
       final reorder =
           map['reorder_level'] == null ? null : _asNum(map['reorder_level']);
-      if (qty <= 0) {
+      if (qty < 0) {
+        negative++;
+        out++;
+      } else if (qty <= 0) {
         out++;
       } else if (reorder != null && qty <= reorder) {
         low++;
@@ -398,6 +411,7 @@ class InventoryRepository {
       totalItems: total,
       lowStock: low,
       outOfStock: out,
+      negativeStock: negative,
       recentlyUpdated: recent,
       stockValue: stockValue,
     );
@@ -516,8 +530,6 @@ class InventoryRepository {
             .from('inventory')
             .select('''
               company_id,
-              quantity,
-              reorder_level,
               products!inner (id, name)
             ''')
             .eq('product_id', input.productId)
@@ -526,8 +538,6 @@ class InventoryRepository {
         if (row == null) return;
 
         final companyId = row['company_id'] as String?;
-        final quantity = _asNum(row['quantity']);
-        final reorder = _asNum(row['reorder_level']);
         final product = row['products'];
         final productName = product is Map
             ? (product['name'] as String? ?? 'Product')
@@ -541,24 +551,7 @@ class InventoryRepository {
             productName: productName,
           ),
         );
-
-        if (quantity <= 0) {
-          await _events.publish(
-            companyId: companyId,
-            event: BusinessEvents.outOfStock(
-              productId: input.productId,
-              productName: productName,
-            ),
-          );
-        } else if (reorder > 0 && quantity <= reorder) {
-          await _events.publish(
-            companyId: companyId,
-            event: BusinessEvents.lowStock(
-              productId: input.productId,
-              productName: productName,
-            ),
-          );
-        }
+        // Negative-stock crossing is emitted transactionally by adjust_inventory.
       } catch (_) {
         // Never block stock adjustment on notification failure.
       }

@@ -1,2 +1,7 @@
 [functions.send-outbound-sms]
 verify_jwt = true
+
+# JWT is verified inside the function. Gateway verify_jwt must be false so
+# browser OPTIONS preflight (no Authorization) is not rejected with 401/CORS.
+[functions.invite-employee-login]
+verify_jwt = false

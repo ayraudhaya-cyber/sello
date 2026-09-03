@@ -173,7 +173,7 @@ class VisitCheckoutStage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: SelloButton(
-            label: saving ? 'Saving…' : 'Confirm order',
+            label: saving ? 'Saving…' : 'Submit order',
             size: SelloButtonSize.large,
             expanded: true,
             loading: saving,

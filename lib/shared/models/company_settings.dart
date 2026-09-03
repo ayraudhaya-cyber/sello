@@ -92,6 +92,7 @@ class CompanySettings extends Equatable {
     required this.defaultProductStatus,
     required this.allowNegativeStock,
     required this.enableLowStockAlert,
+    this.allowOrdersAboveAvailableStock = false,
     required this.salesRepsCanViewOutstandingBalances,
     required this.financialVisibility,
     this.collectionApprovalRequired = false,
@@ -117,6 +118,9 @@ class CompanySettings extends Equatable {
   final DefaultProductStatus defaultProductStatus;
   final bool allowNegativeStock;
   final bool enableLowStockAlert;
+
+  /// When false, Sales Rep quantity controls cap at branch available stock.
+  final bool allowOrdersAboveAvailableStock;
 
   /// Sales permission gate when outstanding policy is [FinancialVisibilityPolicy.internalOnly].
   final bool salesRepsCanViewOutstandingBalances;
@@ -170,6 +174,7 @@ class CompanySettings extends Equatable {
     defaultProductStatus: DefaultProductStatus.active,
     allowNegativeStock: false,
     enableLowStockAlert: true,
+    allowOrdersAboveAvailableStock: false,
     salesRepsCanViewOutstandingBalances: true,
     financialVisibility: FinancialVisibilityPolicies.defaults,
     collectionApprovalRequired: false,
@@ -209,6 +214,7 @@ class CompanySettings extends Equatable {
     DefaultProductStatus? defaultProductStatus,
     bool? allowNegativeStock,
     bool? enableLowStockAlert,
+    bool? allowOrdersAboveAvailableStock,
     bool? salesRepsCanViewOutstandingBalances,
     FinancialVisibilityPolicies? financialVisibility,
     bool? collectionApprovalRequired,
@@ -238,6 +244,9 @@ class CompanySettings extends Equatable {
       defaultProductStatus: defaultProductStatus ?? this.defaultProductStatus,
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       enableLowStockAlert: enableLowStockAlert ?? this.enableLowStockAlert,
+      allowOrdersAboveAvailableStock:
+          allowOrdersAboveAvailableStock ??
+          this.allowOrdersAboveAvailableStock,
       salesRepsCanViewOutstandingBalances:
           salesRepsCanViewOutstandingBalances ??
           this.salesRepsCanViewOutstandingBalances,
@@ -295,6 +304,8 @@ class CompanySettings extends Equatable {
       ),
       allowNegativeStock: json['allow_negative_stock'] as bool? ?? false,
       enableLowStockAlert: json['enable_low_stock_alert'] as bool? ?? true,
+      allowOrdersAboveAvailableStock:
+          json['allow_orders_above_available_stock'] as bool? ?? false,
       salesRepsCanViewOutstandingBalances:
           json['sales_reps_can_view_outstanding_balances'] as bool? ?? true,
       financialVisibility: FinancialVisibilityPolicies.fromJson(policyMap),
@@ -332,6 +343,7 @@ class CompanySettings extends Equatable {
       'default_product_status': defaultProductStatus.dbValue,
       'allow_negative_stock': allowNegativeStock,
       'enable_low_stock_alert': enableLowStockAlert,
+      'allow_orders_above_available_stock': allowOrdersAboveAvailableStock,
       'sales_reps_can_view_outstanding_balances':
           salesRepsCanViewOutstandingBalances,
       'financial_visibility_policies': financialVisibility.toJson(),
@@ -354,6 +366,7 @@ class CompanySettings extends Equatable {
     defaultProductStatus,
     allowNegativeStock,
     enableLowStockAlert,
+    allowOrdersAboveAvailableStock,
     salesRepsCanViewOutstandingBalances,
     financialVisibility,
         collectionApprovalRequired,

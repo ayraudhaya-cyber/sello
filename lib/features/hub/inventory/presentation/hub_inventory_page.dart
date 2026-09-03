@@ -411,6 +411,10 @@ class _Toolbar extends StatelessWidget {
             child: Text('Out of stock'),
           ),
           DropdownMenuItem(
+            value: StockStatusFilter.negativeStock,
+            child: Text('Negative stock'),
+          ),
+          DropdownMenuItem(
             value: StockStatusFilter.recentlyUpdated,
             child: Text('Recently updated'),
           ),
@@ -502,166 +506,51 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = [
-      _Metric(
-        label: 'Total products',
-        value: '${stats.totalItems}',
-        hint: 'Active catalog',
-        icon: Icons.inventory_2_outlined,
-        accent: context.brandAccent,
-        soft: context.brandAccentContainer,
-        onTap: () => onFilter(StockStatusFilter.all),
-      ),
-      _Metric(
-        label: 'Stock value',
-        value: SelloFormatters.currency(
-          stats.stockValue,
-          symbol: currencySymbol,
-        ),
-        hint: 'At cost',
-        icon: Icons.payments_outlined,
-        accent: AppColors.finance,
-        soft: AppColors.financeSoft,
-      ),
-      _Metric(
-        label: 'Low stock',
-        value: '${stats.lowStock}',
-        hint: 'At or below reorder',
-        icon: Icons.warning_amber_rounded,
-        accent: AppColors.warning,
-        soft: AppColors.warningContainer,
-        onTap: () => onFilter(StockStatusFilter.lowStock),
-      ),
-      _Metric(
-        label: 'Out of stock',
-        value: '${stats.outOfStock}',
-        hint: 'Zero on hand',
-        icon: Icons.error_outline_rounded,
-        accent: AppColors.error,
-        soft: AppColors.errorContainer,
-        onTap: () => onFilter(StockStatusFilter.outOfStock),
-      ),
-      _Metric(
-        label: 'Movements',
-        value: '${stats.recentMovements}',
-        hint: 'Last 7 days',
-        icon: Icons.swap_vert_rounded,
-        accent: AppColors.inventory,
-        soft: context.brandAccentContainer,
-        onTap: () => onFilter(StockStatusFilter.recentlyUpdated),
-      ),
-    ];
-
-    if (context.isMobile) {
-      return Column(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            cards[i],
-            if (i < cards.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      );
-    }
-
-    return Wrap(
-      spacing: AppSpacing.md,
-      runSpacing: AppSpacing.md,
+    return SelloStatCardGrid(
       children: [
-        for (final card in cards)
-          SizedBox(
-            width: (MediaQuery.sizeOf(context).width - 160) / 3.2,
-            child: card,
+        SelloStatCard(
+          label: 'Total products',
+          value: '${stats.totalItems}',
+          hint: 'Active catalog',
+          icon: Icons.inventory_2_outlined,
+          tone: context.brandAccent,
+          onTap: () => onFilter(StockStatusFilter.all),
+        ),
+        SelloStatCard(
+          label: 'Stock value',
+          value: SelloFormatters.currency(
+            stats.stockValue,
+            symbol: currencySymbol,
           ),
+          hint: 'At cost',
+          icon: Icons.payments_outlined,
+          tone: AppColors.finance,
+        ),
+        SelloStatCard(
+          label: 'Low stock',
+          value: '${stats.lowStock}',
+          hint: 'At or below reorder',
+          icon: Icons.warning_amber_rounded,
+          tone: AppColors.warning,
+          onTap: () => onFilter(StockStatusFilter.lowStock),
+        ),
+        SelloStatCard(
+          label: 'Out of stock',
+          value: '${stats.outOfStock}',
+          hint: 'Zero on hand',
+          icon: Icons.error_outline_rounded,
+          tone: AppColors.error,
+          onTap: () => onFilter(StockStatusFilter.outOfStock),
+        ),
+        SelloStatCard(
+          label: 'Movements',
+          value: '${stats.recentMovements}',
+          hint: 'Last 7 days',
+          icon: Icons.swap_vert_rounded,
+          tone: AppColors.inventory,
+          onTap: () => onFilter(StockStatusFilter.recentlyUpdated),
+        ),
       ],
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.label,
-    required this.value,
-    required this.hint,
-    required this.icon,
-    required this.accent,
-    required this.soft,
-    this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final String hint;
-  final IconData icon;
-  final Color accent;
-  final Color soft;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Container(
-      constraints: const BoxConstraints(minHeight: 92),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: AppRadius.panelAll,
-        border: Border.all(color: AppColors.outlinePanel),
-        boxShadow: AppShadows.panel,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: soft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 22, color: accent),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label.toUpperCase(), style: AppTypography.eyebrow),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.numeric(
-                    const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  hint,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (onTap == null) return child;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: AppRadius.panelAll,
-        child: child,
-      ),
     );
   }
 }

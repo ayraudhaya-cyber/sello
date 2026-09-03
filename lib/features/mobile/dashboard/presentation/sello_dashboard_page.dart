@@ -957,7 +957,7 @@ class _ContinueVisit extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.brandAccentContainer,
+      color: const Color(0xFFE4E0F8),
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
         onTap: onContinue,

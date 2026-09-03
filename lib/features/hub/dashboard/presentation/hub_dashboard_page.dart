@@ -8,8 +8,12 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/hub/dashboard/application/hub_dashboard_provider.dart';
+import 'package:sello/features/hub/dashboard/presentation/hub_dashboard_empty_state.dart';
+import 'package:sello/features/hub/dashboard/presentation/hub_needs_attention_card.dart';
 import 'package:sello/features/intelligence/application/intelligence_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/app_notification.dart';
 import 'package:sello/shared/models/intelligence_insight.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/user_role.dart';
@@ -31,7 +35,7 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
   Widget build(BuildContext context) {
     final session = ref.watch(currentSessionProvider);
     final name = session?.displayName.split(' ').first ?? 'there';
-    final branch = session?.branchName ?? 'Colombo Branch';
+    final branch = session?.branchName ?? 'Head Office';
     final date = DateFormat('EEE, d MMM yyyy').format(DateTime.now());
     final gap = AppSpacing.gap;
     final stackHero = context.screenWidth < 1180;
@@ -68,7 +72,9 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
             date: date,
           ),
           SizedBox(height: gap),
-          _KpiGrid(columns: kpiCols, gap: gap),
+          const HubNeedsAttentionCard(),
+          SizedBox(height: gap),
+          _KpiGrid(columns: kpiCols, gap: gap, range: _range),
           SizedBox(height: gap),
           if (stackHero)
             Column(
@@ -89,26 +95,26 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
             ),
           SizedBox(height: gap),
           if (stackPairs) ...[
-            const _ActivityCard(),
+            _ActivityCard(range: _range),
             SizedBox(height: gap),
             const _InventoryHealthCard(),
           ] else
-            const SelloEqualHeightRow(
+            SelloEqualHeightRow(
               children: [
-                _ActivityCard(),
-                _InventoryHealthCard(),
+                _ActivityCard(range: _range),
+                const _InventoryHealthCard(),
               ],
             ),
           SizedBox(height: gap),
           if (stackPairs) ...[
-            const _TopCustomersCard(),
+            _TopCustomersCard(range: _range),
             SizedBox(height: gap),
-            const _BestSellersCard(),
+            _BestSellersCard(range: _range),
           ] else
-            const SelloEqualHeightRow(
+            SelloEqualHeightRow(
               children: [
-                _TopCustomersCard(),
-                _BestSellersCard(),
+                _TopCustomersCard(range: _range),
+                _BestSellersCard(range: _range),
               ],
             ),
           SizedBox(height: gap),
@@ -347,66 +353,83 @@ class _MetaChipState extends State<_MetaChip> {
 
 // ─── KPIs ──────────────────────────────────────────────────────────────────
 
-class _KpiGrid extends StatelessWidget {
-  const _KpiGrid({required this.columns, required this.gap});
+class _KpiGrid extends ConsumerWidget {
+  const _KpiGrid({
+    required this.columns,
+    required this.gap,
+    required this.range,
+  });
 
   final int columns;
   final double gap;
-
-  static final _items = <_KpiSpec>[
-    _KpiSpec(
-      label: 'Revenue (MTD)',
-      value: 'Rs 4.82M',
-      trend: '12.4%',
-      up: true,
-      icon: Icons.payments_outlined,
-      spark: const [0.35, 0.42, 0.38, 0.55, 0.50, 0.72, 0.68, 0.85],
-      route: null,
-    ),
-    _KpiSpec(
-      label: 'Orders',
-      value: '1,248',
-      trend: '6.1%',
-      up: true,
-      icon: Icons.shopping_cart_outlined,
-      tone: AppColors.ops,
-      spark: const [0.40, 0.35, 0.52, 0.48, 0.65, 0.60, 0.78, 0.72],
-      route: RoutePaths.hubOrders,
-    ),
-    _KpiSpec(
-      label: 'Active Customers',
-      value: '386',
-      trend: '3.8%',
-      up: true,
-      icon: Icons.groups_outlined,
-      tone: AppColors.success,
-      spark: const [0.45, 0.48, 0.42, 0.58, 0.55, 0.68, 0.62, 0.80],
-      route: RoutePaths.hubCustomers,
-    ),
-    _KpiSpec(
-      label: 'Outstanding Collections',
-      value: 'Rs 612K',
-      trend: '2.1%',
-      up: false,
-      icon: Icons.credit_card_outlined,
-      tone: AppColors.finance,
-      spark: const [0.75, 0.70, 0.72, 0.58, 0.60, 0.48, 0.50, 0.40],
-      route: RoutePaths.hubPayments,
-    ),
-    _KpiSpec(
-      label: 'Low Stock Alerts',
-      value: '9 items',
-      trend: '4 new',
-      up: false,
-      icon: Icons.warning_amber_rounded,
-      tone: AppColors.attention,
-      spark: const [0.30, 0.35, 0.32, 0.45, 0.42, 0.58, 0.55, 0.70],
-      route: RoutePaths.hubInventory,
-    ),
-  ];
+  final String range;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(hubDashboardProvider(range));
+    final snap = async.valueOrNull;
+    final spark = snap?.sparkForMetric('revenue') ?? const <double>[];
+
+    final items = <_KpiSpec>[
+      _KpiSpec(
+        label: 'Revenue (MTD)',
+        value: snap == null ? '—' : snap.money(snap.revenue),
+        trend: null,
+        up: true,
+        icon: Icons.payments_outlined,
+        spark: spark,
+        route: RoutePaths.hubOrders,
+      ),
+      _KpiSpec(
+        label: 'Orders',
+        value: snap == null
+            ? '—'
+            : NumberFormat.decimalPattern().format(snap.orders),
+        trend: null,
+        up: true,
+        icon: Icons.shopping_cart_outlined,
+        tone: AppColors.ops,
+        spark: snap?.sparkForMetric('orders') ?? const [],
+        route: RoutePaths.hubOrders,
+      ),
+      _KpiSpec(
+        label: 'Active Customers',
+        value: snap == null
+            ? '—'
+            : NumberFormat.decimalPattern().format(snap.activeCustomers),
+        trend: null,
+        up: true,
+        icon: Icons.groups_outlined,
+        tone: AppColors.success,
+        spark: const [],
+        route: RoutePaths.hubCustomers,
+      ),
+      _KpiSpec(
+        label: 'Outstanding Collections',
+        value: snap == null ? '—' : snap.money(snap.outstanding),
+        trend: null,
+        up: false,
+        icon: Icons.credit_card_outlined,
+        tone: AppColors.finance,
+        spark: const [],
+        route: RoutePaths.hubPayments,
+      ),
+      _KpiSpec(
+        label: 'Low Stock Alerts',
+        value: snap == null
+            ? '—'
+            : snap.lowStock == 1
+                ? '1 item'
+                : '${snap.lowStock} items',
+        trend: null,
+        up: false,
+        icon: Icons.warning_amber_rounded,
+        tone: AppColors.attention,
+        spark: const [],
+        route: RoutePaths.hubInventory,
+      ),
+    ];
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final cols = columns.clamp(1, 5);
@@ -415,7 +438,7 @@ class _KpiGrid extends StatelessWidget {
           spacing: gap,
           runSpacing: gap,
           children: [
-            for (final item in _items)
+            for (final item in items)
               SizedBox(
                 width: itemWidth,
                 child: SelloStatCard(
@@ -425,7 +448,8 @@ class _KpiGrid extends StatelessWidget {
                   tone: item.tone,
                   trendLabel: item.trend,
                   trendPositive: item.up,
-                  sparkPoints: item.spark,
+                  sparkPoints:
+                      item.spark.isEmpty ? null : item.spark,
                   onTap: item.route == null
                       ? null
                       : () => context.go(item.route!),
@@ -452,7 +476,7 @@ class _KpiSpec {
 
   final String label;
   final String value;
-  final String trend;
+  final String? trend;
   final bool up;
   final IconData icon;
   final Color? tone;
@@ -462,7 +486,7 @@ class _KpiSpec {
 
 // ─── Performance ───────────────────────────────────────────────────────────
 
-class _PerformanceCard extends StatelessWidget {
+class _PerformanceCard extends ConsumerWidget {
   const _PerformanceCard({
     required this.range,
     required this.metric,
@@ -476,12 +500,38 @@ class _PerformanceCard extends StatelessWidget {
   final ValueChanged<String> onMetric;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final snap = ref.watch(hubDashboardProvider(range)).valueOrNull;
     final figure = switch (metric) {
-      'orders' => ('1,248', '6.1% vs last month', AppColors.ops),
-      'collections' => ('Rs 612K', '2.1% vs last month', AppColors.finance),
-      _ => ('Rs 4.82M', '12.4% vs last month', context.brandAccent),
+      'orders' => (
+          snap == null
+              ? '—'
+              : NumberFormat.decimalPattern().format(snap.orders),
+          snap == null || snap.orders == 0
+              ? 'No orders in this period'
+              : 'Completed in selected period',
+          AppColors.ops,
+          false,
+        ),
+      'collections' => (
+          snap == null ? '—' : snap.money(snap.collections),
+          snap == null || snap.collections == 0
+              ? 'No collections in this period'
+              : 'Collected in selected period',
+          AppColors.finance,
+          false,
+        ),
+      _ => (
+          snap == null ? '—' : snap.money(snap.revenue),
+          snap == null || snap.revenue == 0
+              ? 'No sales in this period'
+              : 'Completed sales in selected period',
+          context.brandAccent,
+          false,
+        ),
     };
+    final spark = snap?.sparkForMetric(metric) ?? const <double>[];
+    final hasChart = spark.length >= 2;
 
     return SelloCard(
       borderRadius: BorderRadius.circular(AppRadius.xl),
@@ -527,35 +577,13 @@ class _PerformanceCard extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.successContainer,
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.pill),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.north_east_rounded,
-                                    size: 10,
-                                    color: AppColors.success,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    figure.$2,
-                                    style: TextStyle(
-                                      fontFamily: AppTypography.fontFamily,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.success,
-                                    ),
-                                  ),
-                                ],
+                            Text(
+                              figure.$2,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -599,48 +627,59 @@ class _PerformanceCard extends StatelessWidget {
               const SizedBox(height: 14),
               if (expandChart)
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: _AnimatedPerformanceChart(
-                          color: figure.$3,
-                          seed: Object.hash(metric, range),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          for (final label in ['W1', 'W2', 'W3', 'W4', 'W5'])
-                            Text(
-                              label,
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textFaint,
+                  child: hasChart
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _AnimatedPerformanceChart(
+                                color: figure.$3,
+                                seed: Object.hash(metric, range, spark.length),
+                                points: spark,
                               ),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                for (final label in ['Start', '', '', '', 'Now'])
+                                  Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontFamily: AppTypography.fontFamily,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textFaint,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        )
+                      : const HubDashboardEmptyState.tall(
+                          icon: Icons.show_chart_rounded,
+                          title: 'No sales yet',
+                          message:
+                              'Performance charts will appear as your business activity grows.',
+                          tone: AppColors.primary,
+                          soft: AppColors.primaryContainer,
+                        ),
                 )
-              else ...[
+              else if (hasChart) ...[
                 SizedBox(
                   height: 180,
                   width: double.infinity,
                   child: _AnimatedPerformanceChart(
                     color: figure.$3,
-                    seed: Object.hash(metric, range),
+                    seed: Object.hash(metric, range, spark.length),
+                    points: spark,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    for (final label in ['W1', 'W2', 'W3', 'W4', 'W5'])
+                    for (final label in ['Start', '', '', '', 'Now'])
                       Text(
                         label,
                         style: TextStyle(
@@ -652,7 +691,19 @@ class _PerformanceCard extends StatelessWidget {
                       ),
                   ],
                 ),
-              ],
+              ] else
+                const SizedBox(
+                  height: 180,
+                  width: double.infinity,
+                  child: HubDashboardEmptyState.tall(
+                    icon: Icons.show_chart_rounded,
+                    title: 'No sales yet',
+                    message:
+                        'Performance charts will appear as your business activity grows.',
+                    tone: AppColors.primary,
+                    soft: AppColors.primaryContainer,
+                  ),
+                ),
             ],
           );
 
@@ -885,10 +936,12 @@ class _AnimatedPerformanceChart extends StatefulWidget {
   const _AnimatedPerformanceChart({
     required this.color,
     required this.seed,
+    this.points = const [],
   });
 
   final Color color;
   final int seed;
+  final List<double> points;
 
   @override
   State<_AnimatedPerformanceChart> createState() =>
@@ -917,7 +970,9 @@ class _AnimatedPerformanceChartState extends State<_AnimatedPerformanceChart>
   @override
   void didUpdateWidget(covariant _AnimatedPerformanceChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.seed != widget.seed || oldWidget.color != widget.color) {
+    if (oldWidget.seed != widget.seed ||
+        oldWidget.color != widget.color ||
+        oldWidget.points.length != widget.points.length) {
       _controller.forward(from: 0);
     }
   }
@@ -938,6 +993,7 @@ class _AnimatedPerformanceChartState extends State<_AnimatedPerformanceChart>
             color: widget.color,
             seed: widget.seed,
             progress: _progress.value,
+            values: widget.points,
           ),
           child: const SizedBox.expand(),
         );
@@ -951,11 +1007,13 @@ class _ChartPainter extends CustomPainter {
     required this.color,
     required this.seed,
     this.progress = 1,
+    this.values = const [],
   });
 
   final Color color;
   final int seed;
   final double progress;
+  final List<double> values;
 
   /// Soft halo under the last-point marker (HTML `--dot-halo`).
   Color get _halo => color.withValues(alpha: 0.14);
@@ -982,16 +1040,17 @@ class _ChartPainter extends CustomPainter {
     final t = progress.clamp(0.0, 1.0);
     if (t <= 0.001) return;
 
-    final rnd = math.Random(seed);
-    final raw =
-        List<double>.generate(12, (_) => 0.25 + rnd.nextDouble() * 0.55);
-    raw[raw.length - 1] = 0.18 + rnd.nextDouble() * 0.22;
+    // Prefer real series; never invent random demo values.
+    final series = values.length >= 2
+        ? values
+        : const <double>[];
+    if (series.length < 2) return;
 
     final pts = <Offset>[
-      for (var i = 0; i < raw.length; i++)
+      for (var i = 0; i < series.length; i++)
         Offset(
-          plot.left + plot.width * i / (raw.length - 1),
-          plot.top + plot.height * raw[i],
+          plot.left + plot.width * i / (series.length - 1),
+          plot.top + plot.height * (1 - series[i].clamp(0.0, 1.0)),
         ),
     ];
 
@@ -1078,7 +1137,8 @@ class _ChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _ChartPainter oldDelegate) =>
       oldDelegate.seed != seed ||
       oldDelegate.color != color ||
-      oldDelegate.progress != progress;
+      oldDelegate.progress != progress ||
+      oldDelegate.values != values;
 }
 
 // ─── Action Center (Sello Intelligence) ────────────────────────────────────
@@ -1095,25 +1155,43 @@ class _ActionCenterCard extends ConsumerWidget {
       data: (snap) {
         final items = snap.insights;
         if (items.isEmpty) {
+          final dash = ref.watch(hubDashboardProvider('month')).valueOrNull;
+          final hasBusinessSignal = dash != null &&
+              (dash.hasSales ||
+                  dash.hasActivity ||
+                  dash.hasInventory ||
+                  dash.activeCustomers > 0);
+
           return SelloDashboardCard(
             title: 'Sello Intelligence',
             countBadge: '0',
             action: SelloViewAllLink(
               onTap: () => context.go(RoutePaths.hubReports),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'Nothing needs your attention right now. Sello is keeping an '
-                'eye on sales, stock, visits, and payments.',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13,
-                  height: 1.4,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
+            child: hasBusinessSignal
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Nothing needs your attention right now. Sello is keeping an '
+                      'eye on sales, stock, visits, and payments.',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13,
+                        height: 1.4,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  )
+                : const HubDashboardEmptyState.tall(
+                    icon: Icons.auto_awesome_outlined,
+                    title: 'Insights will appear here',
+                    message:
+                        'As your business activity grows, Sello Intelligence will '
+                        'surface useful patterns and things worth your attention.',
+                    tone: AppColors.ai,
+                    soft: AppColors.aiSoft,
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 20),
+                  ),
           );
         }
 
@@ -1326,144 +1404,156 @@ class _ActionRowState extends State<_ActionRow> {
 
 // ─── Activity ──────────────────────────────────────────────────────────────
 
-class _ActivityCard extends StatelessWidget {
-  const _ActivityCard();
+class _ActivityCard extends ConsumerWidget {
+  const _ActivityCard({required this.range});
+
+  final String range;
 
   @override
-  Widget build(BuildContext context) {
-    final items = [
-      (
-        'New order #SL-4821 created',
-        'Perera Hardware · Rs 28,400',
-        '08:41',
-        AppColors.ops,
-        AppColors.opsSoft,
-        Icons.upload_outlined,
-      ),
-      (
-        'Payment received',
-        'Rs 112,000 from Nimal Traders',
-        '08:22',
-        AppColors.success,
-        AppColors.successContainer,
-        Icons.credit_card_outlined,
-      ),
-      (
-        'Inventory updated',
-        '32 units of "Steel Hinges 4in" added',
-        '07:58',
-        AppColors.inventory,
-        AppColors.inventorySoft,
-        Icons.inventory_2_outlined,
-      ),
-      (
-        'Customer credit reviewed',
-        'Sunrise Traders · limit adjusted',
-        '07:30',
-        context.brandAccent,
-        context.brandAccentContainer,
-        Icons.person_outline,
-      ),
-    ];
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(hubDashboardProvider(range));
+    final snap = async.valueOrNull;
+    final events = snap?.activity ?? const <CompanyActivityEvent>[];
 
     return SelloDashboardCard(
       title: 'Business Activity',
       action: SelloViewAllLink(onTap: () => context.go(RoutePaths.hubOrders)),
-      child: Column(
-        children: [
-          for (var i = 0; i < items.length; i++)
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
-                    children: [
-                      Container(
-                        width: 33,
-                        height: 33,
-                        decoration: BoxDecoration(
-                          color: items[i].$5,
-                          shape: BoxShape.circle,
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.white,
-                              spreadRadius: 4,
+      child: events.isEmpty
+          ? HubDashboardEmptyState.tall(
+              icon: Icons.timeline_outlined,
+              title: async.isLoading
+                  ? 'Loading activity…'
+                  : 'No business activity yet',
+              message: async.isLoading
+                  ? null
+                  : 'Your orders, payments, inventory updates and other activity will appear here.',
+              tone: AppColors.primary,
+              soft: AppColors.primaryContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 24),
+            )
+          : Column(
+              children: [
+                for (var i = 0; i < events.length; i++)
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          children: [
+                            Container(
+                              width: 33,
+                              height: 33,
+                              decoration: BoxDecoration(
+                                color: _activitySoft(events[i].category),
+                                shape: BoxShape.circle,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.white,
+                                    spreadRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                _activityIcon(events[i].category),
+                                size: 14,
+                                color: _activityTone(events[i].category),
+                              ),
                             ),
+                            if (i < events.length - 1)
+                              Expanded(
+                                child: Container(
+                                  width: 1.5,
+                                  margin:
+                                      const EdgeInsets.symmetric(vertical: 2),
+                                  color: AppColors.outline,
+                                ),
+                              ),
                           ],
                         ),
-                        child: Icon(
-                          items[i].$6,
-                          size: 14,
-                          color: items[i].$4,
-                        ),
-                      ),
-                      if (i < items.length - 1)
+                        const SizedBox(width: 14),
                         Expanded(
-                          child: Container(
-                            width: 1.5,
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            color: AppColors.outline,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        bottom: i < items.length - 1 ? 20 : 0,
-                        top: 2,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              bottom: i < events.length - 1 ? 20 : 0,
+                              top: 2,
+                            ),
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  items[i].$1,
-                                  style: TextStyle(
-                                    fontFamily: AppTypography.fontFamily,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        events[i].summary,
+                                        style: TextStyle(
+                                          fontFamily: AppTypography.fontFamily,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      if (events[i].actorName != null &&
+                                          events[i].actorName!.trim().isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          events[i].actorName!,
+                                          style: TextStyle(
+                                            fontFamily:
+                                                AppTypography.fontFamily,
+                                            fontSize: 12,
+                                            color: AppColors.textTertiary,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 2),
                                 Text(
-                                  items[i].$2,
+                                  snap!.formatActivityTime(events[i].createdAt),
                                   style: TextStyle(
                                     fontFamily: AppTypography.fontFamily,
-                                    fontSize: 12,
-                                    color: AppColors.textTertiary,
+                                    fontSize: 10.5,
+                                    color: AppColors.textFaint,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          Text(
-                            items[i].$3,
-                            style: TextStyle(
-                              fontFamily: AppTypography.fontFamily,
-                              fontSize: 10.5,
-                              color: AppColors.textFaint,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
-        ],
-      ),
     );
   }
+
+  static Color _activityTone(NotificationCategory category) => switch (category) {
+        NotificationCategory.orders => AppColors.ops,
+        NotificationCategory.payments => AppColors.success,
+        NotificationCategory.inventory => AppColors.inventory,
+        _ => AppColors.primary,
+      };
+
+  static Color _activitySoft(NotificationCategory category) => switch (category) {
+        NotificationCategory.orders => AppColors.opsSoft,
+        NotificationCategory.payments => AppColors.successContainer,
+        NotificationCategory.inventory => AppColors.inventorySoft,
+        _ => AppColors.primaryContainer,
+      };
+
+  static IconData _activityIcon(NotificationCategory category) =>
+      switch (category) {
+        NotificationCategory.orders => Icons.upload_outlined,
+        NotificationCategory.payments => Icons.credit_card_outlined,
+        NotificationCategory.inventory => Icons.inventory_2_outlined,
+        _ => Icons.person_outline,
+      };
 }
 
 // ─── Inventory ─────────────────────────────────────────────────────────────
@@ -1516,10 +1606,11 @@ class _InventoryHealthCard extends ConsumerWidget {
     ];
 
     final healthyRatio = stats == null || stats.totalItems == 0
-        ? 0.82
+        ? 0.0
         : ((stats.totalItems - stats.lowStock - stats.outOfStock) /
                 stats.totalItems)
             .clamp(0.0, 1.0);
+    final emptyInventory = stats != null && stats.totalItems == 0;
 
     return SelloCard(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
@@ -1544,6 +1635,16 @@ class _InventoryHealthCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 28),
+          if (emptyInventory)
+            const HubDashboardEmptyState.tall(
+              icon: Icons.inventory_2_outlined,
+              title: 'No inventory yet',
+              message: 'Add products and stock to see your inventory health.',
+              tone: AppColors.inventory,
+              soft: AppColors.inventorySoft,
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 36),
+            )
+          else
           LayoutBuilder(
             builder: (context, c) {
               final narrow = c.maxWidth < 420;
@@ -1635,18 +1736,22 @@ class _InventoryHealthCard extends ConsumerWidget {
               ),
               children: [
                 TextSpan(
-                  text: attention == 0
-                      ? 'Inventory looks healthy. '
-                      : attention == 1
-                          ? '1 product needs attention. '
-                          : '$attention products need attention. ',
+                  text: emptyInventory
+                      ? 'Add products and stock to see inventory health. '
+                      : attention == 0
+                          ? 'Inventory looks healthy. '
+                          : attention == 1
+                              ? '1 product needs attention. '
+                              : '$attention products need attention. ',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,
                   ),
                 ),
-                const TextSpan(
-                  text: 'Open Inventory to adjust stock or review movements.',
+                TextSpan(
+                  text: emptyInventory
+                      ? 'Open Inventory when you are ready to start.'
+                      : 'Open Inventory to adjust stock or review movements.',
                 ),
               ],
             ),
@@ -1755,51 +1860,67 @@ class _GaugePainter extends CustomPainter {
 
 // ─── Ranked lists ──────────────────────────────────────────────────────────
 
-class _TopCustomersCard extends StatelessWidget {
-  const _TopCustomersCard();
+class _TopCustomersCard extends ConsumerWidget {
+  const _TopCustomersCard({required this.range});
+
+  final String range;
+
+  static const _avatarPairs = <(Color, Color)>[
+    (Color(0xFF8B72F5), Color(0xFF4B32C3)),
+    (Color(0xFFD9A244), Color(0xFFB97A18)),
+    (Color(0xFF22B183), Color(0xFF137C54)),
+    (Color(0xFFE5686C), Color(0xFFB23438)),
+    (Color(0xFF6C4FF2), Color(0xFF2C1D7A)),
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    final rows = [
-      ('1', 'PH', 'Perera Hardware', 'Last purchase: today', 'Rs 482K',
-          'Outstanding Rs 0', false, const Color(0xFF8B72F5),
-          const Color(0xFF4B32C3)),
-      ('2', 'NT', 'Nimal Traders', 'Last purchase: yesterday', 'Rs 361K',
-          'Outstanding Rs 12K', true, const Color(0xFFD9A244),
-          const Color(0xFFB97A18)),
-      ('3', 'CF', 'Colombo Fresh Mart', 'Last purchase: 2 days ago', 'Rs 298K',
-          'Outstanding Rs 0', false, const Color(0xFF22B183),
-          const Color(0xFF137C54)),
-      ('4', 'SG', 'Sunrise Traders', 'Last purchase: 3 days ago', 'Rs 214K',
-          'Outstanding Rs 42K', true, const Color(0xFFE5686C),
-          const Color(0xFFB23438)),
-      ('5', 'RS', 'Ranaweera Stores', 'Last purchase: 4 days ago', 'Rs 176K',
-          'Outstanding Rs 0', false, const Color(0xFF6C4FF2),
-          const Color(0xFF2C1D7A)),
-    ];
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(hubDashboardProvider(range));
+    final snap = async.valueOrNull;
+    final customers = snap?.overview.topCustomers.take(5).toList() ?? const [];
 
     return SelloDashboardCard(
       title: 'Top Customers',
       action:
           SelloViewAllLink(onTap: () => context.go(RoutePaths.hubCustomers)),
-      child: Column(
-        children: [
-          for (var i = 0; i < rows.length; i++)
-            _RankCustomerRow(
-              rank: rows[i].$1,
-              initials: rows[i].$2,
-              name: rows[i].$3,
-              subtitle: rows[i].$4,
-              amount: rows[i].$5,
-              outstanding: rows[i].$6,
-              owed: rows[i].$7,
-              avatarFrom: rows[i].$8,
-              avatarTo: rows[i].$9,
-              showDivider: i < rows.length - 1,
+      child: customers.isEmpty
+          ? HubDashboardEmptyState.compact(
+              icon: Icons.groups_outlined,
+              title: async.isLoading ? 'Loading customers…' : 'No customers yet.',
+              tone: AppColors.success,
+              soft: AppColors.successContainer,
+            )
+          : Column(
+              children: [
+                for (var i = 0; i < customers.length; i++)
+                  _RankCustomerRow(
+                    rank: '${i + 1}',
+                    initials: _initials(customers[i].name),
+                    name: customers[i].name,
+                    subtitle: customers[i].subtitle ??
+                        (customers[i].count == null
+                            ? 'Sales in period'
+                            : '${customers[i].count} orders'),
+                    amount: snap!.moneyCompact(customers[i].value),
+                    outstanding: '',
+                    owed: false,
+                    avatarFrom: _avatarPairs[i % _avatarPairs.length].$1,
+                    avatarTo: _avatarPairs[i % _avatarPairs.length].$2,
+                    showDivider: i < customers.length - 1,
+                  ),
+              ],
             ),
-        ],
-      ),
     );
+  }
+
+  static String _initials(String name) {
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) {
+      return parts.first.substring(0, math.min(2, parts.first.length)).toUpperCase();
+    }
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 }
 
@@ -1964,40 +2085,50 @@ class _RankCustomerRow extends StatelessWidget {
   }
 }
 
-class _BestSellersCard extends StatelessWidget {
-  const _BestSellersCard();
+class _BestSellersCard extends ConsumerWidget {
+  const _BestSellersCard({required this.range});
+
+  final String range;
 
   @override
-  Widget build(BuildContext context) {
-    final rows = [
-      ('1', '🔩', 'Steel Hinges 4in', '842 units sold', context.brandAccent,
-          const [0.2, 0.35, 0.3, 0.55, 0.5, 0.85]),
-      ('2', '🧴', 'Industrial Cleaner 5L', '611 units sold', AppColors.success,
-          const [0.55, 0.45, 0.65, 0.5, 0.75, 0.6]),
-      ('3', '🔧', 'Adjustable Wrench Set', '498 units sold', AppColors.finance,
-          const [0.4, 0.35, 0.55, 0.45, 0.6, 0.55]),
-      ('4', '🪛', 'Precision Screwdriver Kit', '402 units sold',
-          AppColors.attention, const [0.7, 0.55, 0.6, 0.4, 0.45, 0.3]),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(hubDashboardProvider(range));
+    final snap = async.valueOrNull;
+    final products = snap?.overview.topProducts.take(4).toList() ?? const [];
+    final tones = [
+      context.brandAccent,
+      AppColors.success,
+      AppColors.finance,
+      AppColors.attention,
     ];
 
     return SelloDashboardCard(
       title: 'Best Sellers',
       action:
           SelloViewAllLink(onTap: () => context.go(RoutePaths.hubProducts)),
-      child: Column(
-        children: [
-          for (var i = 0; i < rows.length; i++)
-            _BestSellerRow(
-              rank: rows[i].$1,
-              emoji: rows[i].$2,
-              name: rows[i].$3,
-              subtitle: rows[i].$4,
-              sparkColor: rows[i].$5,
-              spark: rows[i].$6,
-              showDivider: i < rows.length - 1,
+      child: products.isEmpty
+          ? HubDashboardEmptyState.compact(
+              icon: Icons.shopping_bag_outlined,
+              title: async.isLoading ? 'Loading products…' : 'No sales yet.',
+              tone: AppColors.finance,
+              soft: AppColors.financeSoft,
+            )
+          : Column(
+              children: [
+                for (var i = 0; i < products.length; i++)
+                  _BestSellerRow(
+                    rank: '${i + 1}',
+                    emoji: '•',
+                    name: products[i].name,
+                    subtitle: products[i].count == null
+                        ? snap!.moneyCompact(products[i].value)
+                        : '${products[i].count} units · ${snap!.moneyCompact(products[i].value)}',
+                    sparkColor: tones[i % tones.length],
+                    spark: const [],
+                    showDivider: i < products.length - 1,
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
@@ -2136,12 +2267,13 @@ class _MiniTrendPainter extends CustomPainter {
 
 // ─── Insights ──────────────────────────────────────────────────────────────
 
-class _InsightsSection extends StatelessWidget {
+class _InsightsSection extends ConsumerWidget {
   const _InsightsSection();
 
   @override
-  Widget build(BuildContext context) {
-    final stack = context.screenWidth < 1280;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final intel = ref.watch(hubIntelligenceProvider);
+    final insights = intel.valueOrNull?.insights ?? const [];
 
     final head = Row(
       children: [
@@ -2156,44 +2288,55 @@ class _InsightsSection extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        SelloViewAllLink(label: 'Ask Jarvis', onTap: () {}),
+        SelloViewAllLink(
+          label: 'View reports',
+          onTap: () => context.go(RoutePaths.hubReports),
+        ),
       ],
     );
 
-    final hero = _InsightCard(
-      badge: 'Growth',
-      badgeIcon: Icons.north_east_rounded,
-      tone: context.brandAccent,
-      soft: context.brandAccentContainer,
-      body:
-          'Revenue is up 12% compared to last month, led by stronger sales at the Colombo branch.',
-      cta: 'View revenue breakdown',
-      onTap: () => context.go(RoutePaths.hubReports),
-      large: true,
-    );
+    if (insights.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          head,
+          const SizedBox(height: 18),
+          SelloCard(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+            child: HubDashboardEmptyState.tall(
+              icon: Icons.auto_awesome_outlined,
+              title: intel.isLoading
+                  ? 'Loading insights…'
+                  : 'Insights will appear here',
+              message: intel.isLoading
+                  ? null
+                  : 'As your business activity grows, Sello Intelligence will '
+                      'surface useful patterns and things worth your attention.',
+              tone: AppColors.ai,
+              soft: AppColors.aiSoft,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+        ],
+      );
+    }
 
+    final role = ref.watch(currentSessionProvider)?.appRole ?? UserRole.owner;
     final cards = [
-      _InsightCard(
-        badge: 'Pattern',
-        badgeIcon: Icons.add_circle_outline,
-        tone: AppColors.ops,
-        soft: AppColors.opsSoft,
-        body:
-            'Customers who buy Steel Hinges 4in also purchase Industrial Cleaner 5L 61% of the time.',
-        cta: 'Bundle these products',
-        onTap: () => context.go(RoutePaths.hubProducts),
-      ),
-      _InsightCard(
-        badge: 'Watch',
-        badgeIcon: Icons.warning_amber_rounded,
-        tone: AppColors.finance,
-        soft: AppColors.financeSoft,
-        body:
-            'Supplier deliveries for hardware stock are running 2 days behind schedule this week.',
-        cta: 'Track deliveries',
-        onTap: () => context.go(RoutePaths.hubSchedule),
-      ),
+      for (var i = 0; i < math.min(3, insights.length); i++)
+        _InsightCard(
+          badge: insights[i].category.label,
+          badgeIcon: Icons.auto_awesome_outlined,
+          tone: context.brandAccent,
+          soft: context.brandAccentContainer,
+          body: insights[i].message,
+          cta: insights[i].actionLabel,
+          onTap: () => context.go(insights[i].routeFor(role)),
+          large: i == 0,
+        ),
     ];
+
+    final stack = context.screenWidth < 1280;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2203,18 +2346,20 @@ class _InsightsSection extends StatelessWidget {
         if (stack)
           Column(
             children: [
-              hero,
-              const SizedBox(height: AppSpacing.gap),
-              cards[0],
-              const SizedBox(height: AppSpacing.gap),
-              cards[1],
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.gap),
+                cards[i],
+              ],
             ],
           )
         else
-          // HTML: grid-template-columns: 1.32fr 1fr 1fr
           SelloEqualHeightRow(
-            flexes: const [132, 100, 100],
-            children: [hero, cards[0], cards[1]],
+            flexes: cards.length == 1
+                ? const [1]
+                : cards.length == 2
+                    ? const [132, 100]
+                    : const [132, 100, 100],
+            children: cards,
           ),
       ],
     );

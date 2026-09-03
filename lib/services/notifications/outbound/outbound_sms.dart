@@ -98,7 +98,8 @@ abstract final class OutboundSmsTest {
       'claim_failed' =>
         'SMS test is not set up on the server yet. Run migration 049, then redeploy send-outbound-sms.',
       'sms_not_configured' => 'SMS is not configured on the server.',
-      'provider_error' => 'Text.lk did not accept the message. Check the Sender ID.',
+      'provider_error' =>
+          'The SMS provider did not accept the message. Check the Sender ID.',
       'network' => 'Could not reach the SMS service.',
       'already_sent' => 'Test SMS sent.',
       final reason? => 'Could not send the test SMS ($reason).',
@@ -112,12 +113,13 @@ abstract final class OutboundSmsTest {
 abstract final class OutboundSmsVerify {
   static const title = 'Set up SMS notifications';
   static const explanation =
-      'Already have a registered Text.lk Sender ID? Add it now and test SMS notifications.';
+      'To send SMS notifications, enter the Sender ID registered for your business. '
+      'This is the name your customers will see when they receive SMS notifications from Sello.';
   static const successTitle = 'SMS is ready';
   static const successBody =
       'Your Sender ID has been verified and saved.';
   static const rejectedMessage =
-      "We couldn't verify this Sender ID. Please make sure it is registered with Text.lk or contact Sello support.";
+      "We couldn't verify this Sender ID. Please make sure it is registered for your business or contact Sello support.";
 
   static Map<String, String> requestJson({
     required String recipient,

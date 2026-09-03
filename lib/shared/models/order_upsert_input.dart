@@ -89,6 +89,7 @@ class OrderLineDraft {
   OrderLineDraft copyWith({
     num? unitPrice,
     num? quantity,
+    num? availableStock,
     num? discount,
     String? discountType,
     bool clearDiscount = false,
@@ -100,7 +101,7 @@ class OrderLineDraft {
       imageUrl: imageUrl,
       unitPrice: unitPrice ?? this.unitPrice,
       quantity: quantity ?? this.quantity,
-      availableStock: availableStock,
+      availableStock: availableStock ?? this.availableStock,
       unitLabel: unitLabel,
       discount: clearDiscount ? null : (discount ?? this.discount),
       discountType: clearDiscount ? null : (discountType ?? this.discountType),

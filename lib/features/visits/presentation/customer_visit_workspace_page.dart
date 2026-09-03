@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
@@ -15,9 +16,16 @@ import 'package:sello/features/visits/application/active_customer_visit_provider
 import 'package:sello/features/visits/presentation/signature_pad.dart';
 import 'package:sello/features/visits/presentation/visit_basket_bar.dart';
 import 'package:sello/features/visits/presentation/visit_basket_sheet.dart';
+import 'package:sello/features/visits/presentation/visit_customer_context_header.dart';
+import 'package:sello/features/visits/presentation/visit_customer_details_sheet.dart';
+import 'package:sello/features/visits/presentation/visit_draft_restore_banner.dart';
+import 'package:sello/features/visits/presentation/visit_order_status_banner.dart';
 import 'package:sello/features/visits/presentation/visit_checkout_stage.dart';
 import 'package:sello/features/visits/presentation/walk_in_customer_sheet.dart';
+import 'package:sello/services/orders/visit_order_draft.dart';
+import 'package:sello/services/orders/visit_order_draft_store.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/app_session.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_visit.dart';
@@ -70,7 +78,6 @@ class _CustomerVisitWorkspacePageState
   CustomerSummary? _customer;
   bool _booting = true;
   String? _bootError;
-  bool _detailsExpanded = false;
   int _basketCount = 0;
   num _basketQty = 0;
   num _basketTotal = 0;
@@ -80,16 +87,25 @@ class _CustomerVisitWorkspacePageState
   bool _saving = false;
   bool _signed = false;
   late bool _isWalkIn;
+  final _draftStore = VisitOrderDraftStore();
+  VisitOrderDraft? _pendingDraft;
+  bool _draftSaved = false;
 
   @override
   void initState() {
     super.initState();
     _isWalkIn = widget.walkIn;
+    _visitNotes.addListener(_onVisitNotesChanged);
     Future.microtask(_bootstrap);
+  }
+
+  void _onVisitNotesChanged() {
+    unawaited(_persistDraft());
   }
 
   @override
   void dispose() {
+    _visitNotes.removeListener(_onVisitNotesChanged);
     _visitNotes.dispose();
     super.dispose();
   }
@@ -118,6 +134,7 @@ class _CustomerVisitWorkspacePageState
           _customer = null;
           _booting = false;
         });
+        await _loadPendingDraft();
         return;
       }
 
@@ -150,6 +167,7 @@ class _CustomerVisitWorkspacePageState
         _isWalkIn = false;
         _booting = false;
       });
+      await _loadPendingDraft();
     } on AppFailure catch (error) {
       if (!mounted) return;
       setState(() {
@@ -165,6 +183,9 @@ class _CustomerVisitWorkspacePageState
     }
   }
 
+  String? _branchIdFor(AppSession session) =>
+      session.branch?.id ?? session.employee.branchId;
+
   Future<CustomerSummary?> _registerWalkInCustomer() async {
     final session = ref.read(currentSessionProvider);
     if (session == null) return null;
@@ -172,12 +193,14 @@ class _CustomerVisitWorkspacePageState
     final input = await WalkInCustomerSheet.show(context);
     if (input == null || !mounted) return null;
 
+    final branchId = _branchIdFor(session);
+
     final customerId = await ref
         .read(customerRepositoryProvider)
         .upsertCustomer(
           companyId: session.company.id,
           employeeId: session.employee.id,
-          branchId: session.employee.branchId,
+          branchId: branchId,
           input: input,
         );
 
@@ -186,7 +209,7 @@ class _CustomerVisitWorkspacePageState
         .startVisit(
           customerId: customerId,
           customerName: input.name,
-          branchId: session.employee.branchId,
+          branchId: branchId,
         );
 
     final customer = await ref
@@ -205,34 +228,219 @@ class _CustomerVisitWorkspacePageState
     return customer;
   }
 
+  bool _draftMatchesContext(VisitOrderDraft draft) {
+    final customerId = _customer?.id ?? widget.customerId;
+    if (draft.walkIn && _isWalkIn) {
+      if (_customer == null && draft.customerId == null) return true;
+      if (_customer != null &&
+          draft.customerId != null &&
+          draft.customerId == _customer!.id) {
+        return true;
+      }
+    }
+    if (customerId != null &&
+        draft.customerId != null &&
+        draft.customerId == customerId) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _loadPendingDraft() async {
+    final session = ref.read(currentSessionProvider);
+    if (session == null) return;
+    final draft = await _draftStore.load(
+      companyId: session.company.id,
+      employeeId: session.employee.id,
+    );
+    if (!mounted) return;
+    if (draft == null || !draft.hasLines || !_draftMatchesContext(draft)) {
+      return;
+    }
+    final editor = _orderKey.currentState;
+    if (editor != null && editor.lines.isNotEmpty) {
+      return;
+    }
+    setState(() => _pendingDraft = draft);
+  }
+
+  Future<void> _persistDraft() async {
+    final session = ref.read(currentSessionProvider);
+    if (session == null) return;
+    final editor = _orderKey.currentState;
+    final lines = editor?.lines ?? [];
+    final hasMeta = _visitNotes.text.trim().isNotEmpty ||
+        _stage == _VisitStage.checkout ||
+        _arrangement != VisitPaymentArrangement.noneYet;
+
+    if (lines.isEmpty && !hasMeta) {
+      await _draftStore.clear(
+        companyId: session.company.id,
+        employeeId: session.employee.id,
+      );
+      if (mounted) setState(() => _draftSaved = false);
+      return;
+    }
+
+    final draft = VisitOrderDraft(
+      companyId: session.company.id,
+      employeeId: session.employee.id,
+      customerId: _customer?.id,
+      customerName: _customer?.name ?? widget.customerName,
+      walkIn: _isWalkIn,
+      scheduledVisitId: widget.scheduledVisitId,
+      lines: [
+        for (final line in lines)
+          VisitOrderDraftLine(
+            productId: line.productId,
+            quantity: line.quantity,
+          ),
+      ],
+      visitNotes: _visitNotes.text.trim().isEmpty ? null : _visitNotes.text.trim(),
+      stage: _stage == _VisitStage.checkout
+          ? VisitOrderDraftStage.checkout
+          : VisitOrderDraftStage.catalog,
+      arrangement: _arrangement.name,
+      chequeFollowUpAt: _chequeFollowUpDate,
+      updatedAt: DateTime.now(),
+      runningTotal: editor?.runningTotal ?? 0,
+    );
+    await _draftStore.save(draft);
+    if (mounted) setState(() => _draftSaved = true);
+  }
+
+  Future<void> _continueDraft() async {
+    final draft = _pendingDraft;
+    if (draft == null) return;
+    final restored = await _orderKey.currentState?.restoreFromProductLines(
+      [
+        for (final line in draft.lines)
+          (productId: line.productId, quantity: line.quantity),
+      ],
+    );
+    if (draft.visitNotes != null && draft.visitNotes!.isNotEmpty) {
+      _visitNotes.text = draft.visitNotes!;
+    }
+    if (draft.arrangement != null) {
+      _arrangement = VisitPaymentArrangement.values.firstWhere(
+        (value) => value.name == draft.arrangement,
+        orElse: () => VisitPaymentArrangement.noneYet,
+      );
+    }
+    _chequeFollowUpDate = draft.chequeFollowUpAt;
+    if (draft.stage == VisitOrderDraftStage.checkout && (restored ?? 0) > 0) {
+      _stage = _VisitStage.checkout;
+    }
+    setState(() => _pendingDraft = null);
+    _syncBasketFromEditor();
+    await _persistDraft();
+    if (mounted && restored == 0 && draft.lines.isNotEmpty) {
+      SelloSnackbars.warning(
+        context,
+        'Some products from your draft could not be loaded.',
+      );
+    }
+  }
+
+  Future<void> _confirmDiscardDraft() async {
+    final shopName = _isWalkIn && _customer == null
+        ? 'Walk-in'
+        : (_customer?.name ?? widget.customerName ?? 'this customer');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard order?'),
+        content: Text(
+          'This will remove the current draft for $shopName.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final session = ref.read(currentSessionProvider);
+    if (session != null) {
+      await _draftStore.clear(
+        companyId: session.company.id,
+        employeeId: session.employee.id,
+      );
+    }
+    _orderKey.currentState?.clearBasket();
+    _visitNotes.clear();
+    _arrangement = VisitPaymentArrangement.noneYet;
+    _chequeFollowUpDate = null;
+    _stage = _VisitStage.catalog;
+    setState(() {
+      _pendingDraft = null;
+      _draftSaved = false;
+      _basketCount = 0;
+      _basketQty = 0;
+      _basketTotal = 0;
+    });
+    if (mounted) {
+      SelloSnackbars.success(context, 'Draft discarded.');
+    }
+  }
+
+  void _openCustomerDetails() {
+    final settings =
+        ref.read(selloCompanySettingsProvider).valueOrNull ??
+        CompanySettings.defaults;
+    final active = ref.read(activeCustomerVisitProvider).valueOrNull;
+    final shopName = _isWalkIn && _customer == null
+        ? 'Walk-in'
+        : (_customer?.name ?? widget.customerName ?? 'Customer');
+    final hasDraft = _basketCount > 0 || _pendingDraft != null;
+
+    showVisitCustomerDetailsSheet(
+      context,
+      shopName: shopName,
+      customer: _customer,
+      activeVisit: active,
+      currencySymbol: _currency,
+      showOutstanding: settings.salesCanViewOutstandingBalances,
+      onDiscardOrder: hasDraft ? _confirmDiscardDraft : null,
+    );
+  }
+
   Future<void> _leaveWithoutSaving() async {
     final orderState = _orderKey.currentState;
     final hasLines = orderState?.lines.isNotEmpty ?? false;
     final active = ref.read(activeCustomerVisitProvider).valueOrNull;
 
-    if (_isWalkIn && active == null) {
-      if (hasLines) {
-        final discard = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Leave walk-in?'),
-            content: const Text(
-              'The basket will be discarded and no customer will be saved.',
+    if (hasLines) {
+      await _persistDraft();
+      if (!mounted) return;
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Order in progress'),
+          content: const Text('Your progress has been saved.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Stay'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Keep browsing'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Discard'),
-              ),
-            ],
-          ),
-        );
-        if (discard != true || !mounted) return;
-      }
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Leave'),
+            ),
+          ],
+        ),
+      );
+      if (leave != true || !mounted) return;
+    }
+
+    if (_isWalkIn && active == null && !hasLines) {
       context.go(RoutePaths.selloCustomers);
       return;
     }
@@ -255,7 +463,11 @@ class _CustomerVisitWorkspacePageState
       if (count == 0) {
         _stage = _VisitStage.catalog;
       }
+      if (count > 0 && _pendingDraft != null) {
+        _pendingDraft = null;
+      }
     });
+    unawaited(_persistDraft());
   }
 
   Future<void> _openBasketReview({bool fromCheckout = false}) async {
@@ -308,7 +520,7 @@ class _CustomerVisitWorkspacePageState
           input: VisitUpsertInput(
             customerId: customer.id,
             employeeId: session.employee.id,
-            branchId: session.employee.branchId,
+            branchId: _branchIdFor(session),
             visitDate: when,
             priority: VisitPriority.high,
             purpose: 'Cheque collection',
@@ -358,11 +570,7 @@ class _CustomerVisitWorkspacePageState
 
       OrderConfirmationOutcome? confirmation;
       if (hasLines && orderState != null) {
-        final wantComplete =
-            _arrangement == VisitPaymentArrangement.paidToday ||
-            _arrangement == VisitPaymentArrangement.chequeReceived ||
-            _arrangement == VisitPaymentArrangement.creditSale;
-        final result = orderState.tryBuildResult(complete: wantComplete);
+        final result = orderState.tryBuildResult(place: true);
         if (result == null) {
           setState(() => _saving = false);
           return;
@@ -401,15 +609,26 @@ class _CustomerVisitWorkspacePageState
             .read(selloOrdersProvider.notifier)
             .saveOrder(
               input,
-              complete:
-                  result.complete ||
-                  _arrangement == VisitPaymentArrangement.creditSale,
+              place: true,
               reloadList: false,
             );
         if (!saved.isOk) {
           if (!mounted) return;
           setState(() => _saving = false);
-          SelloSnackbars.error(context, saved.error!);
+          final error = saved.error ?? 'Unable to save this order.';
+          if (error.toLowerCase().contains('stock')) {
+            await _orderKey.currentState?.refreshCatalogStock();
+            if (!mounted) return;
+            await showSelloDialog(
+              context: context,
+              title: 'Stock changed',
+              message: '$error Adjust quantities and try again.',
+              confirmLabel: 'OK',
+              cancelLabel: 'Close',
+            );
+          } else {
+            SelloSnackbars.error(context, error);
+          }
           return;
         }
         confirmation = saved.confirmation;
@@ -489,6 +708,14 @@ class _CustomerVisitWorkspacePageState
             signatureStoragePath: signaturePath,
           );
 
+      final session = ref.read(currentSessionProvider);
+      if (session != null) {
+        await _draftStore.clear(
+          companyId: session.company.id,
+          employeeId: session.employee.id,
+        );
+      }
+
       if (!mounted) return;
       SelloSnackbars.success(context, 'Visit saved.');
       if (confirmation != null && confirmation.hasShareActions && mounted) {
@@ -524,9 +751,6 @@ class _CustomerVisitWorkspacePageState
   @override
   Widget build(BuildContext context) {
     final active = ref.watch(activeCustomerVisitProvider).valueOrNull;
-    final settings =
-        ref.watch(selloCompanySettingsProvider).valueOrNull ??
-        CompanySettings.defaults;
 
     final shopName = _isWalkIn && _customer == null
         ? 'Walk-in'
@@ -558,31 +782,42 @@ class _CustomerVisitWorkspacePageState
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _VisitAppBar(
-                      customerName: onCheckout ? 'Checkout' : shopName,
-                      durationLabel: onCheckout ? null : active?.durationLabel,
-                      pendingSync: active?.pendingSync ?? false,
-                      showBack: onCheckout,
-                      onClose: onCheckout ? _goCatalog : _leaveWithoutSaving,
-                    ),
-                    if (!onCheckout && _customer != null)
+                    if (onCheckout)
+                      _VisitCheckoutAppBar(onBack: _goCatalog)
+                    else
                       Padding(
                         padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.md,
+                          AppSpacing.xxs,
+                          AppSpacing.xxs,
+                          AppSpacing.sm,
                           0,
-                          AppSpacing.md,
-                          AppSpacing.xs,
                         ),
-                        child: _VisitActionHeader(
-                          customer: _customer!,
-                          currencySymbol: _currency,
-                          showOutstanding:
-                              settings.salesCanViewOutstandingBalances,
-                          detailsExpanded: _detailsExpanded,
-                          onToggleDetails: () => setState(
-                            () => _detailsExpanded = !_detailsExpanded,
-                          ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              onPressed: _leaveWithoutSaving,
+                              icon: const Icon(Icons.close_rounded),
+                              tooltip: 'Leave',
+                            ),
+                            Expanded(
+                              child: VisitCustomerContextHeader(
+                                shopName: shopName,
+                                onTap: _openCustomerDetails,
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                    VisitOrderStatusBanner(
+                      visitPendingSync: active?.pendingSync ?? false,
+                      draftSaved: _draftSaved || _pendingDraft != null,
+                    ),
+                    if (!onCheckout && _pendingDraft != null)
+                      VisitDraftRestoreBanner(
+                        itemQuantity: _pendingDraft!.itemQuantity,
+                        total: _pendingDraft!.runningTotal,
+                        currencySymbol: _currency,
+                        onContinue: _continueDraft,
                       ),
                     Expanded(
                       child: Stack(
@@ -608,8 +843,9 @@ class _CustomerVisitWorkspacePageState
                                       : active.id,
                                   initialCustomerId: _customer?.id,
                                   initialCustomerName: _customer?.name,
-                                  onBasketChanged: (_) =>
-                                      _syncBasketFromEditor(),
+                                  onBasketChanged: (_) {
+                                    _syncBasketFromEditor();
+                                  },
                                 ),
                               ),
                             ),
@@ -626,15 +862,18 @@ class _CustomerVisitWorkspacePageState
                               currencySymbol: _currency,
                               arrangement: _arrangement,
                               chequeDate: _chequeFollowUpDate,
-                              onArrangementChanged: (value) => setState(() {
-                                _arrangement = value;
-                                if (value.schedulesFollowUp &&
-                                    _chequeFollowUpDate == null) {
-                                  _chequeFollowUpDate = DateTime.now().add(
-                                    const Duration(days: 3),
-                                  );
-                                }
-                              }),
+                              onArrangementChanged: (value) {
+                                setState(() {
+                                  _arrangement = value;
+                                  if (value.schedulesFollowUp &&
+                                      _chequeFollowUpDate == null) {
+                                    _chequeFollowUpDate = DateTime.now().add(
+                                      const Duration(days: 3),
+                                    );
+                                  }
+                                });
+                                unawaited(_persistDraft());
+                              },
                               onPickChequeDate: _pickChequeDate,
                               onViewDetails: () =>
                                   _openBasketReview(fromCheckout: true),
@@ -682,20 +921,10 @@ class _CustomerVisitWorkspacePageState
   }
 }
 
-class _VisitAppBar extends StatelessWidget {
-  const _VisitAppBar({
-    required this.customerName,
-    required this.onClose,
-    this.durationLabel,
-    this.pendingSync = false,
-    this.showBack = false,
-  });
+class _VisitCheckoutAppBar extends StatelessWidget {
+  const _VisitCheckoutAppBar({required this.onBack});
 
-  final String customerName;
-  final String? durationLabel;
-  final bool pendingSync;
-  final bool showBack;
-  final VoidCallback onClose;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -709,170 +938,21 @@ class _VisitAppBar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            onPressed: onClose,
-            icon: Icon(
-              showBack ? Icons.arrow_back_rounded : Icons.close_rounded,
-            ),
-            tooltip: showBack ? 'Back' : 'Leave',
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_rounded),
+            tooltip: 'Back',
           ),
-          Expanded(
+          const Expanded(
             child: Text(
-              customerName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              'Checkout',
+              style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontWeight: FontWeight.w800,
                 fontSize: 17,
               ),
             ),
           ),
-          if (pendingSync)
-            const Padding(
-              padding: EdgeInsets.only(right: 6),
-              child: Icon(
-                Icons.cloud_off_outlined,
-                size: 16,
-                color: AppColors.warning,
-              ),
-            ),
-          if (durationLabel != null)
-            Text(
-              durationLabel!,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textTertiary,
-              ),
-            ),
         ],
-      ),
-    );
-  }
-}
-
-/// Compact chips — details stay secondary.
-class _VisitActionHeader extends StatelessWidget {
-  const _VisitActionHeader({
-    required this.customer,
-    required this.currencySymbol,
-    required this.showOutstanding,
-    required this.detailsExpanded,
-    required this.onToggleDetails,
-  });
-
-  final CustomerSummary customer;
-  final String currencySymbol;
-  final bool showOutstanding;
-  final bool detailsExpanded;
-  final VoidCallback onToggleDetails;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  if (showOutstanding && customer.outstandingBalance > 0)
-                    _MetaChip(
-                      label: SelloFormatters.currency(
-                        customer.outstandingBalance,
-                        symbol: currencySymbol,
-                      ),
-                      emphasis: true,
-                    ),
-                  if (customer.phone != null) _MetaChip(label: customer.phone!),
-                  if (customer.lastPurchaseAt != null)
-                    _MetaChip(
-                      label: DateFormat(
-                        'd MMM',
-                      ).format(customer.lastPurchaseAt!.toLocal()),
-                    ),
-                ],
-              ),
-            ),
-            InkWell(
-              onTap: onToggleDetails,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  detailsExpanded
-                      ? Icons.expand_less_rounded
-                      : Icons.info_outline_rounded,
-                  size: 18,
-                  color: AppColors.textTertiary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (detailsExpanded) ...[
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (customer.createdAt != null)
-                _MetaChip(
-                  label: DateFormat(
-                    'MMM yyyy',
-                  ).format(customer.createdAt!.toLocal()),
-                ),
-              if (customer.addressLine1 != null || customer.city != null)
-                _MetaChip(
-                  label: [
-                    if (customer.addressLine1 != null) customer.addressLine1!,
-                    if (customer.city != null) customer.city!,
-                  ].join(', '),
-                ),
-              _MetaChip(
-                label: customer.creditAllowed
-                    ? SelloFormatters.currency(
-                        customer.creditLimit,
-                        symbol: currencySymbol,
-                      )
-                    : 'Cash',
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.label, this.emphasis = false});
-  final String label;
-  final bool emphasis;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: emphasis
-            ? AppColors.warningContainer.withValues(alpha: 0.55)
-            : AppColors.surfaceMuted,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.outlineSubtle),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: AppTypography.fontFamily,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: emphasis ? AppColors.warning : AppColors.textSecondary,
-        ),
       ),
     );
   }

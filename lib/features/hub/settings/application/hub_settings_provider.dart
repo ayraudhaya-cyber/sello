@@ -69,6 +69,16 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
 
   @override
   HubSettingsState build() {
+    ref.listen(currentSessionProvider, (previous, next) {
+      final prevKey = previous == null
+          ? null
+          : '${previous.company.id}:${previous.employee.id}';
+      final nextKey =
+          next == null ? null : '${next.company.id}:${next.employee.id}';
+      if (prevKey == nextKey) return;
+      Future.microtask(load);
+    });
+
     Future.microtask(load);
     return const HubSettingsState(isLoading: true);
   }
@@ -76,10 +86,8 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
   Future<void> load() async {
     final session = ref.read(currentSessionProvider);
     if (session == null) {
-      state = const HubSettingsState(
-        initialized: true,
-        errorMessage: 'No active session found.',
-      );
+      // Session may still be bootstrapping after a deep-link refresh.
+      state = state.copyWith(isLoading: true, clearError: true);
       return;
     }
 

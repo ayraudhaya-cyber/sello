@@ -731,17 +731,32 @@ class _SmsStepState extends State<_SmsStep> {
 
     return SettingsGroupCard(
       title: OutboundSmsVerify.title,
-      description: OutboundSmsVerify.explanation,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.infoContainer,
+              borderRadius: BorderRadius.circular(AppRadius.button),
+            ),
+            child: Text(
+              OutboundSmsVerify.explanation,
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.info,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
           SettingsCompactField(
             label: 'SMS Sender ID',
-            helper:
-                'Must match the Sender ID already registered with Text.lk.',
             child: SelloTextField(
               controller: widget.senderIdController,
-              hint: '3 to 11 letters or digits',
+              hint: 'Enter your Sender ID',
               textInputAction: TextInputAction.next,
               enabled: !widget.saving,
               inputFormatters: [

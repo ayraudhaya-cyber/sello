@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/animations/app_durations.dart';
+import 'package:sello/core/responsive/app_breakpoints.dart';
 import 'package:sello/core/theme/theme.dart';
 
 enum SelloCardElevation { flat, soft, raised }
@@ -151,6 +152,7 @@ class SelloStatCard extends StatelessWidget {
     this.icon,
     this.trendLabel,
     this.trendPositive,
+    this.hint,
     this.onTap,
     this.tone,
     this.sparkPoints,
@@ -164,6 +166,8 @@ class SelloStatCard extends StatelessWidget {
   final IconData? icon;
   final String? trendLabel;
   final bool? trendPositive;
+  /// Supporting line under the value (e.g. "Active catalog").
+  final String? hint;
   final VoidCallback? onTap;
   final Color? tone;
   final List<double>? sparkPoints;
@@ -289,6 +293,20 @@ class SelloStatCard extends StatelessWidget {
                     ? AppTypography.metric.copyWith(fontSize: 22)
                     : AppTypography.metric,
           ),
+          if (hint != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              hint!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
           if (quiet && trendLabel != null) ...[
             const SizedBox(height: 2),
             Text(
@@ -377,6 +395,58 @@ class _KpiSparkPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _KpiSparkPainter oldDelegate) =>
       oldDelegate.points != points || oldDelegate.color != color;
+}
+
+/// Responsive grid of [SelloStatCard]s — wraps into multiple rows when needed.
+class SelloStatCardGrid extends StatelessWidget {
+  const SelloStatCardGrid({
+    super.key,
+    required this.children,
+    this.gap = AppSpacing.md,
+    this.maxColumns = 4,
+  });
+
+  final List<Widget> children;
+  final double gap;
+
+  /// Maximum columns on large screens (e.g. 6 for Reports, 4 for domain lists).
+  final int maxColumns;
+
+  int _columnsForWidth(double width) {
+    final cap = maxColumns.clamp(1, 12);
+    if (width < AppBreakpoints.mobile) {
+      return width < 400 ? 1 : 2.clamp(1, cap);
+    }
+    if (width < AppBreakpoints.tablet) {
+      return 3.clamp(1, cap);
+    }
+    return cap;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = _columnsForWidth(width);
+        final itemWidth = (width - gap * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children)
+              SizedBox(
+                width: itemWidth,
+                child: child,
+              ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 /// Dashboard section card with title and optional action.

@@ -579,17 +579,10 @@ class SettingsPreferenceRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        SizedBox(
-          height: 28,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: Switch.adaptive(
-              value: value,
-              onChanged: enabled ? onChanged : null,
-              activeThumbColor: AppColors.onPrimary,
-              activeTrackColor: context.brandAccent,
-            ),
-          ),
+        SelloSwitch(
+          value: value,
+          onChanged: enabled ? onChanged : null,
+          enabled: enabled,
         ),
       ],
     );

@@ -570,11 +570,34 @@ class _InventorySection extends StatelessWidget {
                   ),
                   SelloStatusToggle(
                     value: draft.allowNegativeStock,
-                    label: 'Allow negative stock',
+                    label: 'Allow sales when stock is not enough',
                     helper:
-                        'When off, sales and adjustments cannot push stock below zero.',
+                        'Allows you to complete a sale even when you don\'t have enough stock right now. Your stock may go below zero until more stock is added.',
                     onChanged: (value) =>
                         onChanged((c) => c.copyWith(allowNegativeStock: value)),
+                  ),
+                  SelloStatusToggle(
+                    value: draft.allowOrdersAboveAvailableStock,
+                    label: 'Allow orders when stock is not enough',
+                    helper:
+                        'Allows Sales Reps to take an order even when you don\'t have enough stock right now. The order can be completed when stock becomes available.',
+                    onChanged: (value) async {
+                      if (value) {
+                        final confirmed = await showSelloDialog(
+                          context: context,
+                          title: 'Allow orders when stock is not enough?',
+                          message:
+                              'Sales Reps will be able to take an order even when you don\'t have enough stock right now. The order can be completed when stock becomes available.',
+                          confirmLabel: 'Allow',
+                        );
+                        if (confirmed != true) return;
+                      }
+                      onChanged(
+                        (c) => c.copyWith(
+                          allowOrdersAboveAvailableStock: value,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1486,20 +1509,12 @@ class _ProductDetailSettingsCardState
               const SizedBox(width: 8),
               Tooltip(
                 message: 'Enable',
-                child: SizedBox(
-                  height: 28,
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: Switch.adaptive(
-                      value: field.enabled,
-                      onChanged: (value) => widget.onChanged(
-                        field.copyWith(
-                          enabled: value,
-                          required: value ? field.required : false,
-                        ),
-                      ),
-                      activeThumbColor: AppColors.onPrimary,
-                      activeTrackColor: context.brandAccent,
+                child: SelloSwitch(
+                  value: field.enabled,
+                  onChanged: (value) => widget.onChanged(
+                    field.copyWith(
+                      enabled: value,
+                      required: value ? field.required : false,
                     ),
                   ),
                 ),
@@ -1551,18 +1566,10 @@ class _ProductDetailSettingsCardState
                           label: 'Required',
                           tooltip:
                               'Users must provide this value before saving a product.',
-                          trailing: SizedBox(
-                            height: 28,
-                            child: FittedBox(
-                              fit: BoxFit.contain,
-                              child: Switch.adaptive(
-                                value: field.required,
-                                onChanged: (value) => widget.onChanged(
-                                  field.copyWith(required: value),
-                                ),
-                                activeThumbColor: AppColors.onPrimary,
-                                activeTrackColor: context.brandAccent,
-                              ),
+                          trailing: SelloSwitch(
+                            value: field.required,
+                            onChanged: (value) => widget.onChanged(
+                              field.copyWith(required: value),
                             ),
                           ),
                         ),

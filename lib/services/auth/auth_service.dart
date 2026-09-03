@@ -1,9 +1,6 @@
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/router/route_paths.dart';
-import 'package:sello/services/supabase/supabase_config.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -110,6 +107,10 @@ class AuthService {
     }
   }
 
+  /// Self-service password recovery from the login screen only.
+  ///
+  /// Team invitations must use the `invite-employee-login` Edge Function —
+  /// never call this while an Owner/Manager session is active for inviting.
   Future<void> sendPasswordRecovery({
     required String email,
     String redirectPath = RoutePaths.login,
@@ -136,68 +137,6 @@ class AuthService {
     } catch (error) {
       throw UnexpectedFailure(error.toString());
     }
-  }
-
-  /// Creates an Auth user without switching the signed-in Hub session.
-  ///
-  /// Uses an ephemeral Supabase client with in-memory PKCE storage so the
-  /// owner's session stays intact. Caller should send a password-recovery
-  /// email afterward so the employee can set their own password.
-  Future<String> createAuthUserWithoutSessionSwitch({
-    required String email,
-  }) async {
-    final password = _randomPassword();
-    final storage = _MemoryGotrueStorage();
-    final inviteClient = SupabaseClient(
-      SupabaseConfig.url,
-      SupabaseConfig.publishableKey,
-      authOptions: AuthClientOptions(
-        autoRefreshToken: false,
-        pkceAsyncStorage: storage,
-        authFlowType: AuthFlowType.pkce,
-      ),
-    );
-
-    try {
-      final response = await inviteClient.auth.signUp(
-        email: email.trim().toLowerCase(),
-        password: password,
-        emailRedirectTo: _redirectUrlFor(RoutePaths.login),
-      );
-      final user = response.user;
-      final userId = user?.id;
-      if (userId == null || userId.isEmpty) {
-        throw const AuthFailure(
-          'Unable to create a login for this email. Check Auth settings.',
-        );
-      }
-      // When "Confirm email" is enabled, signUp for an existing address returns
-      // an obfuscated user that is NOT in auth.users — empty identities.
-      if (user!.identities == null || user.identities!.isEmpty) {
-        throw const AuthFailure(
-          'An Auth account already exists for this email. '
-          'Ask them to sign in, or use Send invite after they have a login.',
-        );
-      }
-      return userId;
-    } on AuthException catch (error) {
-      throw AuthFailure(_mapInviteMessage(error.message));
-    } catch (error) {
-      if (error is AppFailure) rethrow;
-      throw UnexpectedFailure(error.toString());
-    } finally {
-      try {
-        await inviteClient.auth.signOut();
-      } catch (_) {}
-      inviteClient.dispose();
-    }
-  }
-
-  String _randomPassword() {
-    const chars =
-        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%';
-    final random = Random.secure();
-    return List.generate(20, (_) => chars[random.nextInt(chars.length)]).join();
   }
 
   String? _redirectUrlFor(String path) {
@@ -253,33 +192,5 @@ class AuthService {
     return message.isEmpty
         ? 'Unable to create your account. Please try again.'
         : message;
-  }
-
-  static String _mapInviteMessage(String message) {
-    final lower = message.toLowerCase();
-    if (lower.contains('already registered') ||
-        lower.contains('already been registered') ||
-        lower.contains('user already exists')) {
-      return 'An Auth account already exists for this email. '
-          'Ask them to sign in, or link an existing user later.';
-    }
-    return _mapSignUpMessage(message);
-  }
-}
-
-class _MemoryGotrueStorage extends GotrueAsyncStorage {
-  final Map<String, String> _map = {};
-
-  @override
-  Future<String?> getItem({required String key}) async => _map[key];
-
-  @override
-  Future<void> setItem({required String key, required String value}) async {
-    _map[key] = value;
-  }
-
-  @override
-  Future<void> removeItem({required String key}) async {
-    _map.remove(key);
   }
 }

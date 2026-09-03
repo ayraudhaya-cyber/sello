@@ -95,15 +95,19 @@ enum NotificationPriority {
 abstract final class NotificationTypes {
   // Orders
   static const orderCreated = 'order_created';
+  static const orderPlaced = 'order_placed';
   static const orderSubmitted = 'order_submitted';
   static const orderApproved = 'order_approved';
   static const orderCompleted = 'order_completed';
   static const orderCancelled = 'order_cancelled';
+  static const orderInsufficientStock = 'order_insufficient_stock';
+  static const orderPartiallyDelivered = 'order_partially_delivered';
 
   // Inventory
   static const lowStock = 'low_stock';
   static const outOfStock = 'out_of_stock';
   static const stockAdjusted = 'stock_adjusted';
+  static const negativeStock = 'negative_stock';
 
   // Payments
   static const paymentReceived = 'payment_received';

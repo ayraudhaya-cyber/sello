@@ -204,7 +204,7 @@ class _SmsSenderIdFieldState extends State<_SmsSenderIdField> {
       enabled: widget.enabled,
       hint: widget.enabled ? '3 to 11 letters or digits' : null,
       helperText: widget.enabled
-          ? 'Must match the approved Text.lk Sender ID. 3 to 11 letters or digits.'
+          ? 'Must match the Sender ID registered for your business. 3 to 11 letters or digits.'
           : null,
       textInputAction: TextInputAction.done,
       inputFormatters: [

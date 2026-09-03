@@ -123,6 +123,22 @@ class OwnerSetupService {
       throw const UnexpectedFailure('Sales Rep role is not available.');
     }
 
+    // If a previous attempt created the employee but the invite failed,
+    // find the existing row and just re-send the invite instead of inserting
+    // a duplicate (which would violate employees_company_email_active_key).
+    final existing = await _employees.findEmployeeByEmail(
+      companyId: session.company.id,
+      email: email,
+    );
+
+    if (existing != null) {
+      return _employees.sendLoginInvite(
+        companyId: session.company.id,
+        actorEmployeeId: session.employee.id,
+        employeeId: existing.id,
+      );
+    }
+
     final result = await _employees.upsertEmployee(
       companyId: session.company.id,
       actorEmployeeId: session.employee.id,

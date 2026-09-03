@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/error/app_failure.dart';
-import 'package:sello/services/auth/auth_service.dart';
+import 'package:sello/services/employees/employee_login_invite_response.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
@@ -40,18 +40,15 @@ class EmployeeRepository {
     SupabaseClient? client,
     MediaStorageService? imageStorage,
     MediaService? media,
-    AuthService? auth,
     BusinessEventBus? events,
   })  : _client = client ?? SupabaseService.client,
         _imageStorage = imageStorage ?? MediaStorageService(),
         _media = media ?? MediaService(),
-        _auth = auth ?? AuthService(),
         _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final MediaStorageService _imageStorage;
   final MediaService _media;
-  final AuthService _auth;
   final BusinessEventBus _events;
 
   static const _employeeSelect = '''
@@ -398,6 +395,26 @@ class EmployeeRepository {
     }
   }
 
+  /// Finds an active employee by email within a company (for retry safety).
+  Future<EmployeeSummary?> findEmployeeByEmail({
+    required String companyId,
+    required String email,
+  }) async {
+    try {
+      final row = await _client
+          .from('employees')
+          .select(_directorySelect)
+          .eq('company_id', companyId)
+          .eq('email', email.trim().toLowerCase())
+          .isFilter('deleted_at', null)
+          .maybeSingle();
+      if (row == null) return null;
+      return EmployeeSummary.fromJson(Map<String, dynamic>.from(row));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<EmployeeSummary?> fetchEmployeeById({
     required String companyId,
     required String employeeId,
@@ -594,7 +611,10 @@ class EmployeeRepository {
     }
   }
 
-  /// Provisions Sello access and sends the invitation email.
+  /// Provisions Sello access via the `invite-employee-login` Edge Function.
+  ///
+  /// Auth user creation and the password-setup email run server-side with the
+  /// service role so the Owner's browser session is never touched.
   ///
   /// Returns whether the account is ready and whether the email was delivered.
   /// When email delivery fails (e.g. SMTP not configured), the account still
@@ -618,75 +638,36 @@ class EmployeeRepository {
         );
       }
 
-      var authUserId = existing.userId;
-      var inviteStatus = 'sent';
-      var emailDelivered = false;
-
-      if (authUserId == null || authUserId.isEmpty) {
-        try {
-          authUserId = await _auth.createAuthUserWithoutSessionSwitch(
-            email: existing.email,
-          );
-          await _client.from('employees').update({
-            'user_id': authUserId,
-            'updated_by': actorEmployeeId,
-          }).eq('id', employeeId).eq('company_id', companyId);
-        } on AuthFailure catch (error) {
-          // Existing Auth email: still send recovery so they can access Sello.
-          // Do not write a fake user_id (FK to auth.users would fail).
-          final alreadyRegistered = error.message.toLowerCase().contains(
-                'already exists',
-              );
-          if (!alreadyRegistered) {
-            inviteStatus = 'failed';
-            await _recordInvite(
-              companyId: companyId,
-              employeeId: employeeId,
-              email: existing.email,
-              invitedBy: actorEmployeeId,
-              status: inviteStatus,
-              authUserId: null,
-            );
-            rethrow;
-          }
-          authUserId = null;
-        } on PostgrestException catch (error) {
-          final message = error.message.toLowerCase();
-          if (message.contains('employees_user_id_fkey') ||
-              message.contains('foreign key constraint')) {
-            throw const AuthFailure(
-              'Could not link login for this email. '
-              'The Auth user may already exist — ask them to sign in, '
-              'or try a different email.',
-            );
-          }
-          rethrow;
-        }
+      final body = <String, dynamic>{
+        'employee_id': employeeId,
+      };
+      final redirectTo =
+          EmployeeLoginInviteResponse.redirectToForCurrentOrigin();
+      if (redirectTo != null) {
+        body['redirect_to'] = redirectTo;
       }
 
-      try {
-        await _auth.sendPasswordRecovery(email: existing.email);
-        emailDelivered = true;
-        inviteStatus = 'sent';
-      } catch (_) {
-        // Account may still be ready; mail provider / SMTP often unavailable in dev.
-        inviteStatus = 'failed';
-        emailDelivered = false;
-      }
-
-      await _recordInvite(
-        companyId: companyId,
-        employeeId: employeeId,
-        email: existing.email,
-        invitedBy: actorEmployeeId,
-        status: inviteStatus,
-        authUserId: authUserId,
+      final response = await _client.functions.invoke(
+        EmployeeLoginInviteResponse.functionName,
+        body: body,
       );
+      final data = EmployeeLoginInviteResponse.asMap(response.data);
+      final invite = data == null
+          ? null
+          : EmployeeLoginInviteResponse.tryParseSuccess(data);
+
+      if (invite == null) {
+        final reason = data?['reason']?.toString() ?? 'unknown';
+        throw AuthFailure(
+          EmployeeLoginInviteResponse.failureMessage(data) +
+              (reason != 'unknown' ? ' ($reason)' : ''),
+        );
+      }
 
       await logActivity(
         employeeId: actorEmployeeId,
         eventType: 'employee_invited',
-        summary: emailDelivered
+        summary: invite.emailDelivered
             ? 'Sent invitation to ${existing.fullName}'
             : 'Prepared access for ${existing.fullName} (invitation email unavailable)',
         referenceType: 'employee',
@@ -699,57 +680,34 @@ class EmployeeRepository {
         event: BusinessEvents.teamMemberInvited(
           employeeId: employeeId,
           fullName: existing.fullName,
-          summary: emailDelivered
+          summary: invite.emailDelivered
               ? 'Invitation sent to ${existing.fullName}'
               : 'Access prepared for ${existing.fullName}',
           excludeEmployeeId: actorEmployeeId,
         ),
       );
 
-      return TeamInviteResult(
-        accountReady: authUserId != null && authUserId.isNotEmpty,
-        emailDelivered: emailDelivered,
-      );
+      return invite;
     } on AppFailure {
       rethrow;
+    } on FunctionException catch (error) {
+      // ignore: avoid_print
+      print('[invite-employee-login] FunctionException: '
+          'status=${error.status} '
+          'details=${error.details} '
+          'reason=${error.reasonPhrase}');
+      final data = EmployeeLoginInviteResponse.asMap(error.details) ??
+          EmployeeLoginInviteResponse.asMap(error.reasonPhrase);
+      throw AuthFailure(EmployeeLoginInviteResponse.failureMessage(data));
     } on PostgrestException catch (e) {
       final message = e.message.trim();
-      final lower = message.toLowerCase();
-      if (lower.contains('employees_user_id_fkey') ||
-          lower.contains('foreign key constraint')) {
-        throw const AuthFailure(
-          'Could not link a login for this email. '
-          'It may already be registered — ask them to sign in, '
-          'or use a different email.',
-        );
-      }
       throw UnexpectedFailure(
         message.isEmpty ? 'Request failed.' : message,
       );
-    } catch (_) {
+    } catch (error) {
+      // ignore: avoid_print
+      print('[invite-employee-login] Unexpected: ${error.runtimeType}: $error');
       throw const UnexpectedFailure('Unable to send invitation.');
-    }
-  }
-
-  Future<void> _recordInvite({
-    required String companyId,
-    required String employeeId,
-    required String email,
-    required String invitedBy,
-    required String status,
-    required String? authUserId,
-  }) async {
-    try {
-      await _client.from('employee_invites').insert({
-        'company_id': companyId,
-        'employee_id': employeeId,
-        'email': email.trim().toLowerCase(),
-        'invited_by': invitedBy,
-        'status': status,
-        'auth_user_id': authUserId,
-      });
-    } catch (_) {
-      // Table may not exist until migration 022 — invite still succeeds.
     }
   }
 

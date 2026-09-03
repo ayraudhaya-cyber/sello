@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/feedback/sello_info_hint.dart';
+import 'package:sello/shared/widgets/inputs/sello_switch.dart';
 
 /// Standard desktop width for Sello CRUD form dialogs.
 const double kSelloFormDialogWidth = 1120;
@@ -442,18 +443,7 @@ class SelloStatusToggle extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Row(
                 children: [
-                  SizedBox(
-                    height: 28,
-                    child: FittedBox(
-                      fit: BoxFit.contain,
-                      child: Switch.adaptive(
-                        value: value,
-                        onChanged: onChanged,
-                        activeThumbColor: AppColors.onPrimary,
-                        activeTrackColor: context.brandAccent,
-                      ),
-                    ),
-                  ),
+                  SelloSwitch(value: value, onChanged: onChanged),
                   const SizedBox(width: 10),
                   Flexible(
                     child: Text(

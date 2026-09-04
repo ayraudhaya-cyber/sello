@@ -10,6 +10,26 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   group('RouteGuards bootstrap / deep links', () {
+    test('password recovery always stays on login', () {
+      const auth = AuthSessionState(
+        status: AuthStatus.unauthenticated,
+        isPasswordRecovery: true,
+      );
+
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.login),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.selloDashboard),
+        RoutePaths.login,
+      );
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.hubDashboard),
+        RoutePaths.login,
+      );
+    });
+
     test('preserves Hub routes while session is bootstrapping', () {
       const auth = AuthSessionState(status: AuthStatus.unknown, isLoading: true);
 

@@ -1,5 +1,6 @@
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/router/route_paths.dart';
+import 'package:sello/services/auth/auth_email_personalization.dart';
 import 'package:sello/services/auth/auth_redirect_url.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -52,9 +53,10 @@ class AuthService {
       return await _auth.signUp(
         email: email.trim().toLowerCase(),
         password: password,
-        data: pendingBusiness == null
-            ? null
-            : {'pending_business': pendingBusiness},
+        data: _signupMetadata(
+          email: email,
+          pendingBusiness: pendingBusiness,
+        ),
         emailRedirectTo: _redirectUrlFor(RoutePaths.login),
       );
     } on AuthException catch (error) {
@@ -127,10 +129,16 @@ class AuthService {
     }
   }
 
-  Future<UserResponse> updatePassword(String password) async {
+  Future<UserResponse> updatePassword(
+    String password, {
+    Map<String, dynamic>? userMetadata,
+  }) async {
     try {
       return await _auth.updateUser(
-        UserAttributes(password: password),
+        UserAttributes(
+          password: password,
+          data: userMetadata,
+        ),
       );
     } on AuthException catch (error) {
       throw AuthFailure(_mapSignUpMessage(error.message));
@@ -140,6 +148,23 @@ class AuthService {
   }
 
   String? _redirectUrlFor(String path) => AuthRedirectUrl.forPath(path);
+
+  /// Nested [pending_business] for the DB trigger + flat fields for email HTML.
+  static Map<String, dynamic>? _signupMetadata({
+    required String email,
+    Map<String, dynamic>? pendingBusiness,
+  }) {
+    if (pendingBusiness == null) return null;
+    return {
+      'pending_business': pendingBusiness,
+      ...AuthEmailPersonalization.fields(
+        email: email,
+        fullName: pendingBusiness['owner_full_name']?.toString(),
+        companyName: pendingBusiness['business_name']?.toString(),
+        roleLabel: AuthEmailPersonalization.roleOwner,
+      ),
+    };
+  }
 
   static String _mapAuthMessage(String message) {
     final lower = message.toLowerCase();

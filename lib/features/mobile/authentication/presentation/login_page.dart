@@ -125,6 +125,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authSessionProvider);
     final setNewPassword = auth.isPasswordRecovery;
+    final invitePasswordSetup = auth.isTeamInvitePasswordSetup;
     final loading = auth.isLoading || auth.isAuthenticating || _sendingRecovery;
 
     // Deep-link recovery always wins over the local request-reset card.
@@ -148,6 +149,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           infoMessage: auth.infoMessage,
           emailJustVerified: auth.emailJustVerified,
           setNewPassword: setNewPassword,
+          invitePasswordSetup: invitePasswordSetup,
           cardMode: mode ?? _LoginCardMode.signIn,
           onSubmit: setNewPassword ? _completeRecovery : _submit,
           onForgotPassword: _enterRequestReset,
@@ -172,6 +174,7 @@ class _LoginForm extends StatelessWidget {
     required this.infoMessage,
     required this.emailJustVerified,
     required this.setNewPassword,
+    required this.invitePasswordSetup,
     required this.cardMode,
     required this.onSubmit,
     required this.onForgotPassword,
@@ -190,6 +193,7 @@ class _LoginForm extends StatelessWidget {
   final String? infoMessage;
   final bool emailJustVerified;
   final bool setNewPassword;
+  final bool invitePasswordSetup;
   final _LoginCardMode cardMode;
   final VoidCallback onSubmit;
   final VoidCallback onForgotPassword;
@@ -217,11 +221,12 @@ class _LoginForm extends StatelessWidget {
     if (setNewPassword) {
       return _authCard(
         context,
-        title: 'Reset password',
-        subtitle:
-            'Create a new password to restore access to ${AppConstants.appName}',
+        title: invitePasswordSetup ? 'Set your password' : 'Reset your password',
+        subtitle: invitePasswordSetup
+            ? 'Create a password to access ${AppConstants.appName}'
+            : 'Create a new password to restore access to ${AppConstants.appName}',
         fields: _setNewPasswordFields(context),
-        primaryLabel: 'Update password',
+        primaryLabel: invitePasswordSetup ? 'Set password' : 'Update password',
         onPrimary: onSubmit,
         showInfo: true,
       );

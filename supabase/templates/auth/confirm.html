@@ -30,7 +30,16 @@
           </tr>
           <tr>
             <td style="padding:36px 28px 28px 28px;font-family:Arial,Helvetica,sans-serif;color:#191333;font-size:15px;line-height:1.55;">
-              <p style="margin:0 0 16px 0;">Hello,</p>
+              <p style="margin:0 0 16px 0;">Hi {{ if .Data.greeting_name }}{{ .Data.greeting_name }}{{ else if .Data.full_name }}{{ .Data.full_name }}{{ else if .Data.email_local }}{{ .Data.email_local }}{{ else }}there{{ end }},</p>
+              {{ if .Data.company_name }}
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;">
+                <tr>
+                  <td style="background-color:#EFE9FE;border:1px solid #DED6F1;border-radius:999px;padding:6px 12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;line-height:1.3;color:#4C3D9A;">
+                    {{ .Data.company_name }}{{ if .Data.role_label }} &mdash; {{ .Data.role_label }}{{ end }}
+                  </td>
+                </tr>
+              </table>
+              {{ end }}
               <p style="margin:0 0 16px 0;">Welcome to Sello.</p>
               <p style="margin:0;">Please confirm your email address to continue setting up your Sello workspace.</p>
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 16px 0;">

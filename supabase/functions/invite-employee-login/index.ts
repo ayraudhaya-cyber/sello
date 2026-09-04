@@ -97,8 +97,15 @@ Deno.serve(async (req) => {
   });
 
   try {
+    const emailMeta = await buildInviteEmailMetadata(admin, {
+      employeeId,
+      companyId,
+      email,
+      fullName,
+    });
+
     if (!authUserId) {
-      const ensured = await ensureAuthUser(admin, email);
+      const ensured = await ensureAuthUser(admin, email, emailMeta);
       authUserId = ensured.userId;
 
       const { data: linkRaw, error: linkError } = await admin.rpc(
@@ -145,6 +152,10 @@ Deno.serve(async (req) => {
           email_delivered: false,
         }, 200);
       }
+    } else {
+      await admin.auth.admin.updateUserById(authUserId, {
+        user_metadata: emailMeta,
+      });
     }
 
     let emailDelivered = false;
@@ -203,16 +214,71 @@ class InviteError extends Error {
   }
 }
 
+async function buildInviteEmailMetadata(
+  admin: ReturnType<typeof createClient>,
+  args: {
+    employeeId: string;
+    companyId: string;
+    email: string;
+    fullName: string;
+  },
+): Promise<Record<string, unknown>> {
+  const { data } = await admin
+    .from("employees")
+    .select("full_name, roles(code, name), companies(name)")
+    .eq("id", args.employeeId)
+    .eq("company_id", args.companyId)
+    .maybeSingle();
+
+  const row = asObject(data);
+  const role = asObject(row.roles);
+  const company = asObject(row.companies);
+  const name = str(row.full_name) || args.fullName;
+  const companyName = str(company.name);
+  const roleLabel = roleLabelFor(str(role.code), str(role.name));
+  const local = emailLocal(args.email);
+
+  return {
+    sello_team_invite: true,
+    ...(name ? { full_name: name, greeting_name: name } : {}),
+    ...(local ? { email_local: local } : {}),
+    ...(companyName ? { company_name: companyName } : {}),
+    ...(roleLabel ? { role_label: roleLabel } : {}),
+  };
+}
+
+function roleLabelFor(code: string, name: string): string {
+  switch (code.toLowerCase()) {
+    case "owner":
+      return "Owner";
+    case "manager":
+      return "Manager";
+    case "administrator":
+      return "Administrator";
+    case "sales_representative":
+      return "Sales Rep";
+    default:
+      return name || code;
+  }
+}
+
+function emailLocal(email: string): string {
+  const at = email.indexOf("@");
+  if (at <= 0) return email;
+  return email.slice(0, at);
+}
+
 async function ensureAuthUser(
   admin: ReturnType<typeof createClient>,
   email: string,
+  emailMeta: Record<string, unknown>,
 ): Promise<{ userId: string; created: boolean }> {
   const password = `${crypto.randomUUID()}Aa1!`;
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: { sello_team_invite: true },
+    user_metadata: emailMeta,
   });
 
   if (!error && data.user?.id) {
@@ -239,6 +305,10 @@ async function ensureAuthUser(
   if (linkError || !userId) {
     throw new InviteError("auth_lookup_failed");
   }
+
+  await admin.auth.admin.updateUserById(userId, {
+    user_metadata: emailMeta,
+  });
 
   return { userId, created: false };
 }

@@ -130,7 +130,36 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Reset password'), findsOneWidget);
+    expect(find.text('Reset your password'), findsOneWidget);
+    expect(find.text('Update password'), findsOneWidget);
+    expect(find.text('Set your password'), findsNothing);
+    expect(find.text('Set password'), findsNothing);
+    expect(find.text('New password'), findsOneWidget);
+    expect(find.text('Confirm password'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsNothing);
+  });
+
+  testWidgets('Team invite recovery mode shows set-password form', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authSessionProvider.overrideWith(_TeamInviteRecoverySession.new),
+          updateCheckControllerProvider.overrideWith(_IdleUpdateCheck.new),
+        ],
+        child: const SelloApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Set your password'), findsOneWidget);
+    expect(find.text('Set password'), findsOneWidget);
+    expect(find.text('Reset your password'), findsNothing);
+    expect(find.text('Update password'), findsNothing);
     expect(find.text('New password'), findsOneWidget);
     expect(find.text('Confirm password'), findsOneWidget);
     expect(find.text('Forgot password?'), findsNothing);
@@ -163,6 +192,18 @@ class _PasswordRecoverySession extends AuthSessionNotifier {
       status: AuthStatus.unauthenticated,
       isPasswordRecovery: true,
       infoMessage: 'Choose a new password to finish account recovery.',
+    );
+  }
+}
+
+class _TeamInviteRecoverySession extends AuthSessionNotifier {
+  @override
+  AuthSessionState build() {
+    return const AuthSessionState(
+      status: AuthStatus.unauthenticated,
+      isPasswordRecovery: true,
+      isTeamInvitePasswordSetup: true,
+      infoMessage: 'Choose a password to finish joining your team.',
     );
   }
 }

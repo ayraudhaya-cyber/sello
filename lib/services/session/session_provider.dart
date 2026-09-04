@@ -6,7 +6,9 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/branch_repository.dart';
 import 'package:sello/data/repositories/company_repository.dart';
 import 'package:sello/data/repositories/provisioning_repository.dart';
+import 'package:sello/services/auth/auth_email_personalization.dart';
 import 'package:sello/services/auth/auth_service.dart';
+import 'package:sello/services/auth/password_recovery_redirect.dart';
 import 'package:sello/services/provisioning/provisioning_coordinator.dart';
 import 'package:sello/services/session/session_service.dart';
 import 'package:sello/shared/models/app_session.dart';
@@ -55,6 +57,7 @@ class AuthSessionState {
     this.infoMessage,
     this.requiresOnboarding = false,
     this.isPasswordRecovery = false,
+    this.isTeamInvitePasswordSetup = false,
     this.awaitingEmailConfirmation = false,
     this.emailJustVerified = false,
     this.pendingEmail,
@@ -67,6 +70,12 @@ class AuthSessionState {
   final String? infoMessage;
   final bool requiresOnboarding;
   final bool isPasswordRecovery;
+
+  /// Recovery came from a Hub team invite (`sello_team_invite` user_metadata).
+  ///
+  /// Drives LoginPage invite vs forgot-password copy. False for Owner
+  /// self-service password reset.
+  final bool isTeamInvitePasswordSetup;
   final bool awaitingEmailConfirmation;
   final bool emailJustVerified;
   final String? pendingEmail;
@@ -86,6 +95,7 @@ class AuthSessionState {
     String? infoMessage,
     bool? requiresOnboarding,
     bool? isPasswordRecovery,
+    bool? isTeamInvitePasswordSetup,
     bool? awaitingEmailConfirmation,
     bool? emailJustVerified,
     String? pendingEmail,
@@ -102,6 +112,8 @@ class AuthSessionState {
       infoMessage: clearInfo ? null : (infoMessage ?? this.infoMessage),
       requiresOnboarding: requiresOnboarding ?? this.requiresOnboarding,
       isPasswordRecovery: isPasswordRecovery ?? this.isPasswordRecovery,
+      isTeamInvitePasswordSetup:
+          isTeamInvitePasswordSetup ?? this.isTeamInvitePasswordSetup,
       awaitingEmailConfirmation:
           awaitingEmailConfirmation ?? this.awaitingEmailConfirmation,
       emailJustVerified: emailJustVerified ?? this.emailJustVerified,
@@ -115,6 +127,14 @@ class AuthSessionState {
 class AuthSessionNotifier extends Notifier<AuthSessionState> {
   StreamSubscription<AuthState>? _authSub;
   bool _handlingAuthEvent = false;
+
+  /// In-memory latch for invite / forgot-password recovery.
+  ///
+  /// Survives auth-event ordering where [AuthChangeEvent.signedIn] arrives
+  /// instead of (or after) [AuthChangeEvent.passwordRecovery]. Cleared only by
+  /// a successful [completePasswordRecovery], [signIn], [signOut], or a normal
+  /// cold start that is not a recovery redirect.
+  bool _passwordRecoveryActive = false;
 
   AuthService get _auth => ref.read(authServiceProvider);
   SessionService get _sessions => ref.read(sessionServiceProvider);
@@ -136,9 +156,22 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       status: AuthStatus.unknown,
       isLoading: true,
     );
+    _passwordRecoveryActive = false;
 
     _authSub?.cancel();
+    // GoTrue uses a BehaviorSubject — listen() synchronously replays the last
+    // event from Supabase.initialize (often PASSWORD_RECOVERY for invite links).
     _authSub = _auth.authStateChanges.listen(_onAuthStateChanged);
+
+    if (_passwordRecoveryActive || state.isPasswordRecovery) {
+      _enterPasswordRecovery();
+      return;
+    }
+
+    if (PasswordRecoveryRedirect.isIndicatedBy(Uri.base)) {
+      _enterPasswordRecovery();
+      return;
+    }
 
     final user = _auth.currentUser;
     if (user == null) {
@@ -149,11 +182,31 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     await _hydrateSession(user);
   }
 
+  void _enterPasswordRecovery() {
+    _passwordRecoveryActive = true;
+    final inviteSetup = AuthEmailPersonalization.isTeamInviteMetadata(
+      _auth.currentUser?.userMetadata,
+    );
+    state = AuthSessionState(
+      status: AuthStatus.unauthenticated,
+      isPasswordRecovery: true,
+      isTeamInvitePasswordSetup: inviteSetup,
+      infoMessage: inviteSetup
+          ? 'Choose a password to finish joining your team.'
+          : 'Choose a new password to finish account recovery.',
+    );
+  }
+
+  void _clearPasswordRecoveryLatch() {
+    _passwordRecoveryActive = false;
+  }
+
   Future<void> _onAuthStateChanged(AuthState authState) async {
     if (_handlingAuthEvent) return;
 
     switch (authState.event) {
       case AuthChangeEvent.signedOut:
+        _clearPasswordRecoveryLatch();
         if (state.awaitingEmailConfirmation) {
           state = AuthSessionState(
             status: AuthStatus.unauthenticated,
@@ -174,14 +227,17 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
         }
         state = const AuthSessionState(status: AuthStatus.unauthenticated);
       case AuthChangeEvent.passwordRecovery:
-        state = const AuthSessionState(
-          status: AuthStatus.unauthenticated,
-          isPasswordRecovery: true,
-          infoMessage: 'Choose a new password to finish account recovery.',
-        );
+        _enterPasswordRecovery();
       case AuthChangeEvent.signedIn:
       case AuthChangeEvent.tokenRefreshed:
       case AuthChangeEvent.userUpdated:
+        // Recovery sessions are real GoTrue sessions. Hydrating them would
+        // clear isPasswordRecovery and skip the set-password UI (Sales invite
+        // and Owner forgot-password both rely on that screen).
+        if (_passwordRecoveryActive || state.isPasswordRecovery) {
+          _enterPasswordRecovery();
+          return;
+        }
         final user = authState.session?.user ?? _auth.currentUser;
         if (user == null) {
           state = const AuthSessionState(status: AuthStatus.unauthenticated);
@@ -198,6 +254,14 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   }
 
   Future<void> _hydrateSession(User user, {bool quiet = false}) async {
+    // Never treat an invite/recovery session as a finished workspace login
+    // unless the user just submitted a new password (completePasswordRecovery).
+    if ((_passwordRecoveryActive || state.isPasswordRecovery) &&
+        !_handlingAuthEvent) {
+      _enterPasswordRecovery();
+      return;
+    }
+
     // Quiet reload keeps status authenticated so route guards do not bounce
     // through /login (Owner setup completion, branding refresh, etc.).
     final quietReload = quiet && state.isAuthenticated && state.session != null;
@@ -214,10 +278,12 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       awaitingEmailConfirmation: false,
       emailJustVerified: false,
       clearPendingEmail: true,
+      isPasswordRecovery: false,
     );
 
     try {
       final session = await _sessions.buildSession(user);
+      _clearPasswordRecoveryLatch();
       state = AuthSessionState(
         status: AuthStatus.authenticated,
         session: session,
@@ -225,17 +291,24 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     } on UnlinkedEmployeeFailure {
       await _handleUnlinkedEmployee();
     } on AppFailure catch (failure) {
-      if (state.isPasswordRecovery) {
+      if (_passwordRecoveryActive || state.isPasswordRecovery) {
+        _enterPasswordRecovery();
         state = state.copyWith(
-          status: AuthStatus.unauthenticated,
           isLoading: false,
-          clearError: true,
-          infoMessage: 'Choose a new password to finish account recovery.',
+          errorMessage: failure.message,
         );
         return;
       }
       await _failHydrate(failure.message);
     } catch (_) {
+      if (_passwordRecoveryActive || state.isPasswordRecovery) {
+        _enterPasswordRecovery();
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'Unable to load your profile. Please try again.',
+        );
+        return;
+      }
       await _failHydrate('Unable to load your profile. Please try again.');
     }
   }
@@ -327,6 +400,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   }
 
   Future<void> _failHydrate(String message) async {
+    _clearPasswordRecoveryLatch();
     _handlingAuthEvent = true;
     try {
       await _auth.signOut();
@@ -346,6 +420,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     required String email,
     required String password,
   }) async {
+    _clearPasswordRecoveryLatch();
     state = state.copyWith(
       status: AuthStatus.authenticating,
       isLoading: true,
@@ -353,6 +428,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       clearInfo: true,
       requiresOnboarding: false,
       isPasswordRecovery: false,
+      isTeamInvitePasswordSetup: false,
       awaitingEmailConfirmation: false,
       emailJustVerified: false,
       clearPendingEmail: true,
@@ -388,6 +464,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   /// Creates auth user + server pending row, then completes into Sello Hub
   /// when a session is available.
   Future<void> provisionBusiness(ProvisionBusinessRequest request) async {
+    _clearPasswordRecoveryLatch();
     state = state.copyWith(
       status: AuthStatus.authenticating,
       isLoading: true,
@@ -471,33 +548,39 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   Future<void> completePasswordRecovery({
     required String password,
   }) async {
+    final inviteSetup = state.isTeamInvitePasswordSetup;
     state = state.copyWith(
       status: AuthStatus.authenticating,
       isLoading: true,
       clearError: true,
       clearInfo: true,
+      isPasswordRecovery: true,
+      isTeamInvitePasswordSetup: inviteSetup,
     );
 
     try {
       _handlingAuthEvent = true;
-      await _auth.updatePassword(password);
+      await _auth.updatePassword(
+        password,
+        userMetadata: inviteSetup
+            ? {AuthEmailPersonalization.teamInviteKey: false}
+            : null,
+      );
       final user = _auth.currentUser;
       if (user == null) {
         throw const AuthFailure(
           'Password updated, but your session expired. Please sign in.',
         );
       }
+      // Hydrate while _handlingAuthEvent is true so the recovery latch does
+      // not block workspace entry after a successful password update.
       await _hydrateSession(user);
     } on AppFailure catch (failure) {
-      state = AuthSessionState(
-        status: AuthStatus.unauthenticated,
-        isPasswordRecovery: true,
-        errorMessage: failure.message,
-      );
+      _enterPasswordRecovery();
+      state = state.copyWith(errorMessage: failure.message);
     } catch (_) {
-      state = const AuthSessionState(
-        status: AuthStatus.unauthenticated,
-        isPasswordRecovery: true,
+      _enterPasswordRecovery();
+      state = state.copyWith(
         errorMessage: 'Unable to update your password. Please try again.',
       );
     } finally {
@@ -519,6 +602,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     } finally {
       _handlingAuthEvent = false;
     }
+    _clearPasswordRecoveryLatch();
     state = const AuthSessionState(status: AuthStatus.unauthenticated);
   }
 

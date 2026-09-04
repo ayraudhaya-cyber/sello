@@ -414,6 +414,47 @@ void main() {
       },
     );
 
+    test(
+      'shareActions mode exposes WhatsApp + SMS without auto-sending',
+      () async {
+        final sms = _RecordingSmsSender();
+        final dispatcher = OrderConfirmationDispatcher(
+          gateway: _RecordingGateway(snapshot()),
+          smsSender: sms,
+          links: const DocumentLinkFactory(
+            overrideOrigin: 'https://app.sello.test',
+          ),
+        );
+
+        final outcome = await dispatcher.dispatch(
+          'order-1',
+          smsMode: OrderConfirmationSmsMode.shareActions,
+        );
+
+        expect(sms.providerPosts, 0);
+        expect(outcome, isNotNull);
+        expect(
+          outcome!.customerActions.any((a) => a.channel == OutboundChannel.whatsapp),
+          isTrue,
+        );
+        expect(
+          outcome.customerActions.any((a) => a.channel == OutboundChannel.sms),
+          isTrue,
+        );
+        expect(outcome.documentUrl, contains('/d/'));
+
+        final smsAction = outcome.customerActions.firstWhere(
+          (a) => a.channel == OutboundChannel.sms,
+        );
+        final sent = await dispatcher.sendSmsAction(
+          outcome: outcome,
+          action: smsAction,
+        );
+        expect(sent.status, OutboundSmsStatus.sent);
+        expect(sms.providerPosts, 1);
+      },
+    );
+
     test('Text.lk failure is recorded without failing dispatch', () async {
       final sms = _RecordingSmsSender(
         result: const OutboundSmsResult(OutboundSmsStatus.failed),

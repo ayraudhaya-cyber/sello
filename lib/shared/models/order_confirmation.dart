@@ -12,6 +12,7 @@ class OrderConfirmationOutcome extends Equatable {
     this.token,
     this.actions = const [],
     this.customerSkippedReason,
+    this.includeDocumentLink = true,
   });
 
   final String orderNumber;
@@ -22,6 +23,10 @@ class OrderConfirmationOutcome extends Equatable {
   final String? token;
   final List<OrderConfirmationAction> actions;
   final String? customerSkippedReason;
+
+  /// Whether the tenant message template includes the document link.
+  /// [documentUrl] is still set so View invoice can open the page.
+  final bool includeDocumentLink;
 
   static const empty = OrderConfirmationOutcome(
     orderNumber: '',
@@ -55,6 +60,7 @@ class OrderConfirmationOutcome extends Equatable {
         token,
         actions,
         customerSkippedReason,
+        includeDocumentLink,
       ];
 }
 

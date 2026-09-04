@@ -138,8 +138,8 @@ abstract final class NeedsAttentionLogic {
           priority: NeedsAttentionPriority.medium,
           count: counts.placedAwaitingFulfillment,
           title: counts.placedAwaitingFulfillment == 1
-              ? '1 order needs fulfillment'
-              : '${counts.placedAwaitingFulfillment} orders need fulfillment',
+              ? '1 order waiting to deliver'
+              : '${counts.placedAwaitingFulfillment} orders waiting to deliver',
           route: RoutePaths.hubOrders,
         ),
       );

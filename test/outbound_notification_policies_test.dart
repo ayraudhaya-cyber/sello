@@ -149,6 +149,28 @@ void main() {
         isTrue,
       );
     });
+
+    test('inactiveOrderMessagingReason points at Channels when masters are off', () {
+      final policies = OutboundNotificationPolicies.defaults.copyWith(
+        whatsappEnabled: false,
+        smsEnabled: false,
+      );
+      expect(
+        policies.inactiveOrderMessagingReason(),
+        contains('Channels'),
+      );
+      expect(
+        policies.isActive(OutboundNotificationType.orderConfirmation),
+        isFalse,
+      );
+    });
+
+    test('inactiveOrderMessagingReason is null when confirmation can send', () {
+      expect(
+        OutboundNotificationPolicies.defaults.inactiveOrderMessagingReason(),
+        isNull,
+      );
+    });
   });
 
   group('OutboundMessageTemplate', () {

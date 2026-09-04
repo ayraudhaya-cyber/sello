@@ -350,17 +350,17 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
   }
 
   /// Deliver every remaining unit (fulfillment finish; does not settle payment).
-  Future<String?> fulfillAllRemaining(OrderSummary order) async {
+  Future<OrderMutationResult> fulfillAllRemaining(OrderSummary order) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
-      await _repo.completeOrder(order.id);
+      final confirmation = await _repo.completeOrder(order.id);
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
-      return null;
+      return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
-      return failure.message;
+      return OrderMutationResult.fail(failure.message);
     }
   }
 

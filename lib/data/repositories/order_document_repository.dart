@@ -1,5 +1,6 @@
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
+import 'package:sello/services/notifications/outbound/document_link_factory.dart';
 import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/order_document.dart';
@@ -8,10 +9,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Persistence for order confirmation tokens and the public document RPC.
 class OrderDocumentRepository {
-  OrderDocumentRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseService.client;
+  OrderDocumentRepository({
+    SupabaseClient? client,
+    this.links = const DocumentLinkFactory(),
+  }) : _client = client ?? SupabaseService.client;
 
   final SupabaseClient _client;
+  final DocumentLinkFactory links;
 
   Future<OutboundNotificationPolicies> fetchOutboundPolicies() async {
     try {
@@ -26,6 +30,19 @@ class OrderDocumentRepository {
     } catch (_) {
       return OutboundNotificationPolicies.defaults;
     }
+  }
+
+  /// Ensures a document token exists and returns the public invoice URL.
+  /// Independent of WhatsApp/SMS channel switches.
+  Future<String> invoiceUrlForOrder(String orderId) async {
+    final prepared = await prepareConfirmation(orderId);
+    final url = links.orderDocument(prepared.token).trim();
+    if (url.isEmpty) {
+      throw const ValidationFailure(
+        'Invoice link is not available for this order yet.',
+      );
+    }
+    return url;
   }
 
   Future<OrderConfirmationPrepareResult> prepareConfirmation(

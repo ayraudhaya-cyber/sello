@@ -674,6 +674,7 @@ class SelloDialogFooter extends StatelessWidget {
     this.cancelVariant = SelloButtonVariant.outline,
     this.destructiveLabel,
     this.onDestructive,
+    this.leading,
   });
 
   final String primaryLabel;
@@ -690,6 +691,9 @@ class SelloDialogFooter extends StatelessWidget {
   final String? destructiveLabel;
   final VoidCallback? onDestructive;
 
+  /// Quiet secondary actions (e.g. icon links) between destructive and Cancel.
+  final Widget? leading;
+
   @override
   Widget build(BuildContext context) {
     final hasDestructive = destructiveLabel != null && onDestructive != null;
@@ -704,6 +708,10 @@ class SelloDialogFooter extends StatelessWidget {
             variant: SelloButtonVariant.danger,
             onPressed: onDestructive,
           ),
+        if (leading != null) ...[
+          if (hasDestructive) const SizedBox(width: 8),
+          Flexible(child: leading!),
+        ],
         const Spacer(),
         SelloButton(
           label: cancelLabel,

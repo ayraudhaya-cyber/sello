@@ -23,12 +23,15 @@ class OrderDetailsDialog extends ConsumerWidget {
     required this.currencySymbol,
     this.onEdit,
     this.onComplete,
-    this.completeLabel = 'Complete order',
+    this.completeLabel = 'Mark as delivered',
     this.onFulfill,
     this.onFulfillAll,
     this.onCancelRemaining,
     this.onCancelOrder,
     this.onArchive,
+    this.onViewInvoice,
+    this.onWhatsAppInvoice,
+    this.onSmsInvoice,
     this.readOnly = false,
   });
 
@@ -42,6 +45,16 @@ class OrderDetailsDialog extends ConsumerWidget {
   final VoidCallback? onCancelRemaining;
   final VoidCallback? onCancelOrder;
   final VoidCallback? onArchive;
+
+  /// Opens the customer invoice document in the browser.
+  final VoidCallback? onViewInvoice;
+
+  /// Opens WhatsApp with the invoice confirmation prefilled.
+  final VoidCallback? onWhatsAppInvoice;
+
+  /// Sends the invoice confirmation SMS to the customer.
+  final VoidCallback? onSmsInvoice;
+
   final bool readOnly;
 
   static const double _sectionGap = 32;
@@ -155,7 +168,7 @@ class OrderDetailsDialog extends ConsumerWidget {
           const SizedBox(height: _sectionGap),
           if (!order.isDraft) ...[
             _Section(
-              label: 'Fulfillment',
+              label: 'Delivery',
               child: Column(
                 children: [
                   SelloFormRow(
@@ -198,7 +211,7 @@ class OrderDetailsDialog extends ConsumerWidget {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: SelloButton(
-                        label: 'Fulfill all remaining',
+                        label: 'Deliver remaining',
                         variant: SelloButtonVariant.outline,
                         size: SelloButtonSize.small,
                         onPressed: onFulfillAll,
@@ -354,12 +367,102 @@ class OrderDetailsDialog extends ConsumerWidget {
               : SelloDialogFooter(
                   destructiveLabel: canArchive ? 'Archive' : null,
                   onDestructive: canArchive ? onArchive : null,
+                  leading: _InvoiceFooterLinks(
+                    onViewInvoice: onViewInvoice,
+                    onWhatsAppInvoice: onWhatsAppInvoice,
+                    onSmsInvoice: onSmsInvoice,
+                  ),
                   cancelLabel: 'Close',
                   cancelVariant: SelloButtonVariant.outline,
                   onCancel: () => Navigator.of(context).maybePop(),
                   primaryLabel: 'Done',
                   onPrimary: () => Navigator.of(context).maybePop(),
                 ),
+    );
+  }
+}
+
+/// Quiet invoice actions for the completed-order footer.
+class _InvoiceFooterLinks extends StatelessWidget {
+  const _InvoiceFooterLinks({
+    this.onViewInvoice,
+    this.onWhatsAppInvoice,
+    this.onSmsInvoice,
+  });
+
+  final VoidCallback? onViewInvoice;
+  final VoidCallback? onWhatsAppInvoice;
+  final VoidCallback? onSmsInvoice;
+
+  bool get _hasAny =>
+      onViewInvoice != null ||
+      onWhatsAppInvoice != null ||
+      onSmsInvoice != null;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasAny) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 0,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (onViewInvoice != null)
+          _InvoiceLink(
+            label: 'View invoice',
+            icon: Icons.open_in_new_rounded,
+            onPressed: onViewInvoice!,
+          ),
+        if (onWhatsAppInvoice != null)
+          _InvoiceLink(
+            label: 'WhatsApp',
+            icon: Icons.chat_bubble_outline_rounded,
+            onPressed: onWhatsAppInvoice!,
+          ),
+        if (onSmsInvoice != null)
+          _InvoiceLink(
+            label: 'SMS',
+            icon: Icons.sms_outlined,
+            onPressed: onSmsInvoice!,
+          ),
+      ],
+    );
+  }
+}
+
+class _InvoiceLink extends StatelessWidget {
+  const _InvoiceLink({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16, color: AppColors.textSecondary),
+      label: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary,
+        ),
+      ),
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.textSecondary,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
     );
   }
 }

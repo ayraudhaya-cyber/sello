@@ -265,6 +265,28 @@ class OutboundNotificationPolicies extends Equatable {
     return policy.enabled && (channelWhatsapp(type) || channelSms(type));
   }
 
+  /// Why order confirmation share / SMS cannot run. Null when messaging can run.
+  ///
+  /// [isActive] requires both "Send this message" and a company WhatsApp/SMS
+  /// channel. Settings UI can show a message type ON while Channels above are
+  /// OFF — that still makes [dispatch] return null.
+  String? inactiveOrderMessagingReason() {
+    final confirmation = policyFor(OutboundNotificationType.orderConfirmation);
+    final notification = policyFor(OutboundNotificationType.orderNotification);
+    if (!confirmation.enabled && !notification.enabled) {
+      return 'Order confirmation messaging is turned off in Notifications.';
+    }
+    if (!whatsappEnabled && !smsEnabled) {
+      return 'Turn on WhatsApp or SMS under Channels in Notifications, then save.';
+    }
+    if (!isActive(OutboundNotificationType.orderConfirmation) &&
+        !isActive(OutboundNotificationType.orderNotification)) {
+      return 'Enable WhatsApp or SMS for Order confirmation in Notifications, '
+          'then save.';
+    }
+    return null;
+  }
+
   String? templateOverride(OutboundNotificationType type) {
     final text = templates[type.dbKey]?.trim();
     return (text == null || text.isEmpty) ? null : text;

@@ -574,31 +574,59 @@ class _MessageAndPreviewPane extends StatelessWidget {
   final ValueChanged<String> onMessageChanged;
 
   static const _sideBySideMinWidth = 720.0;
+  static const _sideBySideFieldLines = 10;
+  static const _stackedFieldLines = 6;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final sideBySide = constraints.maxWidth >= _sideBySideMinWidth;
-        final editor = _MessageEditorColumn(
-          controller: controller,
-          placeholders: placeholders,
-          onInsertPlaceholder: onInsertPlaceholder,
-          onMessageChanged: onMessageChanged,
-          maxLines: sideBySide ? 10 : 6,
-        );
-        final preview = _MessagePreviewCard(
-          text: previewText,
-          compact: !sideBySide,
-        );
 
         if (sideBySide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(flex: 63, child: editor),
-              const SizedBox(width: 16),
-              Expanded(flex: 37, child: preview),
+              const Text(
+                'Message',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _PlaceholderChips(
+                placeholders: placeholders,
+                onInsertPlaceholder: onInsertPlaceholder,
+              ),
+              const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 63,
+                      child: SelloTextField(
+                        controller: controller,
+                        maxLines: _sideBySideFieldLines,
+                        hint:
+                            'Write the message. Tap a field above to personalize it.',
+                        onChanged: onMessageChanged,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 37,
+                      child: _MessagePreviewCard(
+                        text: previewText,
+                        expand: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           );
         }
@@ -606,12 +634,60 @@ class _MessageAndPreviewPane extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            editor,
+            _MessageEditorColumn(
+              controller: controller,
+              placeholders: placeholders,
+              onInsertPlaceholder: onInsertPlaceholder,
+              onMessageChanged: onMessageChanged,
+              maxLines: _stackedFieldLines,
+            ),
             const SizedBox(height: 12),
-            preview,
+            _MessagePreviewCard(
+              text: previewText,
+              compact: true,
+            ),
           ],
         );
       },
+    );
+  }
+}
+
+class _PlaceholderChips extends StatelessWidget {
+  const _PlaceholderChips({
+    required this.placeholders,
+    required this.onInsertPlaceholder,
+  });
+
+  final List<OutboundPlaceholder> placeholders;
+  final ValueChanged<OutboundPlaceholder> onInsertPlaceholder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final field in placeholders)
+          ActionChip(
+            label: Text(
+              field.label,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            onPressed: () => onInsertPlaceholder(field),
+            backgroundColor: AppColors.surface,
+            side: const BorderSide(color: AppColors.outlinePanel),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+      ],
     );
   }
 }
@@ -646,30 +722,9 @@ class _MessageEditorColumn extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final field in placeholders)
-              ActionChip(
-                label: Text(
-                  field.label,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                onPressed: () => onInsertPlaceholder(field),
-                backgroundColor: AppColors.surface,
-                side: const BorderSide(color: AppColors.outlinePanel),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-          ],
+        _PlaceholderChips(
+          placeholders: placeholders,
+          onInsertPlaceholder: onInsertPlaceholder,
         ),
         const SizedBox(height: 10),
         SelloTextField(
@@ -687,13 +742,25 @@ class _MessagePreviewCard extends StatelessWidget {
   const _MessagePreviewCard({
     required this.text,
     this.compact = false,
+    this.expand = false,
   });
 
   final String text;
   final bool compact;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
+    final body = Text(
+      text.isEmpty ? 'Nothing to preview yet.' : text,
+      style: TextStyle(
+        fontFamily: AppTypography.fontFamily,
+        fontSize: compact ? 12.5 : 13,
+        height: 1.4,
+        color: AppColors.textSecondary,
+      ),
+    );
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -712,7 +779,7 @@ class _MessagePreviewCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
+              const Expanded(
                 child: Text(
                   'Preview',
                   style: TextStyle(
@@ -754,15 +821,14 @@ class _MessagePreviewCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: compact ? 8 : 10),
-          Text(
-            text.isEmpty ? 'Nothing to preview yet.' : text,
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: compact ? 12.5 : 13,
-              height: 1.4,
-              color: AppColors.textSecondary,
-            ),
-          ),
+          if (expand)
+            Expanded(
+              child: SingleChildScrollView(
+                child: body,
+              ),
+            )
+          else
+            body,
         ],
       ),
     );

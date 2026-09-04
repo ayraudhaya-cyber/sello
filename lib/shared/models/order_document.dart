@@ -68,6 +68,11 @@ class OrderDocument extends Equatable {
     this.currencyPosition = CurrencyPosition.before,
     this.logoUrl,
     this.logoLightUrl,
+    this.documentLogoUrl,
+    this.documentAddress,
+    this.documentPhone,
+    this.documentEmail,
+    this.documentTerms,
     this.primaryColor,
     this.customBrandingEnabled = false,
     this.showBusinessNameWithLogo = false,
@@ -97,6 +102,13 @@ class OrderDocument extends Equatable {
   final CurrencyPosition currencyPosition;
   final String? logoUrl;
   final String? logoLightUrl;
+
+  /// Customer-facing issuer logo (independent of Custom Branding assets).
+  final String? documentLogoUrl;
+  final String? documentAddress;
+  final String? documentPhone;
+  final String? documentEmail;
+  final String? documentTerms;
   final String? primaryColor;
   final bool customBrandingEnabled;
 
@@ -143,9 +155,12 @@ class OrderDocument extends Equatable {
 
   DocumentIssuerIdentity get issuerIdentity => DocumentIssuerIdentity.resolve(
         companyName: companyName,
-        logoUrl: logoUrl,
-        logoLightUrl: logoLightUrl,
+        documentLogoUrl: documentLogoUrl,
         showBusinessNameWithLogo: showBusinessNameWithLogo,
+        address: documentAddress,
+        phone: documentPhone,
+        email: documentEmail,
+        terms: documentTerms,
       );
 
   String get currencySymbol => SelloFormatters.currencySymbol(currencyCode);
@@ -197,6 +212,11 @@ class OrderDocument extends Equatable {
       ),
       logoUrl: _stringValue(json['logo_url']),
       logoLightUrl: _stringValue(json['logo_light_url']),
+      documentLogoUrl: _stringValue(json['document_logo_url']),
+      documentAddress: _stringValue(json['document_address']),
+      documentPhone: _stringValue(json['document_phone']),
+      documentEmail: _stringValue(json['document_email']),
+      documentTerms: _stringValue(json['document_terms']),
       primaryColor: _stringValue(json['primary_color']),
       customBrandingEnabled: json['custom_branding_enabled'] == true,
       showBusinessNameWithLogo:

@@ -37,6 +37,11 @@ class CompanySettingsRepository {
     inventory_movement_policy,
     logo_url,
     logo_light_url,
+    document_logo_url,
+    document_address,
+    document_phone,
+    document_email,
+    document_terms,
     primary_color,
     nav_background_color,
     custom_branding_enabled,
@@ -161,7 +166,8 @@ class CompanySettingsRepository {
     }
   }
 
-  /// Logo + colours only. Never sends [CompanySettings.customBrandingEnabled].
+  /// Brand assets + colours only. Never sends [CompanySettings.customBrandingEnabled]
+  /// or [CompanySettings.documentLogoUrl].
   Future<CompanySettings> updateBranding({
     required String companyId,
     required String employeeId,
@@ -169,7 +175,6 @@ class CompanySettingsRepository {
     required String? logoLightUrl,
     required String? primaryColor,
     required String? navBackgroundColor,
-    bool? documentShowBusinessNameWithLogo,
   }) async {
     try {
       final updated = await _client
@@ -179,8 +184,6 @@ class CompanySettingsRepository {
             'logo_light_url': logoLightUrl,
             'primary_color': primaryColor,
             'nav_background_color': navBackgroundColor,
-            'document_show_business_name_with_logo':
-                ?documentShowBusinessNameWithLogo,
             'updated_by': employeeId,
           })
           .eq('company_id', companyId)
@@ -195,21 +198,27 @@ class CompanySettingsRepository {
     }
   }
 
-  /// Business logo + document name toggle — available without Custom Branding.
+  /// Document issuer logo, contact block, terms — never touches brand assets.
   Future<CompanySettings> updateDocumentIdentity({
     required String companyId,
     required String employeeId,
-    required String? logoUrl,
-    required String? logoLightUrl,
+    required String? documentLogoUrl,
     required bool showBusinessNameWithLogo,
+    required String? documentAddress,
+    required String? documentPhone,
+    required String? documentEmail,
+    required String? documentTerms,
   }) async {
     try {
       final updated = await _client
           .from('company_settings')
           .update({
-            'logo_url': logoUrl,
-            'logo_light_url': logoLightUrl,
+            'document_logo_url': documentLogoUrl,
             'document_show_business_name_with_logo': showBusinessNameWithLogo,
+            'document_address': documentAddress,
+            'document_phone': documentPhone,
+            'document_email': documentEmail,
+            'document_terms': documentTerms,
             'updated_by': employeeId,
           })
           .eq('company_id', companyId)
@@ -231,7 +240,26 @@ class CompanySettingsRepository {
   }) async {
     final stem = light ? 'logo-light' : 'logo';
     final path = '$companyId/$stem.${media.extension}';
-    await _deleteLogoFiles(companyId, light: light);
+    await _deleteLogoFiles(companyId, stem: stem);
+    await _storage.uploadCompanyLogo(
+      path: path,
+      bytes: media.bytes,
+      contentType: media.contentType,
+    );
+    final url = _storage.publicUrl(
+      bucket: MediaConstants.companyBrandingBucket,
+      path: path,
+    );
+    return '$url?v=${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Future<String> uploadDocumentLogo({
+    required String companyId,
+    required ProcessedMedia media,
+  }) async {
+    const stem = 'document-logo';
+    final path = '$companyId/$stem.${media.extension}';
+    await _deleteLogoFiles(companyId, stem: stem);
     await _storage.uploadCompanyLogo(
       path: path,
       bytes: media.bytes,
@@ -248,15 +276,18 @@ class CompanySettingsRepository {
     required String companyId,
     bool light = false,
   }) {
-    return _deleteLogoFiles(companyId, light: light);
+    return _deleteLogoFiles(companyId, stem: light ? 'logo-light' : 'logo');
+  }
+
+  Future<void> removeDocumentLogo({required String companyId}) {
+    return _deleteLogoFiles(companyId, stem: 'document-logo');
   }
 
   Future<void> _deleteLogoFiles(
     String companyId, {
-    bool light = false,
+    required String stem,
   }) async {
     const extensions = ['jpg', 'jpeg', 'png', 'webp'];
-    final stem = light ? 'logo-light' : 'logo';
     try {
       await _storage.deleteMany(
         bucket: MediaConstants.companyBrandingBucket,

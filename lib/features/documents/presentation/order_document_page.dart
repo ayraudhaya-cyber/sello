@@ -89,6 +89,22 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                     _PaymentDocumentCard(doc: doc)
                   else
                     _OrderDocumentCard(doc: doc),
+                  if (doc.issuerIdentity.hasTerms) ...[
+                    const SizedBox(height: 16),
+                    _DocumentTermsFooter(terms: doc.issuerIdentity.terms!),
+                  ],
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Thank you for your business!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -109,7 +125,7 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
   }
 }
 
-/// Tenant issuer mark — logo and/or business name. Never the Sello logo.
+/// Tenant issuer mark — logo and/or business name, plus optional contact.
 class _DocumentIssuerHeader extends StatelessWidget {
   const _DocumentIssuerHeader({required this.identity});
 
@@ -156,7 +172,82 @@ class _DocumentIssuerHeader extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
+        if (identity.hasContactBlock) ...[
+          const SizedBox(height: 10),
+          if (identity.address != null)
+            Text(
+              identity.address!,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          if (identity.phone != null) ...[
+            if (identity.address != null) const SizedBox(height: 4),
+            Text(
+              identity.phone!,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+          if (identity.email != null) ...[
+            if (identity.address != null || identity.phone != null)
+              const SizedBox(height: 4),
+            Text(
+              identity.email!,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ],
+    );
+  }
+}
+
+class _DocumentTermsFooter extends StatelessWidget {
+  const _DocumentTermsFooter({required this.terms});
+
+  final String terms;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Terms',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            terms,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12.5,
+              height: 1.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

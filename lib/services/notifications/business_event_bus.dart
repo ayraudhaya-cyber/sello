@@ -236,8 +236,8 @@ abstract final class BusinessEvents {
     category: NotificationCategory.orders,
     type: NotificationTypes.orderPlaced,
     title: 'New order received',
-    summary: 'Order from $customerName is ready for fulfillment.',
-    body: 'Order from $customerName is ready for fulfillment.',
+    summary: 'Order from $customerName is waiting to deliver.',
+    body: 'Order from $customerName is waiting to deliver.',
     priority: NotificationPriority.normal,
     referenceType: 'order',
     referenceId: orderId,
@@ -254,9 +254,9 @@ abstract final class BusinessEvents {
     type: NotificationTypes.orderInsufficientStock,
     title: 'Order waiting for stock',
     summary:
-        'Order from $customerName cannot be fully fulfilled with current stock.',
+        'Order from $customerName cannot be fully delivered with current stock.',
     body:
-        'Order from $customerName cannot be fully fulfilled with current stock.',
+        'Order from $customerName cannot be fully delivered with current stock.',
     priority: NotificationPriority.high,
     referenceType: 'order',
     referenceId: orderId,

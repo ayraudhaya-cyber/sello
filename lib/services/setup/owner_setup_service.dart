@@ -59,17 +59,19 @@ class OwnerSetupService {
 
     if (logo != null) {
       final current = await _settings.fetchForCompany(session.company.id);
-      final url = await _settings.uploadLogo(
+      final url = await _settings.uploadDocumentLogo(
         companyId: session.company.id,
         media: logo,
-        light: true,
       );
       await _settings.updateDocumentIdentity(
         companyId: session.company.id,
         employeeId: session.employee.id,
-        logoUrl: current.logoUrl ?? url,
-        logoLightUrl: url,
+        documentLogoUrl: url,
         showBusinessNameWithLogo: current.documentShowBusinessNameWithLogo,
+        documentAddress: current.documentAddress,
+        documentPhone: current.documentPhone,
+        documentEmail: current.documentEmail,
+        documentTerms: current.documentTerms,
       );
     }
   }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
@@ -11,11 +12,16 @@ import 'package:sello/features/mobile/orders/application/sello_orders_provider.d
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
+import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
+import 'package:sello/services/notifications/outbound/outbound_channel.dart';
+import 'package:sello/services/notifications/outbound/outbound_sms.dart';
 import 'package:sello/shared/models/company_settings.dart';
+import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Sales Rep orders — create and complete sales with shared domain logic.
 class SelloOrdersPage extends ConsumerStatefulWidget {
@@ -100,7 +106,7 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
         completed: true,
       );
     } else {
-      SelloSnackbars.success(context, 'Draft saved.');
+      SelloSnackbars.success(context, 'Saved for later.');
     }
   }
 
@@ -143,8 +149,166 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
                 await _archive(detail.summary);
               }
             : null,
+        onViewInvoice: detail.summary.status == OrderStatus.completed
+            ? () => _viewInvoice(detail.summary)
+            : null,
+        onWhatsAppInvoice: detail.summary.status == OrderStatus.completed
+            ? () => _whatsAppInvoice(detail.summary)
+            : null,
+        onSmsInvoice: detail.summary.status == OrderStatus.completed
+            ? () => _smsInvoice(detail.summary)
+            : null,
       ),
     );
+  }
+
+  Future<OrderConfirmationOutcome?> _prepareInvoiceShare(
+    String orderId,
+  ) {
+    return ref.read(orderConfirmationDispatcherProvider).dispatch(
+          orderId,
+          smsMode: OrderConfirmationSmsMode.shareActions,
+        );
+  }
+
+  Future<String> _messagingUnavailableMessage() async {
+    final policies =
+        await ref.read(orderDocumentRepositoryProvider).fetchOutboundPolicies();
+    return policies.inactiveOrderMessagingReason() ??
+        'Unable to prepare the confirmation for this order.';
+  }
+
+  Future<void> _viewInvoice(OrderSummary order) async {
+    try {
+      final url = await ref
+          .read(orderDocumentRepositoryProvider)
+          .invoiceUrlForOrder(order.id);
+      if (!mounted) return;
+      final parsed = Uri.tryParse(url);
+      if (parsed == null) {
+        SelloSnackbars.error(context, 'Unable to open the invoice.');
+        return;
+      }
+      final ok = await launchUrl(parsed, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        SelloSnackbars.error(context, 'Unable to open the invoice.');
+      }
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.warning(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to open the invoice.');
+    }
+  }
+
+  Future<void> _whatsAppInvoice(OrderSummary order) async {
+    try {
+      final outcome = await _prepareInvoiceShare(order.id);
+      if (!mounted) return;
+      if (outcome == null) {
+        final message = await _messagingUnavailableMessage();
+        if (!mounted) return;
+        SelloSnackbars.warning(context, message);
+        return;
+      }
+      final customerWa = outcome.customerActions
+          .where((a) => a.channel == OutboundChannel.whatsapp)
+          .toList();
+      if (customerWa.isEmpty) {
+        SelloSnackbars.warning(
+          context,
+          outcome.customerSkippedReason ??
+              'No WhatsApp number on this customer, or WhatsApp is disabled '
+                  'for Order confirmation.',
+        );
+        return;
+      }
+      final uri = Uri.tryParse(customerWa.first.launchUri);
+      if (uri == null) {
+        SelloSnackbars.error(context, 'Unable to open WhatsApp.');
+        return;
+      }
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        SelloSnackbars.error(context, 'Unable to open WhatsApp.');
+      }
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.warning(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(
+        context,
+        'Unable to prepare WhatsApp for this order.',
+      );
+    }
+  }
+
+  Future<void> _smsInvoice(OrderSummary order) async {
+    try {
+      final outcome = await _prepareInvoiceShare(order.id);
+      if (!mounted) return;
+      if (outcome == null) {
+        final message = await _messagingUnavailableMessage();
+        if (!mounted) return;
+        SelloSnackbars.warning(context, message);
+        return;
+      }
+      final customerSms = outcome.customerActions
+          .where((a) => a.channel == OutboundChannel.sms)
+          .toList();
+      if (customerSms.isEmpty) {
+        SelloSnackbars.warning(
+          context,
+          outcome.customerSkippedReason ??
+              'No phone number on this customer, or SMS is disabled '
+                  'for Order confirmation.',
+        );
+        return;
+      }
+      await _sendInvoiceSms(outcome, customerSms.first);
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.warning(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to prepare SMS for this order.');
+    }
+  }
+
+  Future<void> _sendInvoiceSms(
+    OrderConfirmationOutcome outcome,
+    OrderConfirmationAction action,
+  ) async {
+    final result = await ref
+        .read(orderConfirmationDispatcherProvider)
+        .sendSmsAction(outcome: outcome, action: action);
+    if (!mounted) return;
+    switch (result.status) {
+      case OutboundSmsStatus.sent:
+        SelloSnackbars.success(context, 'SMS sent to the customer.');
+      case OutboundSmsStatus.alreadySent:
+        SelloSnackbars.success(
+          context,
+          'SMS was already sent for this order.',
+        );
+      case OutboundSmsStatus.skippedMissingSender:
+        SelloSnackbars.warning(
+          context,
+          'SMS Sender ID is not configured for this company.',
+        );
+      case OutboundSmsStatus.skipped:
+        SelloSnackbars.warning(
+          context,
+          'SMS was skipped. Check Notifications and the customer phone.',
+        );
+      case OutboundSmsStatus.failed:
+        SelloSnackbars.error(
+          context,
+          'Unable to send SMS. Try again in a moment.',
+        );
+    }
   }
 
   Future<void> _submitDraft(OrderSummary order) async {
@@ -152,7 +316,7 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
       context: context,
       title: 'Submit order?',
       message:
-          '${order.orderNumber} will be placed for fulfillment. Stock will not be reduced yet.',
+          '${order.orderNumber} will be submitted. Stock will not be reduced yet.',
       confirmLabel: 'Submit order',
       cancelLabel: 'Keep draft',
     );

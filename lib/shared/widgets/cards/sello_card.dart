@@ -321,10 +321,25 @@ class SelloStatCard extends StatelessWidget {
               ),
             ),
           ],
-          if (sparkPoints != null && sparkPoints!.isNotEmpty) ...[
+          if (!compact) ...[
+            // Reserve sparkline height so KPI cards in a row stay aligned.
             const SizedBox(height: 14),
             SizedBox(
               height: 30,
+              width: double.infinity,
+              child: sparkPoints != null && sparkPoints!.isNotEmpty
+                  ? CustomPaint(
+                      painter: _KpiSparkPainter(
+                        points: sparkPoints!,
+                        color: accent,
+                      ),
+                    )
+                  : null,
+            ),
+          ] else if (sparkPoints != null && sparkPoints!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 24,
               width: double.infinity,
               child: CustomPaint(
                 painter: _KpiSparkPainter(

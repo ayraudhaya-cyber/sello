@@ -850,7 +850,7 @@ class OrderRepository {
         final status = OrderStatus.fromDb(existing['status'] as String?);
         if (status != OrderStatus.draft) {
           throw const ValidationFailure(
-            'Only draft orders can be edited. Place or cancel remaining to change fulfillment.',
+            'Only draft orders can be edited. Place or cancel remaining to change delivery.',
           );
         }
 
@@ -993,7 +993,7 @@ class OrderRepository {
     required List<({String orderItemId, num quantity})> lines,
   }) async {
     if (lines.isEmpty) {
-      throw const ValidationFailure('Provide at least one fulfillment line.');
+      throw const ValidationFailure('Provide at least one delivery line.');
     }
     try {
       await _client.rpc('fulfill_order_items', params: {

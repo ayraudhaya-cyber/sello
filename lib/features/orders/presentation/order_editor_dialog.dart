@@ -778,7 +778,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final selling = !useSteps || _step == 0;
     final visitMode = widget.visitMode || widget.embedded;
     final primaryActionLabel =
-        _isSalesWorkspace ? 'Submit order' : 'Fulfill all';
+        _isSalesWorkspace ? 'Submit order' : 'Mark as delivered';
     void onPrimaryAction() {
       if (_isSalesWorkspace) {
         _submit(place: true);
@@ -831,7 +831,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               ? (_isEdit
                   ? 'Edit order'
                   : (visitMode ? 'Visit order' : 'New order'))
-              : 'Review & complete')
+              : 'Review & submit')
           : (_isEdit
               ? 'Edit draft order'
               : (visitMode ? 'Visit order' : 'New order')),
@@ -861,7 +861,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               onPrimary: _step == 0 ? _goCheckout : onPrimaryAction,
             )
           : SelloDialogFooter(
-              cancelLabel: 'Save draft',
+              cancelLabel: 'Save for later',
               cancelVariant: SelloButtonVariant.outline,
               onCancel: () => _submit(complete: false),
               primaryLabel: primaryActionLabel,
@@ -1342,7 +1342,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           Align(
             alignment: Alignment.centerLeft,
             child: SelloButton(
-              label: 'Save draft',
+              label: 'Save for later',
               variant: SelloButtonVariant.outline,
               size: SelloButtonSize.small,
               onPressed: () => _submit(complete: false),

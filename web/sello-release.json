@@ -1,13 +1,13 @@
-﻿{
+{
   "schema_version": 2,
   "app": "sello",
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.3",
-        "build": 4,
-        "released_at": "2026-08-18",
-        "notes": "Testing the update flow."
+        "version": "1.0.4",
+        "build": 5,
+        "released_at": "2026-09-05",
+        "notes": "Documents: production invoice links, issuer contact/terms, delivery wording, Hub order confirmation actions."
       },
       "minimum": {
         "version": "1.0.0",
@@ -31,10 +31,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.0",
-        "build": 1,
-        "released_at": "2026-08-18",
-        "notes": ""
+        "version": "1.0.4",
+        "build": 5,
+        "released_at": "2026-09-05",
+        "notes": "Documents: production invoice links, issuer contact/terms, delivery wording, Hub order confirmation actions."
       },
       "minimum": {
         "version": "1.0.0",

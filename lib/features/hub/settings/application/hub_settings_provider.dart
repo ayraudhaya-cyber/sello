@@ -257,11 +257,15 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
     }
   }
 
-  /// Business logo + document name toggle (all entitled settings editors).
+  /// Document logo, contact block, terms. Never mutates brand assets or branding cache.
   Future<String?> saveDocumentIdentity({
     ProcessedMedia? logo,
     required bool clearLogo,
     required bool showBusinessNameWithLogo,
+    String? documentAddress,
+    String? documentPhone,
+    String? documentEmail,
+    String? documentTerms,
   }) async {
     final session = ref.read(currentSessionProvider);
     final permissions = ref.read(permissionServiceProvider);
@@ -269,38 +273,52 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
     if (session == null) return 'No active session found.';
     if (current == null) return 'Settings are not loaded yet.';
     if (permissions == null || !permissions.canManageCompanyLogo) {
-      return 'You do not have permission to update the business logo.';
+      return 'You do not have permission to update document identity.';
+    }
+
+    String? blankToNull(String? value) {
+      final trimmed = value?.trim() ?? '';
+      return trimmed.isEmpty ? null : trimmed;
     }
 
     state = state.copyWith(isSavingBranding: true, clearError: true);
     try {
-      var nextLight = current.logoLightUrl;
-      var nextDark = current.logoUrl;
+      var nextDocumentLogo = current.documentLogoUrl;
 
       if (clearLogo) {
-        if (current.logoLightUrl != null) {
-          await _repo.removeLogo(companyId: session.company.id, light: true);
-          nextLight = null;
-        } else if (current.logoUrl != null) {
-          // Document was falling back to the dark logo — clear it.
-          await _repo.removeLogo(companyId: session.company.id);
-          nextDark = null;
+        if (current.documentLogoUrl != null) {
+          await _repo.removeDocumentLogo(companyId: session.company.id);
         }
+        nextDocumentLogo = null;
       } else if (logo != null) {
-        nextLight = await _repo.uploadLogo(
+        nextDocumentLogo = await _repo.uploadDocumentLogo(
           companyId: session.company.id,
           media: logo,
-          light: true,
         );
-        nextDark = current.logoUrl ?? nextLight;
       }
+
+      final nextAddress = documentAddress != null
+          ? blankToNull(documentAddress)
+          : current.documentAddress;
+      final nextPhone = documentPhone != null
+          ? blankToNull(documentPhone)
+          : current.documentPhone;
+      final nextEmail = documentEmail != null
+          ? blankToNull(documentEmail)
+          : current.documentEmail;
+      final nextTerms = documentTerms != null
+          ? blankToNull(documentTerms)
+          : current.documentTerms;
 
       final saved = await _repo.updateDocumentIdentity(
         companyId: session.company.id,
         employeeId: session.employee.id,
-        logoUrl: nextDark,
-        logoLightUrl: nextLight,
+        documentLogoUrl: nextDocumentLogo,
         showBusinessNameWithLogo: showBusinessNameWithLogo,
+        documentAddress: nextAddress,
+        documentPhone: nextPhone,
+        documentEmail: nextEmail,
+        documentTerms: nextTerms,
       );
 
       final draft = state.draft;
@@ -309,17 +327,22 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
         draft: draft == null
             ? saved
             : draft.copyWith(
-                logoUrl: saved.logoUrl,
-                logoLightUrl: saved.logoLightUrl,
+                documentLogoUrl: saved.documentLogoUrl,
                 documentShowBusinessNameWithLogo:
                     saved.documentShowBusinessNameWithLogo,
-                clearLogoUrl: saved.logoUrl == null,
-                clearLogoLightUrl: saved.logoLightUrl == null,
+                documentAddress: saved.documentAddress,
+                documentPhone: saved.documentPhone,
+                documentEmail: saved.documentEmail,
+                documentTerms: saved.documentTerms,
+                clearDocumentLogoUrl: saved.documentLogoUrl == null,
+                clearDocumentAddress: saved.documentAddress == null,
+                clearDocumentPhone: saved.documentPhone == null,
+                clearDocumentEmail: saved.documentEmail == null,
+                clearDocumentTerms: saved.documentTerms == null,
               ),
         isSavingBranding: false,
         clearError: true,
       );
-      await ref.read(brandingProvider.notifier).refresh();
       return null;
     } on AppFailure catch (failure) {
       state = state.copyWith(

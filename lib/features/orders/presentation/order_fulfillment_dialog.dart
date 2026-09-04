@@ -169,7 +169,7 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
           Row(
             children: [
               SelloButton(
-                label: 'Fulfill all remaining',
+                label: 'Deliver remaining',
                 variant: SelloButtonVariant.outline,
                 size: SelloButtonSize.small,
                 onPressed: _fillAllRemaining,

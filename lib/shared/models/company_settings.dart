@@ -102,6 +102,11 @@ class CompanySettings extends Equatable {
     this.inventoryMovementPolicy = InventoryMovementPolicy.deductOnInvoice,
     this.logoUrl,
     this.logoLightUrl,
+    this.documentLogoUrl,
+    this.documentAddress,
+    this.documentPhone,
+    this.documentEmail,
+    this.documentTerms,
     this.primaryColor,
     this.navBackgroundColor,
     this.customBrandingEnabled = false,
@@ -144,11 +149,27 @@ class CompanySettings extends Equatable {
   /// When stock moves for a sale — enforced by inventory RPCs when wired.
   final InventoryMovementPolicy inventoryMovementPolicy;
 
-  /// Optional reverse wordmark (HTTPS). Null uses the Sello mark on dark chrome.
+  /// Custom Branding reverse wordmark (HTTPS). Null uses the Sello mark on dark chrome.
   final String? logoUrl;
 
-  /// Optional dark-ink wordmark (HTTPS). Null uses the Sello mark on light canvases.
+  /// Custom Branding dark-ink wordmark (HTTPS). Null uses the Sello mark on light canvases.
   final String? logoLightUrl;
+
+  /// Customer-facing business logo for invoices / receipts / `/d/<token>`.
+  /// Independent of Custom Branding brand assets.
+  final String? documentLogoUrl;
+
+  /// Optional business address on invoices / receipts.
+  final String? documentAddress;
+
+  /// Optional business phone on invoices / receipts.
+  final String? documentPhone;
+
+  /// Optional business email on invoices / receipts.
+  final String? documentEmail;
+
+  /// Optional terms / footer text on invoices / receipts.
+  final String? documentTerms;
 
   /// Optional tenant accent as `#RRGGBB`. Null uses Sello purple.
   final String? primaryColor;
@@ -159,7 +180,7 @@ class CompanySettings extends Equatable {
   /// Sello-controlled entitlement. Clients cannot toggle this from the app.
   final bool customBrandingEnabled;
 
-  /// When a business logo exists on invoices/receipts, also show `companies.name`.
+  /// When a document logo exists on invoices/receipts, also show `companies.name`.
   /// Ignored when no logo is set (name is always the fallback). Default: logo only.
   final bool documentShowBusinessNameWithLogo;
 
@@ -189,6 +210,11 @@ class CompanySettings extends Equatable {
     inventoryMovementPolicy: InventoryMovementPolicy.deductOnInvoice,
     logoUrl: null,
     logoLightUrl: null,
+    documentLogoUrl: null,
+    documentAddress: null,
+    documentPhone: null,
+    documentEmail: null,
+    documentTerms: null,
     primaryColor: null,
     navBackgroundColor: null,
     customBrandingEnabled: false,
@@ -230,10 +256,20 @@ class CompanySettings extends Equatable {
     InventoryMovementPolicy? inventoryMovementPolicy,
     String? logoUrl,
     String? logoLightUrl,
+    String? documentLogoUrl,
+    String? documentAddress,
+    String? documentPhone,
+    String? documentEmail,
+    String? documentTerms,
     String? primaryColor,
     String? navBackgroundColor,
     bool clearLogoUrl = false,
     bool clearLogoLightUrl = false,
+    bool clearDocumentLogoUrl = false,
+    bool clearDocumentAddress = false,
+    bool clearDocumentPhone = false,
+    bool clearDocumentEmail = false,
+    bool clearDocumentTerms = false,
     bool clearPrimaryColor = false,
     bool clearNavBackgroundColor = false,
     bool? documentShowBusinessNameWithLogo,
@@ -272,6 +308,21 @@ class CompanySettings extends Equatable {
       logoLightUrl: clearLogoLightUrl
           ? null
           : (logoLightUrl ?? this.logoLightUrl),
+      documentLogoUrl: clearDocumentLogoUrl
+          ? null
+          : (documentLogoUrl ?? this.documentLogoUrl),
+      documentAddress: clearDocumentAddress
+          ? null
+          : (documentAddress ?? this.documentAddress),
+      documentPhone: clearDocumentPhone
+          ? null
+          : (documentPhone ?? this.documentPhone),
+      documentEmail: clearDocumentEmail
+          ? null
+          : (documentEmail ?? this.documentEmail),
+      documentTerms: clearDocumentTerms
+          ? null
+          : (documentTerms ?? this.documentTerms),
       primaryColor: clearPrimaryColor
           ? null
           : (primaryColor ?? this.primaryColor),
@@ -330,6 +381,11 @@ class CompanySettings extends Equatable {
       ),
       logoUrl: _optionalText(json['logo_url']),
       logoLightUrl: _optionalText(json['logo_light_url']),
+      documentLogoUrl: _optionalText(json['document_logo_url']),
+      documentAddress: _optionalText(json['document_address']),
+      documentPhone: _optionalText(json['document_phone']),
+      documentEmail: _optionalText(json['document_email']),
+      documentTerms: _optionalText(json['document_terms']),
       primaryColor: _optionalText(json['primary_color']),
       navBackgroundColor: _optionalText(json['nav_background_color']),
       customBrandingEnabled: json['custom_branding_enabled'] as bool? ?? false,
@@ -387,6 +443,11 @@ class CompanySettings extends Equatable {
         inventoryMovementPolicy,
     logoUrl,
     logoLightUrl,
+    documentLogoUrl,
+    documentAddress,
+    documentPhone,
+    documentEmail,
+    documentTerms,
     primaryColor,
     navBackgroundColor,
     customBrandingEnabled,

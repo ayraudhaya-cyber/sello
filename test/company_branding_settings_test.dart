@@ -26,6 +26,17 @@ void main() {
       expect(CompanySettings.fromJson(_row()).ownerSetupCompleted, isTrue);
     });
 
+    test('fromJson reads an optional document logo separately from brand assets', () {
+      final settings = CompanySettings.fromJson(
+        _row({
+          'document_logo_url': 'https://cdn.example.com/document-logo.png',
+          'logo_url': 'https://cdn.example.com/brand-dark.png',
+        }),
+      );
+      expect(settings.documentLogoUrl, 'https://cdn.example.com/document-logo.png');
+      expect(settings.logoUrl, 'https://cdn.example.com/brand-dark.png');
+    });
+
     test('fromJson reads an optional light-surface logo', () {
       final settings = CompanySettings.fromJson(
         _row({'logo_light_url': 'https://cdn.example.com/logo-light.png'}),

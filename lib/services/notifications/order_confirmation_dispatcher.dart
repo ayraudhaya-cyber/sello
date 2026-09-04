@@ -25,6 +25,15 @@ abstract class OrderConfirmationGateway {
   });
 }
 
+/// How SMS is handled during [OrderConfirmationDispatcher.dispatch].
+enum OrderConfirmationSmsMode {
+  /// Send via Text.lk during dispatch; no SMS buttons in [actions].
+  automatic,
+
+  /// Do not send; expose SMS share buttons for the UI (View → Send SMS).
+  shareActions,
+}
+
 /// Generates confirmation copy, WhatsApp share intents, and automatic SMS.
 ///
 /// SMS is sent server-side (Text.lk). WhatsApp remains a device prefill.
@@ -58,7 +67,15 @@ class OrderConfirmationDispatcher {
     OutboundNotificationType.orderNotification,
   ];
 
-  Future<OrderConfirmationOutcome?> dispatch(String orderId) async {
+  /// Prepares document link + channel actions.
+  ///
+  /// [smsMode.automatic] (default after complete): sends SMS immediately.
+  /// [smsMode.shareActions] (View invoice): builds WhatsApp + SMS actions
+  /// without sending SMS until the UI asks.
+  Future<OrderConfirmationOutcome?> dispatch(
+    String orderId, {
+    OrderConfirmationSmsMode smsMode = OrderConfirmationSmsMode.automatic,
+  }) async {
     final effectivePolicies = await _resolvePolicies();
     final activeTypes = [
       for (final type in _orderTypes)
@@ -112,6 +129,7 @@ class OrderConfirmationDispatcher {
           actions: actions,
           body: body,
           channelPolicy: channelPolicy,
+          smsMode: smsMode,
         );
         customerSkipped ??= skipped;
       }
@@ -122,6 +140,7 @@ class OrderConfirmationDispatcher {
           actions: actions,
           body: body,
           channelPolicy: channelPolicy,
+          smsMode: smsMode,
         );
       }
 
@@ -131,20 +150,70 @@ class OrderConfirmationDispatcher {
           actions: actions,
           body: body,
           channelPolicy: channelPolicy,
+          smsMode: smsMode,
         );
       }
     }
 
+    // Always expose the token URL so View invoice works even when the
+    // message template omits the link (include_document_link = false).
     return OrderConfirmationOutcome(
       orderNumber: prepared.order.number,
-      documentUrl: includeAnyLink ? tokenUrl : '',
+      documentUrl: tokenUrl,
       messageBody: messageBody,
       alreadyPrepared: prepared.alreadyPrepared,
       eventId: prepared.eventId,
       token: prepared.token,
       actions: actions,
       customerSkippedReason: customerSkipped,
+      includeDocumentLink: includeAnyLink,
     );
+  }
+
+  /// Sends one prepared SMS action (View → Send SMS). Never throws.
+  Future<OutboundSmsResult> sendSmsAction({
+    required OrderConfirmationOutcome outcome,
+    required OrderConfirmationAction action,
+  }) async {
+    final sender = smsSender;
+    final eventId = outcome.eventId;
+    final recipient = action.address?.trim();
+    if (sender == null) {
+      return const OutboundSmsResult(
+        OutboundSmsStatus.failed,
+        reason: 'sms_unavailable',
+      );
+    }
+    if (eventId == null || eventId.isEmpty) {
+      return const OutboundSmsResult(
+        OutboundSmsStatus.failed,
+        reason: 'missing_event',
+      );
+    }
+    if (action.channel != OutboundChannel.sms ||
+        recipient == null ||
+        recipient.isEmpty) {
+      return const OutboundSmsResult(
+        OutboundSmsStatus.skipped,
+        reason: 'invalid_sms_action',
+      );
+    }
+    try {
+      return await sender.send(
+        OutboundSmsRequest(
+          eventId: eventId,
+          recipientKind: action.recipientKind,
+          recipientKey: action.recipientKey,
+          recipient: recipient,
+          message: outcome.messageBody,
+        ),
+      );
+    } catch (_) {
+      return const OutboundSmsResult(
+        OutboundSmsStatus.failed,
+        reason: 'network',
+      );
+    }
   }
 
   Future<String?> _dispatchCustomer({
@@ -152,6 +221,7 @@ class OrderConfirmationDispatcher {
     required List<OrderConfirmationAction> actions,
     required String body,
     required OutboundChannelPolicy channelPolicy,
+    required OrderConfirmationSmsMode smsMode,
   }) async {
     final customer = prepared.customer;
     if (customer == null || customer.id.isEmpty) {
@@ -187,6 +257,8 @@ class OrderConfirmationDispatcher {
           body: body,
           alreadyPrepared: prepared.alreadyPrepared,
           policy: channelPolicy,
+          smsMode: smsMode,
+          invoiceLabels: true,
         );
         return null;
   }
@@ -196,6 +268,7 @@ class OrderConfirmationDispatcher {
     required List<OrderConfirmationAction> actions,
     required String body,
     required OutboundChannelPolicy channelPolicy,
+    required OrderConfirmationSmsMode smsMode,
   }) async {
     for (final hub in prepared.hubRecipients) {
       final digits = MessagingPhone.digits(hub.phone);
@@ -220,6 +293,7 @@ class OrderConfirmationDispatcher {
         body: body,
         alreadyPrepared: prepared.alreadyPrepared,
         policy: channelPolicy,
+        smsMode: smsMode,
         roleLabel: hub.role == 'owner' ? 'Owner' : 'Manager',
       );
     }
@@ -230,6 +304,7 @@ class OrderConfirmationDispatcher {
     required List<OrderConfirmationAction> actions,
     required String body,
     required OutboundChannelPolicy channelPolicy,
+    required OrderConfirmationSmsMode smsMode,
   }) async {
     final rep = prepared.salesRep;
     if (rep == null || rep.id.isEmpty) return;
@@ -255,6 +330,7 @@ class OrderConfirmationDispatcher {
       body: body,
       alreadyPrepared: prepared.alreadyPrepared,
       policy: channelPolicy,
+      smsMode: smsMode,
       roleLabel: 'Sales rep',
     );
   }
@@ -270,7 +346,9 @@ class OrderConfirmationDispatcher {
     required String body,
     required bool alreadyPrepared,
     required OutboundChannelPolicy policy,
+    required OrderConfirmationSmsMode smsMode,
     String? roleLabel,
+    bool invoiceLabels = false,
   }) async {
     if (policy.whatsapp && whatsappDigits != null) {
       final inserted = await _record(
@@ -280,6 +358,11 @@ class OrderConfirmationDispatcher {
         key: key,
         address: whatsappDigits,
       );
+      final whatsappLabel = kind == OutboundRecipientKind.customer
+          ? (invoiceLabels && smsMode == OrderConfirmationSmsMode.shareActions
+              ? 'WhatsApp invoice'
+              : 'WhatsApp customer')
+          : 'WhatsApp ${roleLabel ?? name}';
       actions.add(
         OrderConfirmationAction(
           channel: OutboundChannel.whatsapp,
@@ -287,9 +370,7 @@ class OrderConfirmationDispatcher {
           recipientKey: key,
           recipientName: name,
           address: whatsappDigits,
-          label: kind == OutboundRecipientKind.customer
-              ? 'WhatsApp customer'
-              : 'WhatsApp ${roleLabel ?? name}',
+          label: whatsappLabel,
           launchUri: OrderConfirmationMessage.whatsappUri(
             digits: whatsappDigits,
             body: body,
@@ -299,14 +380,33 @@ class OrderConfirmationDispatcher {
       );
     }
     if (policy.sms) {
-      await _deliverSms(
-        sender: smsSender,
-        eventId: eventId,
-        kind: kind,
-        key: key,
-        recipient: smsRecipient,
-        body: body,
-      );
+      if (smsMode == OrderConfirmationSmsMode.automatic) {
+        await _deliverSms(
+          sender: smsSender,
+          eventId: eventId,
+          kind: kind,
+          key: key,
+          recipient: smsRecipient,
+          body: body,
+        );
+      } else if (smsRecipient != null && smsRecipient.isNotEmpty) {
+        // Do not pre-record SMS — Text.lk claim owns the dispatch row on send.
+        final smsLabel = kind == OutboundRecipientKind.customer
+            ? (invoiceLabels ? 'Send SMS' : 'SMS customer')
+            : 'SMS ${roleLabel ?? name}';
+        actions.add(
+          OrderConfirmationAction(
+            channel: OutboundChannel.sms,
+            recipientKind: kind,
+            recipientKey: key,
+            recipientName: name,
+            address: smsRecipient,
+            label: smsLabel,
+            launchUri: '',
+            duplicate: alreadyPrepared,
+          ),
+        );
+      }
     }
   }
 
@@ -508,6 +608,7 @@ class CollectionAcknowledgementDispatcher {
       token: prepared.token,
       actions: actions,
       customerSkippedReason: customerSkipped,
+      includeDocumentLink: includeAnyLink,
     );
   }
 

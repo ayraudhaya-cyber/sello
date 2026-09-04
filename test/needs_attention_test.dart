@@ -12,7 +12,7 @@ void main() {
       expect(const NeedsAttentionCounts().isEmpty, isTrue);
     });
 
-    test('placed order appears as needing fulfillment', () {
+    test('placed order appears as waiting to deliver', () {
       final items = NeedsAttentionLogic.build(
         const NeedsAttentionCounts(placed: 3),
       );
@@ -21,7 +21,7 @@ void main() {
       expect(items.single.count, 3);
       expect(items.single.priority, NeedsAttentionPriority.medium);
       expect(items.single.route, RoutePaths.hubOrders);
-      expect(items.single.title, '3 orders need fulfillment');
+      expect(items.single.title, '3 orders waiting to deliver');
     });
 
     test('partially delivered order appears', () {
@@ -149,7 +149,7 @@ void main() {
               (i) => i.kind == NeedsAttentionKind.placedAwaitingFulfillment,
             )
             .title,
-        '1 order needs fulfillment',
+        '1 order waiting to deliver',
       );
       expect(
         items

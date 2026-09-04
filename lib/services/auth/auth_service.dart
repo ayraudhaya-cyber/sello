@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/router/route_paths.dart';
+import 'package:sello/services/auth/auth_redirect_url.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -139,17 +139,7 @@ class AuthService {
     }
   }
 
-  String? _redirectUrlFor(String path) {
-    if (!kIsWeb) return null;
-    final base = Uri.base;
-    return base
-        .replace(
-          path: path,
-          query: null,
-          fragment: null,
-        )
-        .toString();
-  }
+  String? _redirectUrlFor(String path) => AuthRedirectUrl.forPath(path);
 
   static String _mapAuthMessage(String message) {
     final lower = message.toLowerCase();

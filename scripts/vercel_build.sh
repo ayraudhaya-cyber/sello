@@ -31,6 +31,10 @@ flutter --version
 flutter config --no-analytics --enable-web
 flutter pub get
 
+# Public web origin for Auth email redirects + customer document links.
+SELLO_PUBLIC_URL="${SELLO_PUBLIC_URL:-https://sello.cashro.pro}"
+
 flutter build web --release \
   --dart-define="SUPABASE_URL=${SUPABASE_URL}" \
-  --dart-define="SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}"
+  --dart-define="SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" \
+  --dart-define="SELLO_PUBLIC_URL=${SELLO_PUBLIC_URL}"

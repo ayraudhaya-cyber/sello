@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:sello/core/router/route_paths.dart';
+import 'package:sello/services/auth/auth_redirect_url.dart';
 import 'package:sello/shared/models/team_invite_result.dart';
 
 /// Parses `invite-employee-login` Edge Function responses.
@@ -60,15 +60,6 @@ abstract final class EmployeeLoginInviteResponse {
   }
 
   /// Recovery emails must land on /login (existing password-recovery UX).
-  static String? redirectToForCurrentOrigin() {
-    if (!kIsWeb) return null;
-    final base = Uri.base;
-    return base
-        .replace(
-          path: RoutePaths.login,
-          query: null,
-          fragment: null,
-        )
-        .toString();
-  }
+  static String? redirectToForCurrentOrigin() =>
+      AuthRedirectUrl.forPath(RoutePaths.login);
 }

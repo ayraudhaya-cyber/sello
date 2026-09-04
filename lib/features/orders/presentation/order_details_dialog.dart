@@ -15,6 +15,20 @@ import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
 import 'package:sello/shared/widgets/feedback/entity_activity_panel.dart';
 
+/// Shared horizontal metrics for Order Details content + totals alignment.
+abstract final class _OrderGrid {
+  static const double sectionGap = 24;
+  static const double fieldGap = 12;
+  static const double colGutter = 24;
+  static const double indexW = 32;
+  static const double qtyW = 72;
+  static const double priceW = 108;
+  static const double amountW = 112;
+  static const double totalsBlockW = 268;
+  static const double wideBreakpoint = 720;
+  static const double tableBreakpoint = 560;
+}
+
 /// Internal staff Order Details workspace — not the customer invoice document.
 class OrderDetailsDialog extends ConsumerWidget {
   const OrderDetailsDialog({
@@ -45,19 +59,10 @@ class OrderDetailsDialog extends ConsumerWidget {
   final VoidCallback? onCancelRemaining;
   final VoidCallback? onCancelOrder;
   final VoidCallback? onArchive;
-
-  /// Opens the customer invoice document in the browser.
   final VoidCallback? onViewInvoice;
-
-  /// Opens WhatsApp with the invoice confirmation prefilled.
   final VoidCallback? onWhatsAppInvoice;
-
-  /// Sends the invoice confirmation SMS to the customer.
   final VoidCallback? onSmsInvoice;
-
   final bool readOnly;
-
-  static const double _sectionGap = 26;
 
   OrderSummary get order => detail.summary;
 
@@ -66,9 +71,8 @@ class OrderDetailsDialog extends ConsumerWidget {
     final isMobile = context.isMobile;
     final dash = '—';
     final canManageDraft = !readOnly && order.isEditable;
-    final canFulfill = !readOnly &&
-        order.status.canFulfill &&
-        onFulfill != null;
+    final canFulfill =
+        !readOnly && order.status.canFulfill && onFulfill != null;
     final canArchive = !readOnly &&
         onArchive != null &&
         (order.status == OrderStatus.completed ||
@@ -92,9 +96,9 @@ class OrderDetailsDialog extends ConsumerWidget {
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
         isMobile ? 20 : 32,
-        isMobile ? 12 : 16,
+        isMobile ? 10 : 14,
         isMobile ? 20 : 32,
-        16,
+        12,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -107,7 +111,7 @@ class OrderDetailsDialog extends ConsumerWidget {
               message:
                   'Cancelled orders do not affect inventory. Historical totals stay available for reporting.',
             ),
-            const SizedBox(height: _sectionGap),
+            const SizedBox(height: _OrderGrid.sectionGap),
           ],
           _InfoGrid(
             customer: _InfoBlock(
@@ -132,6 +136,14 @@ class OrderDetailsDialog extends ConsumerWidget {
                     ),
                   ),
               ],
+              account: hasAccountExtras
+                  ? _AccountExtras(
+                      currencySymbol: currencySymbol,
+                      wallet: detail.customerWallet,
+                      creditAllowed: detail.customerCreditAllowed,
+                      creditLimit: detail.customerCreditLimit,
+                    )
+                  : null,
             ),
             order: _InfoBlock(
               title: 'Order',
@@ -188,23 +200,11 @@ class OrderDetailsDialog extends ConsumerWidget {
                         : null,
                   ),
           ),
-          if (hasAccountExtras) ...[
-            const SizedBox(height: 10),
-            _AccountExtras(
-              currencySymbol: currencySymbol,
-              wallet: detail.customerWallet,
-              creditAllowed: detail.customerCreditAllowed,
-              creditLimit: detail.customerCreditLimit,
-            ),
-          ],
-          const SizedBox(height: _sectionGap),
+          const SizedBox(height: _OrderGrid.sectionGap),
           _Section(
             label: 'Products',
             child: detail.lines.isEmpty
-                ? Text(
-                    'No products on this order.',
-                    style: _Type.meta,
-                  )
+                ? Text('No products on this order.', style: _Type.meta)
                 : _ProductsTable(
                     lines: detail.lines,
                     currencySymbol: currencySymbol,
@@ -212,7 +212,7 @@ class OrderDetailsDialog extends ConsumerWidget {
                     showDelivery: !order.isDraft,
                   ),
           ),
-          const SizedBox(height: _sectionGap),
+          const SizedBox(height: _OrderGrid.sectionGap),
           _Section(
             label: 'Totals',
             child: _TotalsBlock(
@@ -224,26 +224,20 @@ class OrderDetailsDialog extends ConsumerWidget {
             ),
           ),
           if (hasNotes) ...[
-            const SizedBox(height: _sectionGap),
+            const SizedBox(height: _OrderGrid.sectionGap),
             _Section(
               label: 'Notes',
-              child: Text(
-                order.notes!.trim(),
-                style: _Type.body,
-              ),
+              child: Text(order.notes!.trim(), style: _Type.body),
             ),
           ],
-          const SizedBox(height: _sectionGap),
+          const SizedBox(height: _OrderGrid.sectionGap),
           _Section(
             label: 'Activity',
             child: detail.timeline.isEmpty
-                ? Text(
-                    'No activity recorded yet.',
-                    style: _Type.meta,
-                  )
+                ? Text('No activity recorded yet.', style: _Type.meta)
                 : _CompactTimeline(events: detail.timeline),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           _Section(
             label: 'Company activity',
             child: EntityActivityPanel(
@@ -296,7 +290,6 @@ class OrderDetailsDialog extends ConsumerWidget {
   }
 }
 
-/// Quiet invoice actions for the completed-order footer.
 class _InvoiceFooterLinks extends StatelessWidget {
   const _InvoiceFooterLinks({
     this.onViewInvoice,
@@ -397,7 +390,7 @@ class _OrderHero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(order.orderNumber, style: _Type.title),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -424,7 +417,7 @@ class _OrderHero extends StatelessWidget {
           ],
         ),
         if (meta.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(meta.join(' · '), style: _Type.subtitle),
         ],
       ],
@@ -459,9 +452,7 @@ class _NoticeBanner extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: tone),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(message, style: _Type.body),
-          ),
+          Expanded(child: Text(message, style: _Type.body)),
         ],
       ),
     );
@@ -485,11 +476,13 @@ class _InfoBlock {
     required this.title,
     required this.fields,
     this.trailing,
+    this.account,
   });
 
   final String title;
   final List<_InfoField> fields;
   final Widget? trailing;
+  final Widget? account;
 }
 
 class _InfoGrid extends StatelessWidget {
@@ -505,24 +498,21 @@ class _InfoGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blocks = <_InfoBlock>[
-      customer,
-      order,
-      ?delivery,
-    ];
+    final blocks = <_InfoBlock>[customer, order, ?delivery];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 720 && blocks.length > 1;
+        final wide = constraints.maxWidth >= _OrderGrid.wideBreakpoint &&
+            blocks.length > 1;
         if (!wide) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < blocks.length; i++) ...[
                 if (i > 0) ...[
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   const Divider(height: 1, color: AppColors.outlinePanel),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                 ],
                 _InfoBlockView(block: blocks[i]),
               ],
@@ -535,15 +525,12 @@ class _InfoGrid extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < blocks.length; i++) ...[
-                if (i > 0) ...[
-                  const SizedBox(width: 20),
+                if (i > 0)
                   const VerticalDivider(
-                    width: 1,
+                    width: _OrderGrid.colGutter,
                     thickness: 1,
                     color: AppColors.outlinePanel,
                   ),
-                  const SizedBox(width: 20),
-                ],
                 Expanded(child: _InfoBlockView(block: blocks[i])),
               ],
             ],
@@ -565,14 +552,18 @@ class _InfoBlockView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(block.title.toUpperCase(), style: _Type.section),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         for (var i = 0; i < block.fields.length; i++) ...[
-          if (i > 0) const SizedBox(height: 12),
+          if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
           _CompactField(field: block.fields[i]),
         ],
         if (block.trailing != null) ...[
           const SizedBox(height: 12),
           block.trailing!,
+        ],
+        if (block.account != null) ...[
+          const SizedBox(height: 14),
+          block.account!,
         ],
       ],
     );
@@ -590,7 +581,7 @@ class _CompactField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(field.label, style: _Type.label),
-        const SizedBox(height: 3),
+        const SizedBox(height: 2),
         Text(
           field.value,
           style: _Type.value.copyWith(
@@ -602,6 +593,7 @@ class _CompactField extends StatelessWidget {
   }
 }
 
+/// Nested under the Customer column — Wallet | Credit side-by-side.
 class _AccountExtras extends StatelessWidget {
   const _AccountExtras({
     required this.currencySymbol,
@@ -621,43 +613,47 @@ class _AccountExtras extends StatelessWidget {
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(bottom: 4),
+        childrenPadding: const EdgeInsets.only(top: 4, bottom: 2),
         visualDensity: VisualDensity.compact,
-        title: Text(
-          'Customer account',
-          style: _Type.label.copyWith(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          'Wallet and credit details',
-          style: _Type.meta,
-        ),
+        initiallyExpanded: false,
+        title: Text('Customer account', style: _Type.accountHeading),
         children: [
-          if (wallet != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _CompactField(
-                field: _InfoField(
-                  label: 'Wallet',
-                  value: SelloFormatters.currency(
-                    wallet!,
-                    symbol: currencySymbol,
+          const Divider(height: 1, color: AppColors.outlinePanel),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (wallet != null)
+                Expanded(
+                  child: _CompactField(
+                    field: _InfoField(
+                      label: 'Wallet',
+                      value: SelloFormatters.currency(
+                        wallet!,
+                        symbol: currencySymbol,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          if (creditAllowed != null)
-            _CompactField(
-              field: _InfoField(
-                label: 'Credit',
-                value: creditAllowed == true
-                    ? SelloFormatters.currency(
-                        creditLimit ?? 0,
-                        symbol: currencySymbol,
-                      )
-                    : 'Not allowed',
-                muted: creditAllowed != true,
-              ),
-            ),
+              if (wallet != null && creditAllowed != null)
+                const SizedBox(width: 16),
+              if (creditAllowed != null)
+                Expanded(
+                  child: _CompactField(
+                    field: _InfoField(
+                      label: 'Credit',
+                      value: creditAllowed == true
+                          ? SelloFormatters.currency(
+                              creditLimit ?? 0,
+                              symbol: currencySymbol,
+                            )
+                          : 'Not allowed',
+                      muted: creditAllowed != true,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -677,23 +673,18 @@ class _ProductsTable extends StatelessWidget {
   final List<CompanyProductField> catalogFields;
   final bool showDelivery;
 
-  static const double _qtyW = 64;
-  static const double _priceW = 100;
-  static const double _amountW = 108;
-  static const double _indexW = 28;
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final useTable = constraints.maxWidth >= 560;
+        final useTable = constraints.maxWidth >= _OrderGrid.tableBreakpoint;
         if (!useTable) {
           return Column(
             children: [
               for (var i = 0; i < lines.length; i++) ...[
                 if (i > 0)
                   const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
+                    padding: EdgeInsets.symmetric(vertical: 8),
                     child: Divider(height: 1, color: AppColors.outlinePanel),
                   ),
                 _ProductMobileRow(
@@ -708,30 +699,61 @@ class _ProductsTable extends StatelessWidget {
           );
         }
 
-        return Column(
+        return Table(
+          columnWidths: const {
+            0: FixedColumnWidth(_OrderGrid.indexW),
+            1: FlexColumnWidth(),
+            2: FixedColumnWidth(_OrderGrid.qtyW),
+            3: FixedColumnWidth(_OrderGrid.priceW),
+            4: FixedColumnWidth(_OrderGrid.amountW),
+          },
+          defaultVerticalAlignment: TableCellVerticalAlignment.top,
           children: [
-            const _ProductHeaderRow(
-              indexW: _indexW,
-              qtyW: _qtyW,
-              priceW: _priceW,
-              amountW: _amountW,
+            TableRow(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('#', style: _Type.tableHead),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, right: 8),
+                  child: Text('Product', style: _Type.tableHead),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Qty',
+                    textAlign: TextAlign.right,
+                    style: _Type.tableHead,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Unit price',
+                    textAlign: TextAlign.right,
+                    style: _Type.tableHead,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Amount',
+                    textAlign: TextAlign.right,
+                    style: _Type.tableHead,
+                  ),
+                ),
+              ],
             ),
-            const Divider(height: 1, color: AppColors.outlinePanel),
-            for (var i = 0; i < lines.length; i++) ...[
-              _ProductDataRow(
+            for (var i = 0; i < lines.length; i++)
+              _productTableRow(
                 index: i + 1,
                 line: lines[i],
                 currencySymbol: currencySymbol,
                 catalogFields: catalogFields,
                 showDelivery: showDelivery,
-                indexW: _indexW,
-                qtyW: _qtyW,
-                priceW: _priceW,
-                amountW: _amountW,
+                showDivider: i > 0,
               ),
-              if (i < lines.length - 1)
-                const Divider(height: 1, color: AppColors.outlinePanel),
-            ],
           ],
         );
       },
@@ -739,140 +761,68 @@ class _ProductsTable extends StatelessWidget {
   }
 }
 
-class _ProductHeaderRow extends StatelessWidget {
-  const _ProductHeaderRow({
-    required this.indexW,
-    required this.qtyW,
-    required this.priceW,
-    required this.amountW,
-  });
+TableRow _productTableRow({
+  required int index,
+  required OrderLineItem line,
+  required String currencySymbol,
+  required List<CompanyProductField> catalogFields,
+  required bool showDelivery,
+  required bool showDivider,
+}) {
+  final specs = _productSpecs(line, catalogFields);
+  final delivery = showDelivery ? _deliveryLine(line) : null;
+  final top = showDivider ? 10.0 : 0.0;
 
-  final double indexW;
-  final double qtyW;
-  final double priceW;
-  final double amountW;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget cell(Widget child, {EdgeInsets? padding}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: indexW,
-            child: Text('#', style: _Type.tableHead),
-          ),
-          Expanded(child: Text('Product', style: _Type.tableHead)),
-          SizedBox(
-            width: qtyW,
-            child: Text('Qty', textAlign: TextAlign.right, style: _Type.tableHead),
-          ),
-          SizedBox(
-            width: priceW,
-            child: Text(
-              'Unit price',
-              textAlign: TextAlign.right,
-              style: _Type.tableHead,
-            ),
-          ),
-          SizedBox(
-            width: amountW,
-            child: Text(
-              'Amount',
-              textAlign: TextAlign.right,
-              style: _Type.tableHead,
-            ),
-          ),
-        ],
-      ),
+      padding: padding ?? EdgeInsets.only(top: top, bottom: 10),
+      child: child,
     );
   }
-}
 
-class _ProductDataRow extends StatelessWidget {
-  const _ProductDataRow({
-    required this.index,
-    required this.line,
-    required this.currencySymbol,
-    required this.catalogFields,
-    required this.showDelivery,
-    required this.indexW,
-    required this.qtyW,
-    required this.priceW,
-    required this.amountW,
-  });
-
-  final int index;
-  final OrderLineItem line;
-  final String currencySymbol;
-  final List<CompanyProductField> catalogFields;
-  final bool showDelivery;
-  final double indexW;
-  final double qtyW;
-  final double priceW;
-  final double amountW;
-
-  @override
-  Widget build(BuildContext context) {
-    final specs = _productSpecs(line, catalogFields);
-    final delivery = showDelivery ? _deliveryLine(line) : null;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: indexW,
-            child: Text('$index', style: _Type.meta),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  line.productName ?? 'Product',
-                  style: _Type.productName,
-                ),
-                if (specs != null) ...[
-                  const SizedBox(height: 2),
-                  Text(specs, style: _Type.meta),
-                ],
-                if (delivery != null) ...[
-                  const SizedBox(height: 2),
-                  Text(delivery, style: _Type.meta),
-                ],
-              ],
-            ),
-          ),
-          SizedBox(
-            width: qtyW,
-            child: Text(
-              SelloFormatters.quantity(line.quantity),
-              textAlign: TextAlign.right,
-              style: _Type.tableCell,
-            ),
-          ),
-          SizedBox(
-            width: priceW,
-            child: Text(
-              SelloFormatters.currency(line.unitPrice, symbol: currencySymbol),
-              textAlign: TextAlign.right,
-              style: _Type.tableCell,
-            ),
-          ),
-          SizedBox(
-            width: amountW,
-            child: Text(
-              SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
-              textAlign: TextAlign.right,
-              style: _Type.amount,
-            ),
-          ),
-        ],
+  return TableRow(
+    children: [
+      cell(Text('$index', style: _Type.meta)),
+      cell(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(line.productName ?? 'Product', style: _Type.productName),
+            if (specs != null) ...[
+              const SizedBox(height: 2),
+              Text(specs, style: _Type.meta),
+            ],
+            if (delivery != null) ...[
+              const SizedBox(height: 2),
+              Text(delivery, style: _Type.meta),
+            ],
+          ],
+        ),
+        padding: EdgeInsets.only(top: top, bottom: 10, right: 8),
       ),
-    );
-  }
+      cell(
+        Text(
+          SelloFormatters.quantity(line.quantity),
+          textAlign: TextAlign.right,
+          style: _Type.tableCell,
+        ),
+      ),
+      cell(
+        Text(
+          SelloFormatters.currency(line.unitPrice, symbol: currencySymbol),
+          textAlign: TextAlign.right,
+          style: _Type.tableCell,
+        ),
+      ),
+      cell(
+        Text(
+          SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
+          textAlign: TextAlign.right,
+          style: _Type.amount,
+        ),
+      ),
+    ],
+  );
 }
 
 class _ProductMobileRow extends StatelessWidget {
@@ -901,31 +851,36 @@ class _ProductMobileRow extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$index.', style: _Type.meta),
-            const SizedBox(width: 8),
+            SizedBox(
+              width: _OrderGrid.indexW,
+              child: Text('$index', style: _Type.meta),
+            ),
             Expanded(
               child: Text(
                 line.productName ?? 'Product',
                 style: _Type.productName,
               ),
             ),
-            const SizedBox(width: 12),
-            Text(
-              SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
-              style: _Type.amount,
+            SizedBox(
+              width: _OrderGrid.amountW,
+              child: Text(
+                SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
+                textAlign: TextAlign.right,
+                style: _Type.amount,
+              ),
             ),
           ],
         ),
         if (specs != null) ...[
           const SizedBox(height: 2),
           Padding(
-            padding: const EdgeInsets.only(left: 18),
+            padding: const EdgeInsets.only(left: _OrderGrid.indexW),
             child: Text(specs, style: _Type.meta),
           ),
         ],
         const SizedBox(height: 4),
         Padding(
-          padding: const EdgeInsets.only(left: 18),
+          padding: const EdgeInsets.only(left: _OrderGrid.indexW),
           child: Text(
             '${SelloFormatters.quantity(line.quantity)} × '
             '${SelloFormatters.currency(line.unitPrice, symbol: currencySymbol)}',
@@ -935,7 +890,7 @@ class _ProductMobileRow extends StatelessWidget {
         if (delivery != null) ...[
           const SizedBox(height: 2),
           Padding(
-            padding: const EdgeInsets.only(left: 18),
+            padding: const EdgeInsets.only(left: _OrderGrid.indexW),
             child: Text(delivery, style: _Type.meta),
           ),
         ],
@@ -994,8 +949,8 @@ class _TotalsBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerRight,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 320),
+      child: SizedBox(
+        width: _OrderGrid.totalsBlockW,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1026,7 +981,7 @@ class _TotalsBlock extends StatelessWidget {
             const Divider(height: 1, color: AppColors.outlinePanel),
             const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               decoration: BoxDecoration(
                 color: AppColors.primaryContainer,
                 borderRadius: BorderRadius.circular(AppRadius.md),
@@ -1072,14 +1027,18 @@ class _TotalLine extends StatelessWidget {
                 : _Type.label.copyWith(fontSize: 13.5),
           ),
         ),
-        Text(
-          value,
-          style: emphasize
-              ? _Type.amount.copyWith(fontSize: 16)
-              : _Type.tableCell.copyWith(
-                  color: muted ? AppColors.textFaint : AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+        SizedBox(
+          width: _OrderGrid.amountW,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: emphasize
+                ? _Type.amount.copyWith(fontSize: 16)
+                : _Type.tableCell.copyWith(
+                    color: muted ? AppColors.textFaint : AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+          ),
         ),
       ],
     );
@@ -1094,6 +1053,7 @@ class _CompactTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < events.length; i++) ...[
           if (i > 0) const SizedBox(height: 10),
@@ -1125,10 +1085,7 @@ class _CompactTimeline extends StatelessWidget {
                     if (events[i].detail != null &&
                         events[i].detail!.trim().isNotEmpty) ...[
                       const SizedBox(height: 2),
-                      Text(
-                        events[i].detail!,
-                        style: _Type.body,
-                      ),
+                      Text(events[i].detail!, style: _Type.body),
                     ],
                   ],
                 ),
@@ -1153,7 +1110,7 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(label.toUpperCase(), style: _Type.section),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         child,
       ],
     );
@@ -1172,9 +1129,9 @@ abstract final class _Type {
 
   static const TextStyle subtitle = TextStyle(
     fontFamily: AppTypography.fontFamily,
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: FontWeight.w500,
-    height: 1.35,
+    height: 1.3,
     color: AppColors.textSecondary,
   );
 
@@ -1191,7 +1148,7 @@ abstract final class _Type {
     fontFamily: AppTypography.fontFamily,
     fontSize: 12.5,
     fontWeight: FontWeight.w500,
-    height: 1.3,
+    height: 1.25,
     color: AppColors.textTertiary,
   );
 
@@ -1200,7 +1157,7 @@ abstract final class _Type {
     fontSize: 14.5,
     fontWeight: FontWeight.w600,
     letterSpacing: -0.1,
-    height: 1.3,
+    height: 1.25,
     color: AppColors.textPrimary,
   );
 
@@ -1242,7 +1199,7 @@ abstract final class _Type {
     fontFamily: AppTypography.fontFamily,
     fontSize: 12.5,
     fontWeight: FontWeight.w500,
-    height: 1.35,
+    height: 1.3,
     color: AppColors.textFaint,
   );
 
@@ -1250,7 +1207,15 @@ abstract final class _Type {
     fontFamily: AppTypography.fontFamily,
     fontSize: 13.5,
     fontWeight: FontWeight.w500,
-    height: 1.45,
+    height: 1.4,
+    color: AppColors.textSecondary,
+  );
+
+  static const TextStyle accountHeading = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 12.5,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
     color: AppColors.textSecondary,
   );
 }

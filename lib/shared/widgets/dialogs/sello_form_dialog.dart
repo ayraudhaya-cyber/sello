@@ -698,27 +698,38 @@ class SelloDialogFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasDestructive = destructiveLabel != null && onDestructive != null;
 
+    // Left actions grow/wrap; Close + primary stay pinned to the right edge.
     // Padding / top rule live on [SelloFormDialog] so every modal footer
     // shares the same inset — including custom Rows.
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (hasDestructive)
-          SelloButton(
-            label: destructiveLabel!,
-            variant: SelloButtonVariant.danger,
-            onPressed: onDestructive,
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (hasDestructive)
+                  SelloButton(
+                    label: destructiveLabel!,
+                    variant: SelloButtonVariant.danger,
+                    onPressed: onDestructive,
+                  ),
+                ?leading,
+              ],
+            ),
           ),
-        if (leading != null) ...[
-          if (hasDestructive) const SizedBox(width: 8),
-          Flexible(child: leading!),
-        ],
-        const Spacer(),
+        ),
+        const SizedBox(width: 16),
         SelloButton(
           label: cancelLabel,
           variant: cancelVariant,
           onPressed: onCancel ?? () => Navigator.of(context).maybePop(),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 12),
         SelloButton(
           label: primaryLabel,
           variant: SelloButtonVariant.primary,

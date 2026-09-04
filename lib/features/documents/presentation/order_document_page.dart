@@ -96,7 +96,7 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                   const SizedBox(height: 20),
                   const Text(
                     'Thank you for your business!',
-                    textAlign: TextAlign.center,
+                    textAlign: TextAlign.left,
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
                       fontSize: 13.5,
@@ -125,36 +125,40 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
   }
 }
 
-/// Tenant issuer mark — logo and/or business name, plus optional contact.
+/// Tenant issuer mark — logo/name on the left, contact top-right.
 class _DocumentIssuerHeader extends StatelessWidget {
   const _DocumentIssuerHeader({required this.identity});
 
   final DocumentIssuerIdentity identity;
 
+  static const _contactStyle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 13,
+    height: 1.45,
+    color: AppColors.textSecondary,
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final mark = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (identity.showLogo && identity.logoUrl != null) ...[
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220, maxHeight: 48),
-              child: Image.network(
-                identity.logoUrl!,
-                fit: BoxFit.contain,
-                alignment: Alignment.centerLeft,
-                filterQuality: FilterQuality.medium,
-                errorBuilder: (_, error, stackTrace) => Text(
-                  identity.businessName,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    color: AppColors.textPrimary,
-                  ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220, maxHeight: 48),
+            child: Image.network(
+              identity.logoUrl!,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, error, stackTrace) => Text(
+                identity.businessName,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                  color: AppColors.textPrimary,
                 ),
               ),
             ),
@@ -172,44 +176,46 @@ class _DocumentIssuerHeader extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-        if (identity.hasContactBlock) ...[
-          const SizedBox(height: 10),
-          if (identity.address != null)
-            Text(
-              identity.address!,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                height: 1.45,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          if (identity.phone != null) ...[
-            if (identity.address != null) const SizedBox(height: 4),
-            Text(
-              identity.phone!,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                height: 1.4,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-          if (identity.email != null) ...[
-            if (identity.address != null || identity.phone != null)
-              const SizedBox(height: 4),
-            Text(
-              identity.email!,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                height: 1.4,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ],
+      ],
+    );
+
+    if (!identity.hasContactBlock) return mark;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: mark),
+        const SizedBox(width: 16),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (identity.address != null)
+                Text(
+                  identity.address!,
+                  textAlign: TextAlign.right,
+                  style: _contactStyle,
+                ),
+              if (identity.phone != null) ...[
+                if (identity.address != null) const SizedBox(height: 4),
+                Text(
+                  identity.phone!,
+                  textAlign: TextAlign.right,
+                  style: _contactStyle,
+                ),
+              ],
+              if (identity.email != null) ...[
+                if (identity.address != null || identity.phone != null)
+                  const SizedBox(height: 4),
+                Text(
+                  identity.email!,
+                  textAlign: TextAlign.right,
+                  style: _contactStyle,
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }

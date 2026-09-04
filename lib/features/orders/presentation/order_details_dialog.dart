@@ -15,7 +15,7 @@ import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
 import 'package:sello/shared/widgets/feedback/entity_activity_panel.dart';
 
-/// Order Workspace — operational profile for a sale.
+/// Internal staff Order Details workspace — not the customer invoice document.
 class OrderDetailsDialog extends ConsumerWidget {
   const OrderDetailsDialog({
     super.key,
@@ -57,7 +57,7 @@ class OrderDetailsDialog extends ConsumerWidget {
 
   final bool readOnly;
 
-  static const double _sectionGap = 32;
+  static const double _sectionGap = 26;
 
   OrderSummary get order => detail.summary;
 
@@ -82,15 +82,18 @@ class OrderDetailsDialog extends ConsumerWidget {
         detail.lines.fold<num>(0, (s, l) => s + l.cancelledQuantity);
     final fieldConfig = ref.watch(productFieldConfigProvider).valueOrNull ??
         ProductFieldConfig(fields: []);
+    final hasNotes = order.notes != null && order.notes!.trim().isNotEmpty;
+    final hasAccountExtras = detail.customerWallet != null ||
+        detail.customerCreditAllowed != null;
 
     return SelloFormDialog(
       header: _OrderHero(order: order),
       maxWidth: kSelloDetailDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
-        isMobile ? 20 : 36,
-        isMobile ? 16 : 20,
-        isMobile ? 20 : 36,
+        isMobile ? 20 : 32,
+        isMobile ? 12 : 16,
+        isMobile ? 20 : 32,
         16,
       ),
       body: Column(
@@ -106,220 +109,141 @@ class OrderDetailsDialog extends ConsumerWidget {
             ),
             const SizedBox(height: _sectionGap),
           ],
-          _Section(
-            label: 'Customer',
-            child: Column(
-              children: [
-                SelloFormRow(
-                  left: _Field(
-                    label: 'Name',
-                    value: order.customerName ?? dash,
-                    mutedEmpty: order.customerName == null,
-                  ),
-                  right: _Field(
-                    label: 'Phone',
-                    value: order.customerPhone ?? dash,
-                    mutedEmpty: order.customerPhone == null,
-                  ),
+          _InfoGrid(
+            customer: _InfoBlock(
+              title: 'Customer',
+              fields: [
+                _InfoField(
+                  label: 'Name',
+                  value: order.customerName ?? dash,
+                  muted: order.customerName == null,
                 ),
-                if (detail.customerOutstanding != null ||
-                    detail.customerWallet != null) ...[
-                  const SizedBox(height: 18),
-                  SelloFormRow(
-                    left: _Field(
-                      label: 'Outstanding balance',
-                      value: SelloFormatters.currency(
-                        detail.customerOutstanding ?? 0,
-                        symbol: currencySymbol,
-                      ),
-                    ),
-                    right: _Field(
-                      label: 'Wallet',
-                      value: SelloFormatters.currency(
-                        detail.customerWallet ?? 0,
-                        symbol: currencySymbol,
-                      ),
+                _InfoField(
+                  label: 'Phone',
+                  value: order.customerPhone ?? dash,
+                  muted: order.customerPhone == null,
+                ),
+                if (detail.customerOutstanding != null)
+                  _InfoField(
+                    label: 'Outstanding balance',
+                    value: SelloFormatters.currency(
+                      detail.customerOutstanding!,
+                      symbol: currencySymbol,
                     ),
                   ),
-                ],
-                if (detail.customerCreditAllowed != null) ...[
-                  const SizedBox(height: 18),
-                  SelloFormRow(
-                    left: _Field(
-                      label: 'Credit',
-                      value: detail.customerCreditAllowed == true
-                          ? SelloFormatters.currency(
-                              detail.customerCreditLimit ?? 0,
-                              symbol: currencySymbol,
-                            )
-                          : 'Not allowed',
-                      mutedEmpty: detail.customerCreditAllowed != true,
-                    ),
-                    right: _Field(
-                      label: 'Sales representative',
-                      value: order.employeeName ?? dash,
-                      mutedEmpty: order.employeeName == null,
-                    ),
-                  ),
-                ],
               ],
             ),
-          ),
-          const SizedBox(height: _sectionGap),
-          if (!order.isDraft) ...[
-            _Section(
-              label: 'Delivery',
-              child: Column(
-                children: [
-                  SelloFormRow(
-                    left: _Field(
-                      label: 'Ordered',
-                      value: SelloFormatters.quantity(totalOrdered),
-                    ),
-                    right: _Field(
-                      label: 'Delivered',
-                      value: SelloFormatters.quantity(totalDelivered),
-                    ),
+            order: _InfoBlock(
+              title: 'Order',
+              fields: [
+                _InfoField(
+                  label: 'Order date',
+                  value: SelloFormatters.date(order.orderedAt),
+                ),
+                _InfoField(
+                  label: 'Sales representative',
+                  value: order.employeeName ?? dash,
+                  muted: order.employeeName == null,
+                ),
+                if (order.paymentMethod != null)
+                  _InfoField(
+                    label: 'Payment method',
+                    value: order.paymentMethod!.label,
                   ),
-                  const SizedBox(height: 18),
-                  SelloFormRow(
-                    left: _Field(
-                      label: 'Remaining',
-                      value: SelloFormatters.quantity(totalRemaining),
-                    ),
-                    right: _Field(
-                      label: 'Cancelled',
-                      value: totalCancelled > 0
-                          ? SelloFormatters.quantity(totalCancelled)
-                          : dash,
-                      mutedEmpty: totalCancelled <= 0,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  SelloFormRow(
-                    left: _Field(
-                      label: 'Order date',
-                      value: SelloFormatters.date(order.orderedAt),
-                    ),
-                    right: _Field(
-                      label: 'Payment',
-                      value: order.paymentStatus.label,
-                    ),
-                  ),
-                  if (canFulfill && onFulfillAll != null) ...[
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: SelloButton(
-                        label: 'Deliver remaining',
-                        variant: SelloButtonVariant.outline,
-                        size: SelloButtonSize.small,
-                        onPressed: onFulfillAll,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              ],
             ),
-            const SizedBox(height: _sectionGap),
+            delivery: order.isDraft
+                ? null
+                : _InfoBlock(
+                    title: 'Delivery',
+                    fields: [
+                      _InfoField(
+                        label: 'Ordered',
+                        value: SelloFormatters.quantity(totalOrdered),
+                      ),
+                      _InfoField(
+                        label: 'Delivered',
+                        value: SelloFormatters.quantity(totalDelivered),
+                      ),
+                      _InfoField(
+                        label: 'Remaining',
+                        value: SelloFormatters.quantity(totalRemaining),
+                      ),
+                      if (totalCancelled > 0)
+                        _InfoField(
+                          label: 'Cancelled',
+                          value: SelloFormatters.quantity(totalCancelled),
+                        ),
+                    ],
+                    trailing: canFulfill && onFulfillAll != null
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: SelloButton(
+                              label: 'Deliver remaining',
+                              variant: SelloButtonVariant.outline,
+                              size: SelloButtonSize.small,
+                              onPressed: onFulfillAll,
+                            ),
+                          )
+                        : null,
+                  ),
+          ),
+          if (hasAccountExtras) ...[
+            const SizedBox(height: 10),
+            _AccountExtras(
+              currencySymbol: currencySymbol,
+              wallet: detail.customerWallet,
+              creditAllowed: detail.customerCreditAllowed,
+              creditLimit: detail.customerCreditLimit,
+            ),
           ],
+          const SizedBox(height: _sectionGap),
           _Section(
             label: 'Products',
             child: detail.lines.isEmpty
                 ? Text(
                     'No products on this order.',
-                    style: _Type.label.copyWith(color: AppColors.textFaint),
+                    style: _Type.meta,
                   )
-                : Column(
-                    children: [
-                      for (var i = 0; i < detail.lines.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 14),
-                        _LineRow(
-                          line: detail.lines[i],
-                          currencySymbol: currencySymbol,
-                          catalogFields: fieldConfig.forCatalog,
-                          showFulfillment: !order.isDraft,
-                        ),
-                      ],
-                    ],
+                : _ProductsTable(
+                    lines: detail.lines,
+                    currencySymbol: currencySymbol,
+                    catalogFields: fieldConfig.forCatalog,
+                    showDelivery: !order.isDraft,
                   ),
           ),
           const SizedBox(height: _sectionGap),
           _Section(
             label: 'Totals',
-            child: Column(
-              children: [
-                SelloFormRow(
-                  left: _Field(
-                    label: 'Subtotal',
-                    value: SelloFormatters.currency(
-                      order.subtotal,
-                      symbol: currencySymbol,
-                    ),
-                  ),
-                  right: _Field(
-                    label: 'Discount',
-                    value: SelloFormatters.currency(
-                      order.discountAmount,
-                      symbol: currencySymbol,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _Field(
-                    label: 'Tax',
-                    value: order.taxAmount > 0
-                        ? SelloFormatters.currency(
-                            order.taxAmount,
-                            symbol: currencySymbol,
-                          )
-                        : 'Reserved',
-                    mutedEmpty: order.taxAmount <= 0,
-                  ),
-                  right: _Field(
-                    label: 'Grand total',
-                    value: SelloFormatters.currency(
-                      order.total,
-                      symbol: currencySymbol,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _Field(
-                    label: 'Payment status',
-                    value: order.paymentStatus.label,
-                  ),
-                  right: _Field(
-                    label: 'Order status',
-                    value: order.status.label,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                _Field(
-                  label: 'Payment method',
-                  value: order.paymentMethod?.label ?? dash,
-                  mutedEmpty: order.paymentMethod == null,
-                ),
-              ],
+            child: _TotalsBlock(
+              currencySymbol: currencySymbol,
+              subtotal: order.subtotal,
+              discount: order.discountAmount,
+              tax: order.taxAmount,
+              total: order.total,
             ),
           ),
-          if (order.notes != null && order.notes!.trim().isNotEmpty) ...[
+          if (hasNotes) ...[
             const SizedBox(height: _sectionGap),
             _Section(
               label: 'Notes',
               child: Text(
-                order.notes!,
-                style: _Type.value.copyWith(
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
-                ),
+                order.notes!.trim(),
+                style: _Type.body,
               ),
             ),
           ],
           const SizedBox(height: _sectionGap),
+          _Section(
+            label: 'Activity',
+            child: detail.timeline.isEmpty
+                ? Text(
+                    'No activity recorded yet.',
+                    style: _Type.meta,
+                  )
+                : _CompactTimeline(events: detail.timeline),
+          ),
+          const SizedBox(height: 18),
           _Section(
             label: 'Company activity',
             child: EntityActivityPanel(
@@ -327,16 +251,6 @@ class OrderDetailsDialog extends ConsumerWidget {
               referenceId: order.id,
               emptyMessage: 'Company activity for this order will appear here.',
             ),
-          ),
-          const SizedBox(height: _sectionGap),
-          _Section(
-            label: 'Timeline',
-            child: detail.timeline.isEmpty
-                ? Text(
-                    'No activity recorded yet.',
-                    style: _Type.label.copyWith(color: AppColors.textFaint),
-                  )
-                : _Timeline(events: detail.timeline),
           ),
         ],
       ),
@@ -483,14 +397,10 @@ class _OrderHero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(order.orderNumber, style: _Type.title),
-        if (meta.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(meta.join(' · '), style: _Type.subtitle),
-        ],
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
-          runSpacing: 8,
+          runSpacing: 6,
           children: [
             SelloStatusBadge(
               label: order.status.label,
@@ -513,6 +423,10 @@ class _OrderHero extends StatelessWidget {
             ),
           ],
         ),
+        if (meta.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(meta.join(' · '), style: _Type.subtitle),
+        ],
       ],
     );
   }
@@ -534,10 +448,10 @@ class _NoticeBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(AppRadius.panel),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.outlinePanel),
       ),
       child: Row(
@@ -546,9 +460,327 @@ class _NoticeBanner extends StatelessWidget {
           Icon(icon, size: 18, color: tone),
           const SizedBox(width: 10),
           Expanded(
+            child: Text(message, style: _Type.body),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoField {
+  const _InfoField({
+    required this.label,
+    required this.value,
+    this.muted = false,
+  });
+
+  final String label;
+  final String value;
+  final bool muted;
+}
+
+class _InfoBlock {
+  const _InfoBlock({
+    required this.title,
+    required this.fields,
+    this.trailing,
+  });
+
+  final String title;
+  final List<_InfoField> fields;
+  final Widget? trailing;
+}
+
+class _InfoGrid extends StatelessWidget {
+  const _InfoGrid({
+    required this.customer,
+    required this.order,
+    this.delivery,
+  });
+
+  final _InfoBlock customer;
+  final _InfoBlock order;
+  final _InfoBlock? delivery;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = <_InfoBlock>[
+      customer,
+      order,
+      ?delivery,
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 720 && blocks.length > 1;
+        if (!wide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < blocks.length; i++) ...[
+                if (i > 0) ...[
+                  const SizedBox(height: 18),
+                  const Divider(height: 1, color: AppColors.outlinePanel),
+                  const SizedBox(height: 18),
+                ],
+                _InfoBlockView(block: blocks[i]),
+              ],
+            ],
+          );
+        }
+
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < blocks.length; i++) ...[
+                if (i > 0) ...[
+                  const SizedBox(width: 20),
+                  const VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: AppColors.outlinePanel,
+                  ),
+                  const SizedBox(width: 20),
+                ],
+                Expanded(child: _InfoBlockView(block: blocks[i])),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _InfoBlockView extends StatelessWidget {
+  const _InfoBlockView({required this.block});
+
+  final _InfoBlock block;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(block.title.toUpperCase(), style: _Type.section),
+        const SizedBox(height: 12),
+        for (var i = 0; i < block.fields.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          _CompactField(field: block.fields[i]),
+        ],
+        if (block.trailing != null) ...[
+          const SizedBox(height: 12),
+          block.trailing!,
+        ],
+      ],
+    );
+  }
+}
+
+class _CompactField extends StatelessWidget {
+  const _CompactField({required this.field});
+
+  final _InfoField field;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(field.label, style: _Type.label),
+        const SizedBox(height: 3),
+        Text(
+          field.value,
+          style: _Type.value.copyWith(
+            color: field.muted ? AppColors.textFaint : AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AccountExtras extends StatelessWidget {
+  const _AccountExtras({
+    required this.currencySymbol,
+    this.wallet,
+    this.creditAllowed,
+    this.creditLimit,
+  });
+
+  final String currencySymbol;
+  final num? wallet;
+  final bool? creditAllowed;
+  final num? creditLimit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 4),
+        visualDensity: VisualDensity.compact,
+        title: Text(
+          'Customer account',
+          style: _Type.label.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          'Wallet and credit details',
+          style: _Type.meta,
+        ),
+        children: [
+          if (wallet != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _CompactField(
+                field: _InfoField(
+                  label: 'Wallet',
+                  value: SelloFormatters.currency(
+                    wallet!,
+                    symbol: currencySymbol,
+                  ),
+                ),
+              ),
+            ),
+          if (creditAllowed != null)
+            _CompactField(
+              field: _InfoField(
+                label: 'Credit',
+                value: creditAllowed == true
+                    ? SelloFormatters.currency(
+                        creditLimit ?? 0,
+                        symbol: currencySymbol,
+                      )
+                    : 'Not allowed',
+                muted: creditAllowed != true,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductsTable extends StatelessWidget {
+  const _ProductsTable({
+    required this.lines,
+    required this.currencySymbol,
+    required this.catalogFields,
+    required this.showDelivery,
+  });
+
+  final List<OrderLineItem> lines;
+  final String currencySymbol;
+  final List<CompanyProductField> catalogFields;
+  final bool showDelivery;
+
+  static const double _qtyW = 64;
+  static const double _priceW = 100;
+  static const double _amountW = 108;
+  static const double _indexW = 28;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTable = constraints.maxWidth >= 560;
+        if (!useTable) {
+          return Column(
+            children: [
+              for (var i = 0; i < lines.length; i++) ...[
+                if (i > 0)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1, color: AppColors.outlinePanel),
+                  ),
+                _ProductMobileRow(
+                  index: i + 1,
+                  line: lines[i],
+                  currencySymbol: currencySymbol,
+                  catalogFields: catalogFields,
+                  showDelivery: showDelivery,
+                ),
+              ],
+            ],
+          );
+        }
+
+        return Column(
+          children: [
+            const _ProductHeaderRow(
+              indexW: _indexW,
+              qtyW: _qtyW,
+              priceW: _priceW,
+              amountW: _amountW,
+            ),
+            const Divider(height: 1, color: AppColors.outlinePanel),
+            for (var i = 0; i < lines.length; i++) ...[
+              _ProductDataRow(
+                index: i + 1,
+                line: lines[i],
+                currencySymbol: currencySymbol,
+                catalogFields: catalogFields,
+                showDelivery: showDelivery,
+                indexW: _indexW,
+                qtyW: _qtyW,
+                priceW: _priceW,
+                amountW: _amountW,
+              ),
+              if (i < lines.length - 1)
+                const Divider(height: 1, color: AppColors.outlinePanel),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ProductHeaderRow extends StatelessWidget {
+  const _ProductHeaderRow({
+    required this.indexW,
+    required this.qtyW,
+    required this.priceW,
+    required this.amountW,
+  });
+
+  final double indexW;
+  final double qtyW;
+  final double priceW;
+  final double amountW;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: indexW,
+            child: Text('#', style: _Type.tableHead),
+          ),
+          Expanded(child: Text('Product', style: _Type.tableHead)),
+          SizedBox(
+            width: qtyW,
+            child: Text('Qty', textAlign: TextAlign.right, style: _Type.tableHead),
+          ),
+          SizedBox(
+            width: priceW,
             child: Text(
-              message,
-              style: _Type.label.copyWith(height: 1.4),
+              'Unit price',
+              textAlign: TextAlign.right,
+              style: _Type.tableHead,
+            ),
+          ),
+          SizedBox(
+            width: amountW,
+            child: Text(
+              'Amount',
+              textAlign: TextAlign.right,
+              style: _Type.tableHead,
             ),
           ),
         ],
@@ -557,47 +789,326 @@ class _NoticeBanner extends StatelessWidget {
   }
 }
 
-class _Timeline extends StatelessWidget {
-  const _Timeline({required this.events});
+class _ProductDataRow extends StatelessWidget {
+  const _ProductDataRow({
+    required this.index,
+    required this.line,
+    required this.currencySymbol,
+    required this.catalogFields,
+    required this.showDelivery,
+    required this.indexW,
+    required this.qtyW,
+    required this.priceW,
+    required this.amountW,
+  });
+
+  final int index;
+  final OrderLineItem line;
+  final String currencySymbol;
+  final List<CompanyProductField> catalogFields;
+  final bool showDelivery;
+  final double indexW;
+  final double qtyW;
+  final double priceW;
+  final double amountW;
+
+  @override
+  Widget build(BuildContext context) {
+    final specs = _productSpecs(line, catalogFields);
+    final delivery = showDelivery ? _deliveryLine(line) : null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: indexW,
+            child: Text('$index', style: _Type.meta),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  line.productName ?? 'Product',
+                  style: _Type.productName,
+                ),
+                if (specs != null) ...[
+                  const SizedBox(height: 2),
+                  Text(specs, style: _Type.meta),
+                ],
+                if (delivery != null) ...[
+                  const SizedBox(height: 2),
+                  Text(delivery, style: _Type.meta),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(
+            width: qtyW,
+            child: Text(
+              SelloFormatters.quantity(line.quantity),
+              textAlign: TextAlign.right,
+              style: _Type.tableCell,
+            ),
+          ),
+          SizedBox(
+            width: priceW,
+            child: Text(
+              SelloFormatters.currency(line.unitPrice, symbol: currencySymbol),
+              textAlign: TextAlign.right,
+              style: _Type.tableCell,
+            ),
+          ),
+          SizedBox(
+            width: amountW,
+            child: Text(
+              SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
+              textAlign: TextAlign.right,
+              style: _Type.amount,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductMobileRow extends StatelessWidget {
+  const _ProductMobileRow({
+    required this.index,
+    required this.line,
+    required this.currencySymbol,
+    required this.catalogFields,
+    required this.showDelivery,
+  });
+
+  final int index;
+  final OrderLineItem line;
+  final String currencySymbol;
+  final List<CompanyProductField> catalogFields;
+  final bool showDelivery;
+
+  @override
+  Widget build(BuildContext context) {
+    final specs = _productSpecs(line, catalogFields);
+    final delivery = showDelivery ? _deliveryLine(line) : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$index.', style: _Type.meta),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                line.productName ?? 'Product',
+                style: _Type.productName,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
+              style: _Type.amount,
+            ),
+          ],
+        ),
+        if (specs != null) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 18),
+            child: Text(specs, style: _Type.meta),
+          ),
+        ],
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 18),
+          child: Text(
+            '${SelloFormatters.quantity(line.quantity)} × '
+            '${SelloFormatters.currency(line.unitPrice, symbol: currencySymbol)}',
+            style: _Type.tableCell,
+          ),
+        ),
+        if (delivery != null) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 18),
+            child: Text(delivery, style: _Type.meta),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+String? _productSpecs(
+  OrderLineItem line,
+  List<CompanyProductField> catalogFields,
+) {
+  final parts = <String>[];
+  if (line.productSku != null && line.productSku!.isNotEmpty) {
+    parts.add(line.productSku!);
+  }
+  if (line.productBrand != null && line.productBrand!.trim().isNotEmpty) {
+    parts.add(line.productBrand!.trim());
+  }
+  for (final field in catalogFields) {
+    if (field.definition.storage != ProductFieldStorage.attribute) continue;
+    final raw = line.productAttributes[field.fieldKey];
+    if (raw == null || raw.trim().isEmpty) continue;
+    final display = field.definition.fieldType == ProductFieldType.country
+        ? CountryCatalog.display(raw)
+        : raw.trim();
+    parts.add(display);
+    if (parts.length >= 4) break;
+  }
+  if (parts.isEmpty) return null;
+  return parts.join(' · ');
+}
+
+String _deliveryLine(OrderLineItem line) {
+  return '${SelloFormatters.quantity(line.deliveredQuantity)} delivered · '
+      '${SelloFormatters.quantity(line.remainingQuantity)} remaining'
+      '${line.cancelledQuantity > 0 ? ' · ${SelloFormatters.quantity(line.cancelledQuantity)} cancelled' : ''}';
+}
+
+class _TotalsBlock extends StatelessWidget {
+  const _TotalsBlock({
+    required this.currencySymbol,
+    required this.subtotal,
+    required this.discount,
+    required this.tax,
+    required this.total,
+  });
+
+  final String currencySymbol;
+  final num subtotal;
+  final num discount;
+  final num tax;
+  final num total;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 320),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TotalLine(
+              label: 'Subtotal',
+              value: SelloFormatters.currency(
+                subtotal,
+                symbol: currencySymbol,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _TotalLine(
+              label: 'Discount',
+              value: SelloFormatters.currency(
+                discount,
+                symbol: currencySymbol,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _TotalLine(
+              label: 'Tax',
+              value: tax > 0
+                  ? SelloFormatters.currency(tax, symbol: currencySymbol)
+                  : '—',
+              muted: tax <= 0,
+            ),
+            const SizedBox(height: 10),
+            const Divider(height: 1, color: AppColors.outlinePanel),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: _TotalLine(
+                label: 'Grand total',
+                value: SelloFormatters.currency(
+                  total,
+                  symbol: currencySymbol,
+                ),
+                emphasize: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TotalLine extends StatelessWidget {
+  const _TotalLine({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+    this.muted = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: emphasize
+                ? _Type.productName
+                : _Type.label.copyWith(fontSize: 13.5),
+          ),
+        ),
+        Text(
+          value,
+          style: emphasize
+              ? _Type.amount.copyWith(fontSize: 16)
+              : _Type.tableCell.copyWith(
+                  color: muted ? AppColors.textFaint : AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactTimeline extends StatelessWidget {
+  const _CompactTimeline({required this.events});
 
   final List<OrderTimelineEvent> events;
-
-  IconData _iconFor(OrderTimelineKind kind) {
-    return switch (kind) {
-      OrderTimelineKind.created => Icons.fiber_new_rounded,
-      OrderTimelineKind.updated => Icons.edit_outlined,
-      OrderTimelineKind.submitted => Icons.send_rounded,
-      OrderTimelineKind.completed => Icons.check_circle_outline_rounded,
-      OrderTimelineKind.cancelled => Icons.cancel_outlined,
-      OrderTimelineKind.stockMoved => Icons.inventory_2_outlined,
-      OrderTimelineKind.paymentReceived => Icons.payments_outlined,
-      OrderTimelineKind.archived => Icons.archive_outlined,
-      OrderTimelineKind.note => Icons.sticky_note_2_outlined,
-    };
-  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         for (var i = 0; i < events.length; i++) ...[
-          if (i > 0) const SizedBox(height: 12),
+          if (i > 0) const SizedBox(height: 10),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceMuted,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.outlinePanel),
-                ),
-                child: Icon(
-                  _iconFor(events[i].kind),
-                  size: 16,
-                  color: AppColors.textSecondary,
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.brandViolet,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -605,21 +1116,18 @@ class _Timeline extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(events[i].title, style: _Type.value),
+                    Text(events[i].title, style: _Type.productName),
                     const SizedBox(height: 2),
                     Text(
                       SelloFormatters.dateTime(events[i].at),
-                      style: _Type.label.copyWith(color: AppColors.textFaint),
+                      style: _Type.meta,
                     ),
                     if (events[i].detail != null &&
                         events[i].detail!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         events[i].detail!,
-                        style: _Type.label.copyWith(
-                          color: AppColors.textSecondary,
-                          height: 1.35,
-                        ),
+                        style: _Type.body,
                       ),
                     ],
                   ],
@@ -645,125 +1153,8 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(label.toUpperCase(), style: _Type.section),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         child,
-      ],
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.value,
-    this.mutedEmpty = false,
-  });
-
-  final String label;
-  final String value;
-  final bool mutedEmpty;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: _Type.label),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: _Type.value.copyWith(
-            color: mutedEmpty ? AppColors.textFaint : AppColors.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LineRow extends StatelessWidget {
-  const _LineRow({
-    required this.line,
-    required this.currencySymbol,
-    required this.catalogFields,
-    this.showFulfillment = false,
-  });
-
-  final OrderLineItem line;
-  final String currencySymbol;
-  final List<CompanyProductField> catalogFields;
-  final bool showFulfillment;
-
-  String? _specLine() {
-    final parts = <String>[];
-    if (line.productSku != null && line.productSku!.isNotEmpty) {
-      parts.add(line.productSku!);
-    }
-    if (line.productBrand != null && line.productBrand!.trim().isNotEmpty) {
-      parts.add(line.productBrand!.trim());
-    }
-    for (final field in catalogFields) {
-      if (field.definition.storage != ProductFieldStorage.attribute) continue;
-      final raw = line.productAttributes[field.fieldKey];
-      if (raw == null || raw.trim().isEmpty) continue;
-      final display = field.definition.fieldType == ProductFieldType.country
-          ? CountryCatalog.display(raw)
-          : raw.trim();
-      parts.add(display);
-      if (parts.length >= 4) break;
-    }
-    if (parts.isEmpty) return null;
-    return parts.join(' · ');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final specs = _specLine();
-    final discount = line.discount != null && line.discount! > 0
-        ? ' · Disc ${line.discountType == 'percentage' ? '${line.discount}%' : SelloFormatters.currency(line.discount!, symbol: currencySymbol)}'
-        : '';
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                line.productName ?? 'Product',
-                style: _Type.value.copyWith(fontSize: 16),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${SelloFormatters.quantity(line.quantity)} × '
-                '${SelloFormatters.currency(line.unitPrice, symbol: currencySymbol)}'
-                '$discount',
-                style: _Type.label.copyWith(color: AppColors.textSecondary),
-              ),
-              if (showFulfillment) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '${SelloFormatters.quantity(line.deliveredQuantity)} delivered · '
-                  '${SelloFormatters.quantity(line.remainingQuantity)} remaining'
-                  '${line.cancelledQuantity > 0 ? ' · ${SelloFormatters.quantity(line.cancelledQuantity)} cancelled' : ''}',
-                  style: _Type.label.copyWith(color: AppColors.textFaint),
-                ),
-              ],
-              if (specs != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  specs,
-                  style: _Type.label.copyWith(color: AppColors.textFaint),
-                ),
-              ],
-            ],
-          ),
-        ),
-        Text(
-          SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
-          style: _Type.value,
-        ),
       ],
     );
   }
@@ -772,18 +1163,18 @@ class _LineRow extends StatelessWidget {
 abstract final class _Type {
   static const TextStyle title = TextStyle(
     fontFamily: AppTypography.fontFamily,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: FontWeight.w700,
-    letterSpacing: -0.45,
+    letterSpacing: -0.4,
     height: 1.15,
     color: AppColors.textPrimary,
   );
 
   static const TextStyle subtitle = TextStyle(
     fontFamily: AppTypography.fontFamily,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: FontWeight.w500,
-    height: 1.4,
+    height: 1.35,
     color: AppColors.textSecondary,
   );
 
@@ -798,18 +1189,68 @@ abstract final class _Type {
 
   static const TextStyle label = TextStyle(
     fontFamily: AppTypography.fontFamily,
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: FontWeight.w500,
     height: 1.3,
-    color: AppColors.textSecondary,
+    color: AppColors.textTertiary,
   );
 
   static const TextStyle value = TextStyle(
     fontFamily: AppTypography.fontFamily,
-    fontSize: 18,
+    fontSize: 14.5,
     fontWeight: FontWeight.w600,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
     height: 1.3,
     color: AppColors.textPrimary,
+  );
+
+  static const TextStyle productName = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 14.5,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.1,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+
+  static const TextStyle tableHead = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    height: 1.2,
+    color: AppColors.textTertiary,
+  );
+
+  static const TextStyle tableCell = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 13.5,
+    fontWeight: FontWeight.w500,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+
+  static const TextStyle amount = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 14.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.15,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+
+  static const TextStyle meta = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 12.5,
+    fontWeight: FontWeight.w500,
+    height: 1.35,
+    color: AppColors.textFaint,
+  );
+
+  static const TextStyle body = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 13.5,
+    fontWeight: FontWeight.w500,
+    height: 1.45,
+    color: AppColors.textSecondary,
   );
 }

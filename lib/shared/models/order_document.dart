@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:sello/shared/models/client_branding.dart';
 import 'package:sello/shared/models/company_settings.dart';
+import 'package:sello/shared/models/document_issuer_identity.dart';
 import 'package:sello/shared/utils/formatters.dart';
 
 num _numValue(dynamic value) {
@@ -69,6 +70,7 @@ class OrderDocument extends Equatable {
     this.logoLightUrl,
     this.primaryColor,
     this.customBrandingEnabled = false,
+    this.showBusinessNameWithLogo = false,
     this.customerPhone,
     this.customerAddress,
     this.salesRepName,
@@ -97,6 +99,9 @@ class OrderDocument extends Equatable {
   final String? logoLightUrl;
   final String? primaryColor;
   final bool customBrandingEnabled;
+
+  /// When a logo exists, also show [companyName]. Ignored when no logo.
+  final bool showBusinessNameWithLogo;
   final String customerName;
   final String? customerPhone;
   final String? customerAddress;
@@ -127,6 +132,7 @@ class OrderDocument extends Equatable {
     return orderNumber.isEmpty ? 'Order' : 'Order $orderNumber';
   }
 
+  /// Theme accents only — issuer logo is [issuerIdentity], never the Sello mark.
   ClientBranding get branding => customBrandingEnabled
       ? ClientBranding.resolve(
           logoUrl: logoUrl,
@@ -134,6 +140,13 @@ class OrderDocument extends Equatable {
           primaryColor: primaryColor,
         )
       : ClientBranding.sello;
+
+  DocumentIssuerIdentity get issuerIdentity => DocumentIssuerIdentity.resolve(
+        companyName: companyName,
+        logoUrl: logoUrl,
+        logoLightUrl: logoLightUrl,
+        showBusinessNameWithLogo: showBusinessNameWithLogo,
+      );
 
   String get currencySymbol => SelloFormatters.currencySymbol(currencyCode);
 
@@ -176,7 +189,7 @@ class OrderDocument extends Equatable {
       paymentMethod: _stringValue(json['payment_method']) ??
           _stringValue(json['method']),
       notes: _stringValue(json['notes']),
-      companyName: _stringValue(json['company_name']) ?? 'Sello',
+      companyName: _stringValue(json['company_name']) ?? 'Business',
       companyLegalName: _stringValue(json['company_legal_name']),
       currencyCode: _stringValue(json['currency']) ?? 'USD',
       currencyPosition: CurrencyPosition.fromDb(
@@ -186,6 +199,8 @@ class OrderDocument extends Equatable {
       logoLightUrl: _stringValue(json['logo_light_url']),
       primaryColor: _stringValue(json['primary_color']),
       customBrandingEnabled: json['custom_branding_enabled'] == true,
+      showBusinessNameWithLogo:
+          json['document_show_business_name_with_logo'] == true,
       customerName: _stringValue(json['customer_name']) ?? 'Customer',
       customerPhone: _stringValue(json['customer_phone']),
       customerAddress: _stringValue(json['customer_address']),

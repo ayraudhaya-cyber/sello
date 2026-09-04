@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/product_repository.dart';
+import 'package:sello/features/hub/inventory/application/inventory_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/models/product_category.dart';
@@ -210,6 +211,8 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
       );
       await _loadCategories();
       await loadProducts(showLoading: false);
+      // Product upsert seeds/adjusts stock — keep Inventory valuation in sync.
+      unawaited(refreshHubInventoryQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
 
       final needsMediaSync = gallery.any(

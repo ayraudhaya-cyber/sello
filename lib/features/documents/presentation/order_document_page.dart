@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/documents/presentation/order_document_print.dart';
+import 'package:sello/shared/models/document_issuer_identity.dart';
 import 'package:sello/shared/models/order_document.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -82,37 +83,7 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: BrandedLogo(
-                      size: 36,
-                      maxWidth: 220,
-                      branding: branding,
-                      onLightSurface: true,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    doc.companyName,
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  if (doc.companyLegalName != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      doc.companyLegalName!,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 13,
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
-                  ],
+                  _DocumentIssuerHeader(identity: doc.issuerIdentity),
                   const SizedBox(height: 22),
                   if (doc.purpose.isPaymentDocument)
                     _PaymentDocumentCard(doc: doc)
@@ -134,6 +105,58 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Tenant issuer mark — logo and/or business name. Never the Sello logo.
+class _DocumentIssuerHeader extends StatelessWidget {
+  const _DocumentIssuerHeader({required this.identity});
+
+  final DocumentIssuerIdentity identity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (identity.showLogo && identity.logoUrl != null) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220, maxHeight: 48),
+              child: Image.network(
+                identity.logoUrl!,
+                fit: BoxFit.contain,
+                alignment: Alignment.centerLeft,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (_, error, stackTrace) => Text(
+                  identity.businessName,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (identity.showBusinessName) const SizedBox(height: 14),
+        ],
+        if (identity.showBusinessName)
+          Text(
+            identity.businessName,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+              color: AppColors.textPrimary,
+            ),
+          ),
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/hub/settings/presentation/about_settings_section.dart';
 import 'package:sello/features/hub/settings/presentation/branding_settings_section.dart';
+import 'package:sello/features/hub/settings/presentation/document_identity_settings_section.dart';
 import 'package:sello/features/hub/settings/presentation/outbound_messaging_settings.dart';
 import 'package:sello/features/hub/settings/presentation/reliability_settings_section.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
@@ -250,23 +251,30 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
         child: KeyedSubtree(
           key: ValueKey(section),
           child: switch (section) {
-            SettingsSectionId.business => _BusinessSection(
-              state: state,
-              currencies: _currencies,
-              monthLabels: _monthLabels,
-              onChanged: (update) =>
-                  ref.read(hubSettingsProvider.notifier).patchDraft(update),
-              onSave: _save,
-              onDiscard: () {
-                ref.read(hubSettingsProvider.notifier).discardDraft();
-                final level = ref
-                    .read(hubSettingsProvider)
-                    .settings
-                    ?.defaultReorderLevel;
-                if (level != null) _reorderLevel.text = level.toString();
-                setState(() => _reorderError = null);
-              },
-            ),
+            SettingsSectionId.business => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _BusinessSection(
+                    state: state,
+                    currencies: _currencies,
+                    monthLabels: _monthLabels,
+                    onChanged: (update) =>
+                        ref.read(hubSettingsProvider.notifier).patchDraft(update),
+                    onSave: _save,
+                    onDiscard: () {
+                      ref.read(hubSettingsProvider.notifier).discardDraft();
+                      final level = ref
+                          .read(hubSettingsProvider)
+                          .settings
+                          ?.defaultReorderLevel;
+                      if (level != null) _reorderLevel.text = level.toString();
+                      setState(() => _reorderError = null);
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  const DocumentIdentitySettingsSection(),
+                ],
+              ),
             SettingsSectionId.branding => const BrandingSettingsSection(),
             SettingsSectionId.inventory => _InventorySection(
               state: state,

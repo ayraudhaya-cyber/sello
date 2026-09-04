@@ -89,8 +89,11 @@ abstract final class OutboundPlaceholders {
   }
 
   /// Sample values for the Settings preview (never real tenant data).
-  static Map<String, String?> previewValues(OutboundNotificationType type) {
-    final link = 'https://app.sello.example/d/preview';
+  static Map<String, String?> previewValues(
+    OutboundNotificationType type, {
+    bool includeDocumentLink = true,
+  }) {
+    final link = includeDocumentLink ? 'https://app.sello.example/d/preview' : null;
     final shared = <String, String?>{
       'customer_name': 'City Mart',
       'business_name': 'Your business',

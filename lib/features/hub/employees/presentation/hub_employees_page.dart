@@ -277,12 +277,19 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
         SelloButton(
           label: 'Add Team Member',
           icon: Icons.person_add_alt_1_rounded,
+          loading: state.isSaving,
           onPressed: state.isSaving ? null : () => _openEditor(),
         ),
       ],
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (state.isSaving) ...[
+            _TeamSavingBanner(
+              message: state.savingProgress ?? 'Working…',
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
           _Toolbar(
             searchController: _searchController,
             state: state,
@@ -520,6 +527,58 @@ extension on Role {
       default:
         return name;
     }
+  }
+}
+
+/// Real in-progress feedback while create/invite/status mutations run.
+class _TeamSavingBanner extends StatelessWidget {
+  const _TeamSavingBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelloCard(
+      enableHoverLift: false,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  strokeCap: StrokeCap.round,
+                  color: context.brandAccent,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: context.texts.bodyMedium?.copyWith(
+                    color: context.selloColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: LinearProgressIndicator(
+              minHeight: 3,
+              backgroundColor: AppColors.primaryContainer,
+              color: context.brandAccent,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

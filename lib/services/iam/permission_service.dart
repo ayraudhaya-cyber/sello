@@ -60,7 +60,10 @@ class PermissionService {
   /// Owner / administrator (settings edit). Managers are view-only.
   bool get canManageCompanyBranding => canEditCompanySettings;
 
-  /// Branding settings require settings edit **and** the tenant entitlement.
+  /// Business logo for invoices/receipts — not gated by Custom Branding.
+  bool get canManageCompanyLogo => canEditCompanySettings;
+
+  /// Branding settings (colours / dual chrome logos) require entitlement.
   bool canAccessBrandingSettings(bool customBrandingEnabled) =>
       customBrandingEnabled && canManageCompanyBranding;
 

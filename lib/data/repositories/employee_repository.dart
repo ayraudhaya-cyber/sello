@@ -502,8 +502,12 @@ class EmployeeRepository {
     required String companyId,
     required String actorEmployeeId,
     required EmployeeUpsertInput input,
+    void Function(String status)? onProgress,
   }) async {
     try {
+      onProgress?.call(
+        input.isCreate ? 'Saving team member…' : 'Updating team member…',
+      );
       final payload = <String, dynamic>{
         'company_id': companyId,
         'full_name': input.fullName.trim(),
@@ -547,12 +551,14 @@ class EmployeeRepository {
       }
 
       if (input.clearAvatar) {
+        onProgress?.call('Updating photo…');
         await _clearAvatar(
           companyId: companyId,
           employeeId: employeeId,
           actorEmployeeId: actorEmployeeId,
         );
       } else if (input.avatarBytes != null && input.avatarBytes!.isNotEmpty) {
+        onProgress?.call('Uploading photo…');
         await _uploadAvatar(
           companyId: companyId,
           employeeId: employeeId,
@@ -573,6 +579,7 @@ class EmployeeRepository {
 
       TeamInviteResult? invite;
       if (input.isCreate) {
+        onProgress?.call('Sending invitation…');
         invite = await sendLoginInvite(
           companyId: companyId,
           actorEmployeeId: actorEmployeeId,
@@ -590,6 +597,7 @@ class EmployeeRepository {
         );
       }
 
+      onProgress?.call('Refreshing team…');
       final saved = await fetchEmployeeById(
         companyId: companyId,
         employeeId: employeeId,

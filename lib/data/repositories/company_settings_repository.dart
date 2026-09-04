@@ -39,7 +39,8 @@ class CompanySettingsRepository {
     logo_light_url,
     primary_color,
     nav_background_color,
-    custom_branding_enabled
+    custom_branding_enabled,
+    document_show_business_name_with_logo
   ''';
 
   // inventory_movement_policy is added in migration 030. Include it in
@@ -168,6 +169,7 @@ class CompanySettingsRepository {
     required String? logoLightUrl,
     required String? primaryColor,
     required String? navBackgroundColor,
+    bool? documentShowBusinessNameWithLogo,
   }) async {
     try {
       final updated = await _client
@@ -177,6 +179,37 @@ class CompanySettingsRepository {
             'logo_light_url': logoLightUrl,
             'primary_color': primaryColor,
             'nav_background_color': navBackgroundColor,
+            'document_show_business_name_with_logo':
+                ?documentShowBusinessNameWithLogo,
+            'updated_by': employeeId,
+          })
+          .eq('company_id', companyId)
+          .select(_select)
+          .single();
+
+      return CompanySettings.fromJson(Map<String, dynamic>.from(updated));
+    } on PostgrestException catch (error) {
+      throw _brandingFailure(error);
+    } catch (error) {
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Business logo + document name toggle — available without Custom Branding.
+  Future<CompanySettings> updateDocumentIdentity({
+    required String companyId,
+    required String employeeId,
+    required String? logoUrl,
+    required String? logoLightUrl,
+    required bool showBusinessNameWithLogo,
+  }) async {
+    try {
+      final updated = await _client
+          .from('company_settings')
+          .update({
+            'logo_url': logoUrl,
+            'logo_light_url': logoLightUrl,
+            'document_show_business_name_with_logo': showBusinessNameWithLogo,
             'updated_by': employeeId,
           })
           .eq('company_id', companyId)

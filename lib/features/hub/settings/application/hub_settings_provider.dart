@@ -256,6 +256,85 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
       return 'Unable to save branding.';
     }
   }
+
+  /// Business logo + document name toggle (all entitled settings editors).
+  Future<String?> saveDocumentIdentity({
+    ProcessedMedia? logo,
+    required bool clearLogo,
+    required bool showBusinessNameWithLogo,
+  }) async {
+    final session = ref.read(currentSessionProvider);
+    final permissions = ref.read(permissionServiceProvider);
+    final current = state.settings;
+    if (session == null) return 'No active session found.';
+    if (current == null) return 'Settings are not loaded yet.';
+    if (permissions == null || !permissions.canManageCompanyLogo) {
+      return 'You do not have permission to update the business logo.';
+    }
+
+    state = state.copyWith(isSavingBranding: true, clearError: true);
+    try {
+      var nextLight = current.logoLightUrl;
+      var nextDark = current.logoUrl;
+
+      if (clearLogo) {
+        if (current.logoLightUrl != null) {
+          await _repo.removeLogo(companyId: session.company.id, light: true);
+          nextLight = null;
+        } else if (current.logoUrl != null) {
+          // Document was falling back to the dark logo — clear it.
+          await _repo.removeLogo(companyId: session.company.id);
+          nextDark = null;
+        }
+      } else if (logo != null) {
+        nextLight = await _repo.uploadLogo(
+          companyId: session.company.id,
+          media: logo,
+          light: true,
+        );
+        nextDark = current.logoUrl ?? nextLight;
+      }
+
+      final saved = await _repo.updateDocumentIdentity(
+        companyId: session.company.id,
+        employeeId: session.employee.id,
+        logoUrl: nextDark,
+        logoLightUrl: nextLight,
+        showBusinessNameWithLogo: showBusinessNameWithLogo,
+      );
+
+      final draft = state.draft;
+      state = state.copyWith(
+        settings: saved,
+        draft: draft == null
+            ? saved
+            : draft.copyWith(
+                logoUrl: saved.logoUrl,
+                logoLightUrl: saved.logoLightUrl,
+                documentShowBusinessNameWithLogo:
+                    saved.documentShowBusinessNameWithLogo,
+                clearLogoUrl: saved.logoUrl == null,
+                clearLogoLightUrl: saved.logoLightUrl == null,
+              ),
+        isSavingBranding: false,
+        clearError: true,
+      );
+      await ref.read(brandingProvider.notifier).refresh();
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(
+        isSavingBranding: false,
+        errorMessage: failure.message,
+      );
+      return failure.message;
+    } catch (_) {
+      state = state.copyWith(
+        isSavingBranding: false,
+        errorMessage: 'Unable to save document identity.',
+      );
+      return 'Unable to save document identity.';
+    }
+  }
 }
 
 final hubSettingsProvider =

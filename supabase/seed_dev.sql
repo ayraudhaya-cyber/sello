@@ -352,7 +352,7 @@ begin
     brand,
     description,
     unit_label,
-    cost_price,
+    unit_cost,
     selling_price,
     is_active,
     created_by,
@@ -381,7 +381,7 @@ begin
     brand = excluded.brand,
     description = excluded.description,
     unit_label = excluded.unit_label,
-    cost_price = excluded.cost_price,
+    unit_cost = excluded.unit_cost,
     selling_price = excluded.selling_price,
     is_active = true,
     updated_by = excluded.updated_by,
@@ -415,7 +415,7 @@ begin
 
   insert into public.products (
     company_id, category_id, sku, barcode, name, brand, description,
-    unit_label, cost_price, selling_price, is_active, created_by, updated_by
+    unit_label, unit_cost, selling_price, is_active, created_by, updated_by
   )
   values (
     v_company_id, v_beverages_id, 'PEPSI-500', '4792038002056',
@@ -430,7 +430,7 @@ begin
     brand = excluded.brand,
     description = excluded.description,
     unit_label = excluded.unit_label,
-    cost_price = excluded.cost_price,
+    unit_cost = excluded.unit_cost,
     selling_price = excluded.selling_price,
     is_active = true,
     updated_by = excluded.updated_by,
@@ -452,7 +452,7 @@ begin
 
   insert into public.products (
     company_id, category_id, sku, barcode, name, brand, description,
-    unit_label, cost_price, selling_price, is_active, created_by, updated_by
+    unit_label, unit_cost, selling_price, is_active, created_by, updated_by
   )
   values (
     v_company_id, v_grocery_id, 'NEST-MILK-400', '7613036934689',
@@ -467,7 +467,7 @@ begin
     brand = excluded.brand,
     description = excluded.description,
     unit_label = excluded.unit_label,
-    cost_price = excluded.cost_price,
+    unit_cost = excluded.unit_cost,
     selling_price = excluded.selling_price,
     is_active = true,
     updated_by = excluded.updated_by,
@@ -489,7 +489,7 @@ begin
 
   insert into public.products (
     company_id, category_id, sku, barcode, name, brand, description,
-    unit_label, cost_price, selling_price, is_active, created_by, updated_by
+    unit_label, unit_cost, selling_price, is_active, created_by, updated_by
   )
   values (
     v_company_id, v_dairy_id, 'ANCH-BUTTER-200', '9400547003211',
@@ -504,7 +504,7 @@ begin
     brand = excluded.brand,
     description = excluded.description,
     unit_label = excluded.unit_label,
-    cost_price = excluded.cost_price,
+    unit_cost = excluded.unit_cost,
     selling_price = excluded.selling_price,
     is_active = true,
     updated_by = excluded.updated_by,
@@ -526,7 +526,7 @@ begin
 
   insert into public.products (
     company_id, category_id, sku, barcode, name, brand, description,
-    unit_label, cost_price, selling_price, is_active, created_by, updated_by
+    unit_label, unit_cost, selling_price, is_active, created_by, updated_by
   )
   values (
     v_company_id, v_beverages_id, 'SPRITE-500', '5449000014219',
@@ -541,7 +541,7 @@ begin
     brand = excluded.brand,
     description = excluded.description,
     unit_label = excluded.unit_label,
-    cost_price = excluded.cost_price,
+    unit_cost = excluded.unit_cost,
     selling_price = excluded.selling_price,
     is_active = true,
     updated_by = excluded.updated_by,
@@ -563,7 +563,7 @@ begin
 
   insert into public.products (
     company_id, category_id, sku, barcode, name, brand, description,
-    unit_label, cost_price, selling_price, is_active, created_by, updated_by
+    unit_label, unit_cost, selling_price, is_active, created_by, updated_by
   )
   values (
     v_company_id, v_beverages_id, 'OJ-1L', '8901234567890',
@@ -578,7 +578,7 @@ begin
     brand = excluded.brand,
     description = excluded.description,
     unit_label = excluded.unit_label,
-    cost_price = excluded.cost_price,
+    unit_cost = excluded.unit_cost,
     selling_price = excluded.selling_price,
     is_active = true,
     updated_by = excluded.updated_by,

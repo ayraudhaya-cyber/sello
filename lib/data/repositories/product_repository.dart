@@ -189,7 +189,8 @@ class ProductRepository {
         'brand': _nullIfBlank(input.brand),
         'description': _nullIfBlank(input.description),
         'unit_label': _nullIfBlank(input.unitLabel),
-        'cost_price': input.costPrice,
+        // Physical column is unit_cost; cost_price is a role-masked computed field.
+        'unit_cost': input.costPrice,
         'selling_price': input.sellingPrice,
         'preferred_supplier_id': input.preferredSupplierId,
         'is_active': input.isActive,

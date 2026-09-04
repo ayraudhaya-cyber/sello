@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/order_repository.dart';
+import 'package:sello/features/hub/inventory/application/inventory_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
@@ -280,6 +283,9 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         place: place,
       );
       await loadOrders(showLoading: false);
+      if (complete || place) {
+        unawaited(refreshHubInventoryQuietly(ref));
+      }
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: saved.confirmation);
     } on AppFailure catch (failure) {
@@ -317,6 +323,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         employeeId: session?.employee.id,
       );
       await loadOrders(showLoading: false);
+      unawaited(refreshHubInventoryQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {
@@ -333,6 +340,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     try {
       await _repo.fulfillOrderItems(orderId: orderId, lines: lines);
       await loadOrders(showLoading: false);
+      unawaited(refreshHubInventoryQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -347,6 +355,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     try {
       await _repo.completeOrder(order.id);
       await loadOrders(showLoading: false);
+      unawaited(refreshHubInventoryQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {

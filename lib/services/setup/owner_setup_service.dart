@@ -59,22 +59,17 @@ class OwnerSetupService {
 
     if (logo != null) {
       final current = await _settings.fetchForCompany(session.company.id);
-      if (!current.customBrandingEnabled) {
-        throw const AuthorizationFailure(
-          'Branding is not available for this business.',
-        );
-      }
       final url = await _settings.uploadLogo(
         companyId: session.company.id,
         media: logo,
+        light: true,
       );
-      await _settings.updateBranding(
+      await _settings.updateDocumentIdentity(
         companyId: session.company.id,
         employeeId: session.employee.id,
-        logoUrl: url,
-        logoLightUrl: current.logoLightUrl,
-        primaryColor: current.primaryColor,
-        navBackgroundColor: current.navBackgroundColor,
+        logoUrl: current.logoUrl ?? url,
+        logoLightUrl: url,
+        showBusinessNameWithLogo: current.documentShowBusinessNameWithLogo,
       );
     }
   }

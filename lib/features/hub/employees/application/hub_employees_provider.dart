@@ -56,6 +56,7 @@ class HubEmployeesState {
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
+    this.savingProgress,
     this.errorMessage,
     this.initialized = false,
   });
@@ -75,6 +76,9 @@ class HubEmployeesState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  /// Human-readable phase while [isSaving] (e.g. sending invitation).
+  final String? savingProgress;
   final String? errorMessage;
   final bool initialized;
 
@@ -95,6 +99,8 @@ class HubEmployeesState {
     bool? hasMore,
     bool? isLoading,
     bool? isSaving,
+    String? savingProgress,
+    bool clearSavingProgress = false,
     String? errorMessage,
     bool clearError = false,
     bool? initialized,
@@ -113,6 +119,9 @@ class HubEmployeesState {
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
+      savingProgress: clearSavingProgress
+          ? null
+          : (savingProgress ?? this.savingProgress),
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       initialized: initialized ?? this.initialized,
     );
@@ -257,7 +266,13 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'Sign in required.';
 
-    state = state.copyWith(isSaving: true, clearError: true);
+    state = state.copyWith(
+      isSaving: true,
+      savingProgress: input.isCreate
+          ? 'Saving team member…'
+          : 'Updating team member…',
+      clearError: true,
+    );
     try {
       ref.read(permissionServiceProvider)?.require(
             AppModule.employees,
@@ -267,17 +282,33 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
         companyId: session.company.id,
         actorEmployeeId: session.employee.id,
         input: input,
+        onProgress: (message) {
+          state = state.copyWith(
+            isSaving: true,
+            savingProgress: message,
+          );
+        },
       );
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(savingProgress: 'Refreshing team…');
       await loadEmployees(resetPage: input.isCreate, showLoading: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       final invite = result.invite;
       if (invite != null) onInvite?.call(invite);
       return null;
     } on AppFailure catch (e) {
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return e.message;
     } catch (_) {
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return 'Unable to save team member.';
     }
   }
@@ -293,7 +324,10 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
       return 'You cannot deactivate your own account.';
     }
 
-    state = state.copyWith(isSaving: true);
+    state = state.copyWith(
+      isSaving: true,
+      savingProgress: 'Updating status…',
+    );
     try {
       await _repo.setEmploymentStatus(
         companyId: session.company.id,
@@ -301,14 +335,24 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
         employeeId: employee.id,
         status: status,
       );
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(savingProgress: 'Refreshing team…');
       await loadEmployees(showLoading: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return null;
     } on AppFailure catch (e) {
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return e.message;
     } catch (_) {
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return 'Unable to update status.';
     }
   }
@@ -337,22 +381,35 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
   }) async {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'Sign in required.';
-    state = state.copyWith(isSaving: true);
+    state = state.copyWith(
+      isSaving: true,
+      savingProgress: 'Sending invitation…',
+    );
     try {
       final invite = await _repo.sendLoginInvite(
         companyId: session.company.id,
         actorEmployeeId: session.employee.id,
         employeeId: employee.id,
       );
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(savingProgress: 'Refreshing team…');
       await loadEmployees(showLoading: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       onInvite?.call(invite);
       return null;
     } on AppFailure catch (e) {
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return e.message;
     } catch (_) {
-      state = state.copyWith(isSaving: false);
+      state = state.copyWith(
+        isSaving: false,
+        clearSavingProgress: true,
+      );
       return 'Unable to send invitation.';
     }
   }

@@ -388,7 +388,10 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
     final policy = _policy;
     final preview = OutboundMessageTemplate.render(
       _controller.text,
-      values: OutboundPlaceholders.previewValues(widget.type),
+      values: OutboundPlaceholders.previewValues(
+        widget.type,
+        includeDocumentLink: policy.includeDocumentLink,
+      ),
     );
 
     return Column(

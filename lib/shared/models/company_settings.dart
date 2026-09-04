@@ -105,6 +105,7 @@ class CompanySettings extends Equatable {
     this.primaryColor,
     this.navBackgroundColor,
     this.customBrandingEnabled = false,
+    this.documentShowBusinessNameWithLogo = false,
     this.ownerSetupCompleted = true,
   });
 
@@ -158,6 +159,10 @@ class CompanySettings extends Equatable {
   /// Sello-controlled entitlement. Clients cannot toggle this from the app.
   final bool customBrandingEnabled;
 
+  /// When a business logo exists on invoices/receipts, also show `companies.name`.
+  /// Ignored when no logo is set (name is always the fallback). Default: logo only.
+  final bool documentShowBusinessNameWithLogo;
+
   /// When false, a newly provisioned Owner is guided through first-time setup.
   /// Missing / legacy rows are treated as complete so existing tenants are
   /// never forced through the flow.
@@ -187,6 +192,7 @@ class CompanySettings extends Equatable {
     primaryColor: null,
     navBackgroundColor: null,
     customBrandingEnabled: false,
+    documentShowBusinessNameWithLogo: false,
     ownerSetupCompleted: true,
   );
 
@@ -230,6 +236,7 @@ class CompanySettings extends Equatable {
     bool clearLogoLightUrl = false,
     bool clearPrimaryColor = false,
     bool clearNavBackgroundColor = false,
+    bool? documentShowBusinessNameWithLogo,
     bool? ownerSetupCompleted,
   }) {
     return CompanySettings(
@@ -272,6 +279,8 @@ class CompanySettings extends Equatable {
           ? null
           : (navBackgroundColor ?? this.navBackgroundColor),
       customBrandingEnabled: customBrandingEnabled,
+      documentShowBusinessNameWithLogo: documentShowBusinessNameWithLogo ??
+          this.documentShowBusinessNameWithLogo,
       ownerSetupCompleted: ownerSetupCompleted ?? this.ownerSetupCompleted,
     );
   }
@@ -324,6 +333,8 @@ class CompanySettings extends Equatable {
       primaryColor: _optionalText(json['primary_color']),
       navBackgroundColor: _optionalText(json['nav_background_color']),
       customBrandingEnabled: json['custom_branding_enabled'] as bool? ?? false,
+      documentShowBusinessNameWithLogo:
+          json['document_show_business_name_with_logo'] as bool? ?? false,
       ownerSetupCompleted: json['owner_setup_completed'] as bool? ?? true,
     );
   }
@@ -379,6 +390,7 @@ class CompanySettings extends Equatable {
     primaryColor,
     navBackgroundColor,
     customBrandingEnabled,
+    documentShowBusinessNameWithLogo,
     ownerSetupCompleted,
   ];
 }

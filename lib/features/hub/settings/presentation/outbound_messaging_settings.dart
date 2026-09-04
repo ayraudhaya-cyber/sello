@@ -523,77 +523,13 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Message',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final field in OutboundPlaceholders.forType(widget.type))
-                ActionChip(
-                  label: Text(
-                    field.label,
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onPressed: () => _insertPlaceholder(field),
-                  backgroundColor: AppColors.surface,
-                  side: const BorderSide(color: AppColors.outlinePanel),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SelloTextField(
+          _MessageAndPreviewPane(
             controller: _controller,
-            maxLines: 8,
-            hint: 'Write the message. Tap a field above to personalize it.',
-            onChanged: (value) => widget.onChanged(
+            placeholders: OutboundPlaceholders.forType(widget.type),
+            previewText: preview,
+            onInsertPlaceholder: _insertPlaceholder,
+            onMessageChanged: (value) => widget.onChanged(
               widget.policies.copyWithTemplate(widget.type, value),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Preview',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: AppColors.outlinePanel),
-            ),
-            child: Text(
-              preview.isEmpty ? 'Nothing to preview yet.' : preview,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                height: 1.45,
-                color: AppColors.textSecondary,
-              ),
             ),
           ),
         ],
@@ -618,5 +554,217 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
         OutboundRecipientTarget.hub,
       ],
     };
+  }
+}
+
+/// Message editor + live recipient preview — side-by-side on wide layouts.
+class _MessageAndPreviewPane extends StatelessWidget {
+  const _MessageAndPreviewPane({
+    required this.controller,
+    required this.placeholders,
+    required this.previewText,
+    required this.onInsertPlaceholder,
+    required this.onMessageChanged,
+  });
+
+  final TextEditingController controller;
+  final List<OutboundPlaceholder> placeholders;
+  final String previewText;
+  final ValueChanged<OutboundPlaceholder> onInsertPlaceholder;
+  final ValueChanged<String> onMessageChanged;
+
+  static const _sideBySideMinWidth = 720.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideBySide = constraints.maxWidth >= _sideBySideMinWidth;
+        final editor = _MessageEditorColumn(
+          controller: controller,
+          placeholders: placeholders,
+          onInsertPlaceholder: onInsertPlaceholder,
+          onMessageChanged: onMessageChanged,
+          maxLines: sideBySide ? 10 : 6,
+        );
+        final preview = _MessagePreviewCard(
+          text: previewText,
+          compact: !sideBySide,
+        );
+
+        if (sideBySide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 63, child: editor),
+              const SizedBox(width: 16),
+              Expanded(flex: 37, child: preview),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            editor,
+            const SizedBox(height: 12),
+            preview,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MessageEditorColumn extends StatelessWidget {
+  const _MessageEditorColumn({
+    required this.controller,
+    required this.placeholders,
+    required this.onInsertPlaceholder,
+    required this.onMessageChanged,
+    required this.maxLines,
+  });
+
+  final TextEditingController controller;
+  final List<OutboundPlaceholder> placeholders;
+  final ValueChanged<OutboundPlaceholder> onInsertPlaceholder;
+  final ValueChanged<String> onMessageChanged;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Message',
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final field in placeholders)
+              ActionChip(
+                label: Text(
+                  field.label,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onPressed: () => onInsertPlaceholder(field),
+                backgroundColor: AppColors.surface,
+                side: const BorderSide(color: AppColors.outlinePanel),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SelloTextField(
+          controller: controller,
+          maxLines: maxLines,
+          hint: 'Write the message. Tap a field above to personalize it.',
+          onChanged: onMessageChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _MessagePreviewCard extends StatelessWidget {
+  const _MessagePreviewCard({
+    required this.text,
+    this.compact = false,
+  });
+
+  final String text;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(
+        14,
+        compact ? 12 : 14,
+        14,
+        compact ? 12 : 14,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.veil,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Preview',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: AppColors.outlinePanel),
+                ),
+                child: const Text(
+                  'Read only',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'How the message will appear to the recipient',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 11.5,
+              height: 1.35,
+              color: AppColors.textFaint,
+            ),
+          ),
+          SizedBox(height: compact ? 8 : 10),
+          Text(
+            text.isEmpty ? 'Nothing to preview yet.' : text,
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: compact ? 12.5 : 13,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

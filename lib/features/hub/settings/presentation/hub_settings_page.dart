@@ -251,30 +251,23 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
         child: KeyedSubtree(
           key: ValueKey(section),
           child: switch (section) {
-            SettingsSectionId.business => Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _BusinessSection(
-                    state: state,
-                    currencies: _currencies,
-                    monthLabels: _monthLabels,
-                    onChanged: (update) =>
-                        ref.read(hubSettingsProvider.notifier).patchDraft(update),
-                    onSave: _save,
-                    onDiscard: () {
-                      ref.read(hubSettingsProvider.notifier).discardDraft();
-                      final level = ref
-                          .read(hubSettingsProvider)
-                          .settings
-                          ?.defaultReorderLevel;
-                      if (level != null) _reorderLevel.text = level.toString();
-                      setState(() => _reorderError = null);
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  const DocumentIdentitySettingsSection(),
-                ],
-              ),
+            SettingsSectionId.business => _BusinessSection(
+              state: state,
+              currencies: _currencies,
+              monthLabels: _monthLabels,
+              onChanged: (update) =>
+                  ref.read(hubSettingsProvider.notifier).patchDraft(update),
+              onSave: _save,
+              onDiscard: () {
+                ref.read(hubSettingsProvider.notifier).discardDraft();
+                final level = ref
+                    .read(hubSettingsProvider)
+                    .settings
+                    ?.defaultReorderLevel;
+                if (level != null) _reorderLevel.text = level.toString();
+                setState(() => _reorderError = null);
+              },
+            ),
             SettingsSectionId.branding => const BrandingSettingsSection(),
             SettingsSectionId.inventory => _InventorySection(
               state: state,
@@ -362,106 +355,115 @@ class _BusinessSection extends StatelessWidget {
         onSave: onSave,
         onDiscard: onDiscard,
       ),
-      body: SettingsGroupCard(
-        title: 'Business',
-        description: 'Financial and regional defaults used across Sello.',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SettingsSubgroup(
-              title: 'Financial & regional',
-              child: SettingsTwoUp(
-                children: [
-                  SettingsCompactField(
-                    label: 'Default currency',
-                    helper: 'Defaults to your company currency.',
-                    child: SelloDropdown<String>(
-                      value: draft.currency,
-                      items: [
-                        for (final code in currencyItems)
-                          DropdownMenuItem(value: code, child: Text(code)),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        onChanged((c) => c.copyWith(currency: value));
-                      },
-                    ),
-                  ),
-                  SettingsCompactField(
-                    label: 'Currency symbol position',
-                    helper: 'Controls where the currency symbol appears.',
-                    child: SelloDropdown<CurrencyPosition>(
-                      value: draft.currencyPosition,
-                      items: const [
-                        DropdownMenuItem(
-                          value: CurrencyPosition.before,
-                          child: Text('Before amount'),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsGroupCard(
+            title: 'Business',
+            description: 'Financial and regional defaults used across Sello.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SettingsSubgroup(
+                  title: 'Financial & regional',
+                  child: SettingsTwoUp(
+                    children: [
+                      SettingsCompactField(
+                        label: 'Default currency',
+                        helper: 'Defaults to your company currency.',
+                        child: SelloDropdown<String>(
+                          value: draft.currency,
+                          items: [
+                            for (final code in currencyItems)
+                              DropdownMenuItem(value: code, child: Text(code)),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            onChanged((c) => c.copyWith(currency: value));
+                          },
                         ),
-                        DropdownMenuItem(
-                          value: CurrencyPosition.after,
-                          child: Text('After amount'),
+                      ),
+                      SettingsCompactField(
+                        label: 'Currency symbol position',
+                        helper: 'Controls where the currency symbol appears.',
+                        child: SelloDropdown<CurrencyPosition>(
+                          value: draft.currencyPosition,
+                          items: const [
+                            DropdownMenuItem(
+                              value: CurrencyPosition.before,
+                              child: Text('Before amount'),
+                            ),
+                            DropdownMenuItem(
+                              value: CurrencyPosition.after,
+                              child: Text('After amount'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            onChanged(
+                              (c) => c.copyWith(currencyPosition: value),
+                            );
+                          },
                         ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        onChanged((c) => c.copyWith(currencyPosition: value));
-                      },
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 22),
+                const Divider(height: 1, color: AppColors.outlinePanel),
+                const SizedBox(height: 22),
+                SettingsSubgroup(
+                  title: 'Accounting',
+                  child: SettingsTwoUp(
+                    children: [
+                      SettingsCompactField(
+                        label: 'Financial year',
+                        helper: 'The month your reporting year starts.',
+                        child: SelloDropdown<int>(
+                          value: draft.financialYearStartMonth,
+                          items: [
+                            for (var i = 0; i < monthLabels.length; i++)
+                              DropdownMenuItem(
+                                value: i + 1,
+                                child: Text(monthLabels[i]),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            onChanged(
+                              (c) => c.copyWith(financialYearStartMonth: value),
+                            );
+                          },
+                        ),
+                      ),
+                      SettingsCompactField(
+                        label: 'Default tax mode',
+                        helper:
+                            'Used as the default when pricing; editable per sale.',
+                        child: SelloDropdown<TaxMode>(
+                          value: draft.defaultTaxMode,
+                          items: [
+                            for (final mode in TaxMode.values)
+                              DropdownMenuItem(
+                                value: mode,
+                                child: Text(mode.label),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            onChanged((c) => c.copyWith(defaultTaxMode: value));
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 22),
-            const Divider(height: 1, color: AppColors.outlinePanel),
-            const SizedBox(height: 22),
-            SettingsSubgroup(
-              title: 'Accounting',
-              child: SettingsTwoUp(
-                children: [
-                  SettingsCompactField(
-                    label: 'Financial year',
-                    helper: 'The month your reporting year starts.',
-                    child: SelloDropdown<int>(
-                      value: draft.financialYearStartMonth,
-                      items: [
-                        for (var i = 0; i < monthLabels.length; i++)
-                          DropdownMenuItem(
-                            value: i + 1,
-                            child: Text(monthLabels[i]),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        onChanged(
-                          (c) => c.copyWith(financialYearStartMonth: value),
-                        );
-                      },
-                    ),
-                  ),
-                  SettingsCompactField(
-                    label: 'Default tax mode',
-                    helper:
-                        'Used as the default when pricing; editable per sale.',
-                    child: SelloDropdown<TaxMode>(
-                      value: draft.defaultTaxMode,
-                      items: [
-                        for (final mode in TaxMode.values)
-                          DropdownMenuItem(
-                            value: mode,
-                            child: Text(mode.label),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        onChanged((c) => c.copyWith(defaultTaxMode: value));
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          const DocumentIdentitySettingsSection(),
+        ],
       ),
     );
   }

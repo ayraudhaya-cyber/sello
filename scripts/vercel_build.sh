@@ -34,7 +34,20 @@ flutter pub get
 # Public web origin for Auth email redirects + customer document links.
 SELLO_PUBLIC_URL="${SELLO_PUBLIC_URL:-https://sello.cashro.pro}"
 
-flutter build web --release \
-  --dart-define="SUPABASE_URL=${SUPABASE_URL}" \
-  --dart-define="SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" \
+# Optional short git SHA for Settings → About (Vercel injects VERCEL_GIT_COMMIT_SHA).
+# Never pass secrets here — only a public commit identifier.
+SELLO_GIT_SHA="${SELLO_GIT_SHA:-${VERCEL_GIT_COMMIT_SHA:-}}"
+if [[ -n "${SELLO_GIT_SHA}" && "${#SELLO_GIT_SHA}" -gt 7 ]]; then
+  SELLO_GIT_SHA="${SELLO_GIT_SHA:0:7}"
+fi
+
+DART_DEFINES=(
+  --dart-define="SUPABASE_URL=${SUPABASE_URL}"
+  --dart-define="SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}"
   --dart-define="SELLO_PUBLIC_URL=${SELLO_PUBLIC_URL}"
+)
+if [[ -n "${SELLO_GIT_SHA}" ]]; then
+  DART_DEFINES+=(--dart-define="SELLO_GIT_SHA=${SELLO_GIT_SHA}")
+fi
+
+flutter build web --release "${DART_DEFINES[@]}"

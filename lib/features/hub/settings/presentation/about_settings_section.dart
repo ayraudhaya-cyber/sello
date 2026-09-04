@@ -4,72 +4,68 @@ import 'package:sello/services/updates/update_check_messages.dart';
 import 'package:sello/services/updates/update_providers.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
 import 'package:sello/shared/utils/formatters.dart';
+import 'package:sello/shared/widgets/feedback/sello_app_info_panel.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Settings → About — installed version and a quiet update check.
+/// Settings → About — installed version from `pubspec.yaml` / PackageInfo.
 class AboutSettingsSection extends ConsumerWidget {
   const AboutSettingsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final installed = ref.watch(installedAppVersionProvider);
     final check = ref.watch(updateCheckControllerProvider);
     final snapshot = check.valueOrNull;
     final checking = check.isLoading;
 
-    return SettingsGroupCard(
-      title: 'About Sello',
-      description: 'Version information for this installation.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SettingsTwoColumn(
-            gap: 12,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SettingsGroupCard(
+          title: 'About Sello',
+          description:
+              'Version details for this installation. Sello is updated '
+              'regularly with improvements for your business.',
+          child: const SelloAppInfoPanel(),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        SettingsGroupCard(
+          title: 'Updates',
+          description: 'Compare this installation with the latest available build.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _AboutMetric(
-                label: 'Version',
-                value: installed.when(
-                  data: (v) => v.versionName,
-                  loading: () => '…',
-                  error: (_, _) => '—',
+              SettingsTwoColumn(
+                gap: 12,
+                children: [
+                  _AboutMetric(
+                    label: 'Status',
+                    value: _statusLabel(snapshot, checking: checking),
+                  ),
+                  _AboutMetric(
+                    label: 'Latest',
+                    value: snapshot?.latest?.versionName ?? '—',
+                    helper: snapshot?.releasedAt == null
+                        ? null
+                        : 'Released ${SelloFormatters.date(snapshot!.releasedAt)}.',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SelloButton(
+                  label: checking ? 'Checking…' : 'Check for updates',
+                  icon: Icons.refresh_rounded,
+                  variant: SelloButtonVariant.secondary,
+                  onPressed: checking ? null : () => _checkNow(context, ref),
                 ),
-                helper: 'Taken from this installed app, not the server.',
-              ),
-              _AboutMetric(
-                label: 'Build',
-                value: installed.when(
-                  data: (v) => '${v.build}',
-                  loading: () => '…',
-                  error: (_, _) => '—',
-                ),
-              ),
-              _AboutMetric(
-                label: 'Status',
-                value: _statusLabel(snapshot, checking: checking),
-              ),
-              _AboutMetric(
-                label: 'Latest',
-                value: snapshot?.latest?.versionName ?? '—',
-                helper: snapshot?.releasedAt == null
-                    ? null
-                    : 'Released ${SelloFormatters.date(snapshot!.releasedAt)}.',
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelloButton(
-              label: checking ? 'Checking…' : 'Check for updates',
-              icon: Icons.refresh_rounded,
-              variant: SelloButtonVariant.secondary,
-              onPressed: checking ? null : () => _checkNow(context, ref),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

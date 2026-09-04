@@ -6,6 +6,7 @@ import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/services/updates/update_check_messages.dart';
 import 'package:sello/services/updates/update_providers.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
+import 'package:sello/shared/widgets/feedback/sello_app_info_panel.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
 class SelloProfilePage extends ConsumerWidget {
@@ -93,7 +94,7 @@ class SelloProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.gap),
-          const _SelloVersionCard(),
+          const _SelloAboutCard(),
           const SizedBox(height: AppSpacing.lg),
           SelloButton(
             label: 'Sign out',
@@ -109,54 +110,47 @@ class SelloProfilePage extends ConsumerWidget {
   }
 }
 
-class _SelloVersionCard extends ConsumerWidget {
-  const _SelloVersionCard();
+class _SelloAboutCard extends ConsumerWidget {
+  const _SelloAboutCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final installed = ref.watch(installedAppVersionProvider);
     final checking = ref.watch(updateCheckControllerProvider).isLoading;
-    final label = installed.when(
-      data: (version) => 'Sello ${version.versionName} (${version.build})',
-      loading: () => 'Sello',
-      error: (_, _) => 'Sello',
-    );
 
     return SelloCard(
       enableHoverLift: false,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: context.texts.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          const SelloAppInfoPanel(compact: true),
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelloButton(
+              label: checking ? 'Checking…' : 'Check for updates',
+              variant: SelloButtonVariant.ghost,
+              size: SelloButtonSize.small,
+              onPressed: checking
+                  ? null
+                  : () async {
+                      final result = await ref
+                          .read(updateCheckControllerProvider.notifier)
+                          .checkNow();
+                      if (!context.mounted) return;
+                      if (result.status == UpdateCheckStatus.upToDate) {
+                        SelloSnackbars.success(
+                          context,
+                          UpdateCheckMessages.manualResult(result),
+                        );
+                      } else if (result.status ==
+                          UpdateCheckStatus.checkFailed) {
+                        SelloSnackbars.info(
+                          context,
+                          UpdateCheckMessages.manualResult(result),
+                        );
+                      }
+                    },
             ),
-          ),
-          SelloButton(
-            label: checking ? 'Checking…' : 'Check for updates',
-            variant: SelloButtonVariant.ghost,
-            size: SelloButtonSize.small,
-            onPressed: checking
-                ? null
-                : () async {
-                    final result = await ref
-                        .read(updateCheckControllerProvider.notifier)
-                        .checkNow();
-                    if (!context.mounted) return;
-                    if (result.status == UpdateCheckStatus.upToDate) {
-                      SelloSnackbars.success(
-                        context,
-                        UpdateCheckMessages.manualResult(result),
-                      );
-                    } else if (result.status == UpdateCheckStatus.checkFailed) {
-                      SelloSnackbars.info(
-                        context,
-                        UpdateCheckMessages.manualResult(result),
-                      );
-                    }
-                  },
           ),
         ],
       ),

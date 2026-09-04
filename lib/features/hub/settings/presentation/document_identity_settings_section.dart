@@ -116,8 +116,11 @@ class _DocumentIdentitySettingsSectionState
     final dirty = _isDirty(savedShow, saved?.logoLightUrl, saved?.logoUrl);
     final saving = state.isSavingBranding;
 
-    return SettingsSectionScaffold(
-      actionBar: canEdit
+    return SettingsGroupCard(
+      title: 'Invoices & Receipts',
+      description:
+          'Choose how your business appears on invoices and receipts sent to customers.',
+      footer: canEdit && dirty
           ? SettingsActionBar(
               enabled: dirty,
               saving: saving,
@@ -125,49 +128,43 @@ class _DocumentIdentitySettingsSectionState
               onDiscard: _discard,
             )
           : null,
-      body: SettingsGroupCard(
-        title: 'Customer documents',
-        description:
-            'How your business appears on invoices and receipts. '
-            'Does not require Custom Branding.',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SettingsCompactField(
-              label: 'Business logo',
-              helper:
-                  'Shown on light invoice and receipt pages. '
-                  'If empty, your business name is used.',
-              child: _LogoPreview(
-                bytes: _clearLogo ? null : _pendingLogo?.bytes,
-                url: previewUrl,
-                loading: _picking,
-                saving: saving,
-                enabled: canEdit,
-                onUpload: _pickLogo,
-                onClear: hasLogo && canEdit
-                    ? () => setState(() {
-                          _clearLogo = true;
-                          _pendingLogo = null;
-                        })
-                    : null,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsCompactField(
+            label: 'Business logo',
+            helper:
+                'Shown on light invoice and receipt pages. '
+                'If empty, your business name is used.',
+            child: _LogoPreview(
+              bytes: _clearLogo ? null : _pendingLogo?.bytes,
+              url: previewUrl,
+              loading: _picking,
+              saving: saving,
+              enabled: canEdit,
+              onUpload: _pickLogo,
+              onClear: hasLogo && canEdit
+                  ? () => setState(() {
+                        _clearLogo = true;
+                        _pendingLogo = null;
+                      })
+                  : null,
             ),
-            if (hasLogo) ...[
-              const SizedBox(height: 16),
-              SelloStatusToggle(
-                value: showName,
-                label: 'Show business name with logo',
-                helper:
-                    'Off shows the logo only. On shows your business name under the logo.',
-                onChanged: (value) {
-                  if (!canEdit || saving) return;
-                  setState(() => _showNameWithLogo = value);
-                },
-              ),
-            ],
+          ),
+          if (hasLogo) ...[
+            const SizedBox(height: 16),
+            SelloStatusToggle(
+              value: showName,
+              label: 'Show business name with logo',
+              helper:
+                  'Off shows the logo only. On shows your business name under the logo.',
+              onChanged: (value) {
+                if (!canEdit || saving) return;
+                setState(() => _showNameWithLogo = value);
+              },
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

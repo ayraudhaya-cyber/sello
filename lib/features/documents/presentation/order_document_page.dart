@@ -134,7 +134,7 @@ class _DocumentIssuerHeader extends StatelessWidget {
   static const _contactStyle = TextStyle(
     fontFamily: AppTypography.fontFamily,
     fontSize: 13,
-    height: 1.45,
+    height: 1.2,
     color: AppColors.textSecondary,
   );
 
@@ -184,11 +184,11 @@ class _DocumentIssuerHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: mark),
+        mark,
         const SizedBox(width: 16),
-        Flexible(
+        Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (identity.address != null)
                 Text(
@@ -197,7 +197,7 @@ class _DocumentIssuerHeader extends StatelessWidget {
                   style: _contactStyle,
                 ),
               if (identity.phone != null) ...[
-                if (identity.address != null) const SizedBox(height: 4),
+                if (identity.address != null) const SizedBox(height: 2),
                 Text(
                   identity.phone!,
                   textAlign: TextAlign.right,
@@ -206,7 +206,7 @@ class _DocumentIssuerHeader extends StatelessWidget {
               ],
               if (identity.email != null) ...[
                 if (identity.address != null || identity.phone != null)
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                 Text(
                   identity.email!,
                   textAlign: TextAlign.right,

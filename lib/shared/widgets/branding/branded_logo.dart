@@ -158,6 +158,8 @@ class BrandedLaunchLockup extends ConsumerWidget {
     this.showProgress = false,
     this.lightOnDark = false,
     this.clientLogoSize = 64,
+    this.markSize = 56,
+    this.progressOpacity,
   });
 
   final bool showProgress;
@@ -165,6 +167,12 @@ class BrandedLaunchLockup extends ConsumerWidget {
 
   /// Maximum height of the client wordmark.
   final double clientLogoSize;
+
+  /// Sello mark size when no custom logo is set.
+  final double markSize;
+
+  /// Optional fade for the progress indicator (splash entrance).
+  final Animation<double>? progressOpacity;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -177,32 +185,39 @@ class BrandedLaunchLockup extends ConsumerWidget {
     final maxWordmarkWidth =
         (MediaQuery.sizeOf(context).width * 0.62).clamp(200.0, 360.0);
 
+    Widget progress() {
+      final indicator = SizedBox(
+        width: 22,
+        height: 22,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.25,
+          color: lightOnDark ? AppColors.onPrimary : null,
+        ),
+      );
+      if (progressOpacity == null) return indicator;
+      return FadeTransition(opacity: progressOpacity!, child: indicator);
+    }
+
     if (!branding.hasCustomLogo) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           BrandedLogo(
-            size: 88,
-            shadows: lightOnDark ? null : AppShadows.level2,
+            size: markSize,
+            shadows: lightOnDark ? null : AppShadows.level1,
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
           Text(
             'Sello',
-            style: context.texts.headlineMedium?.copyWith(
+            style: context.texts.titleLarge?.copyWith(
               fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
               color: titleColor,
             ),
           ),
           if (showProgress) ...[
-            const SizedBox(height: AppSpacing.xl),
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: lightOnDark ? AppColors.onPrimary : null,
-              ),
-            ),
+            const SizedBox(height: AppSpacing.lg),
+            progress(),
           ],
         ],
       );
@@ -217,18 +232,11 @@ class BrandedLaunchLockup extends ConsumerWidget {
           branding: branding,
           alignment: Alignment.center,
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.md),
         _PoweredBySello(color: labelColor),
         if (showProgress) ...[
-          const SizedBox(height: AppSpacing.xl),
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: lightOnDark ? AppColors.onPrimary : null,
-            ),
-          ),
+          const SizedBox(height: AppSpacing.lg),
+          progress(),
         ],
       ],
     );

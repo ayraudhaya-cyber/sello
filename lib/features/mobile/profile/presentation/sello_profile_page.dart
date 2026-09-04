@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/mobile/profile/presentation/sello_pwa_install_card.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/services/updates/update_check_messages.dart';
 import 'package:sello/services/updates/update_providers.dart';
@@ -50,6 +51,7 @@ class SelloProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.gap),
+          const SelloPwaInstallCard(),
           SelloCard(
             enableHoverLift: false,
             padding: EdgeInsets.zero,

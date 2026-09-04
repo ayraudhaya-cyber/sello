@@ -1,7 +1,8 @@
 {
     "name": "Sello",
     "short_name": "Sello",
-    "start_url": ".",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#ECEDFB",
     "theme_color": "#6C4FF2",

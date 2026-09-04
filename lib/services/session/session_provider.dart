@@ -136,6 +136,10 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   /// cold start that is not a recovery redirect.
   bool _passwordRecoveryActive = false;
 
+  /// Invalidates in-flight [_hydrateSession] work when a newer hydrate starts
+  /// or recovery mode takes over mid-flight.
+  int _hydrateGeneration = 0;
+
   AuthService get _auth => ref.read(authServiceProvider);
   SessionService get _sessions => ref.read(sessionServiceProvider);
   ProvisioningCoordinator get _provisioning =>
@@ -179,11 +183,21 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       return;
     }
 
+    // Invite recovery sometimes surfaces as SIGNED_IN (last replayed event)
+    // after the PKCE exchange. Team-invite metadata is the durable signal that
+    // this session must finish set-password before workspace entry.
+    if (AuthEmailPersonalization.isTeamInviteMetadata(user.userMetadata)) {
+      _enterPasswordRecovery();
+      return;
+    }
+
     await _hydrateSession(user);
   }
 
   void _enterPasswordRecovery() {
     _passwordRecoveryActive = true;
+    // Drop any SIGNED_IN hydrate that started before recovery was known.
+    _hydrateGeneration++;
     final inviteSetup = AuthEmailPersonalization.isTeamInviteMetadata(
       _auth.currentUser?.userMetadata,
     );
@@ -200,6 +214,9 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   void _clearPasswordRecoveryLatch() {
     _passwordRecoveryActive = false;
   }
+
+  bool get _recoveryHeld =>
+      _passwordRecoveryActive || state.isPasswordRecovery;
 
   Future<void> _onAuthStateChanged(AuthState authState) async {
     if (_handlingAuthEvent) return;
@@ -234,13 +251,17 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
         // Recovery sessions are real GoTrue sessions. Hydrating them would
         // clear isPasswordRecovery and skip the set-password UI (Sales invite
         // and Owner forgot-password both rely on that screen).
-        if (_passwordRecoveryActive || state.isPasswordRecovery) {
+        if (_recoveryHeld) {
           _enterPasswordRecovery();
           return;
         }
         final user = authState.session?.user ?? _auth.currentUser;
         if (user == null) {
           state = const AuthSessionState(status: AuthStatus.unauthenticated);
+          return;
+        }
+        if (AuthEmailPersonalization.isTeamInviteMetadata(user.userMetadata)) {
+          _enterPasswordRecovery();
           return;
         }
         if (state.status == AuthStatus.authenticating) return;
@@ -256,8 +277,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   Future<void> _hydrateSession(User user, {bool quiet = false}) async {
     // Never treat an invite/recovery session as a finished workspace login
     // unless the user just submitted a new password (completePasswordRecovery).
-    if ((_passwordRecoveryActive || state.isPasswordRecovery) &&
-        !_handlingAuthEvent) {
+    if (_recoveryHeld && !_handlingAuthEvent) {
       _enterPasswordRecovery();
       return;
     }
@@ -265,6 +285,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     // Quiet reload keeps status authenticated so route guards do not bounce
     // through /login (Owner setup completion, branding refresh, etc.).
     final quietReload = quiet && state.isAuthenticated && state.session != null;
+    final hydrateGeneration = ++_hydrateGeneration;
     state = state.copyWith(
       status: state.isBootstrapping
           ? AuthStatus.unknown
@@ -278,20 +299,34 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       awaitingEmailConfirmation: false,
       emailJustVerified: false,
       clearPendingEmail: true,
-      isPasswordRecovery: false,
     );
 
     try {
       final session = await _sessions.buildSession(user);
+
+      // PASSWORD_RECOVERY can arrive while buildSession is in flight. An older
+      // SIGNED_IN hydrate must not wipe the set-password UI afterward.
+      if (hydrateGeneration != _hydrateGeneration) return;
+      if (_recoveryHeld && !_handlingAuthEvent) {
+        _enterPasswordRecovery();
+        return;
+      }
+
       _clearPasswordRecoveryLatch();
       state = AuthSessionState(
         status: AuthStatus.authenticated,
         session: session,
       );
     } on UnlinkedEmployeeFailure {
+      if (hydrateGeneration != _hydrateGeneration) return;
+      if (_recoveryHeld && !_handlingAuthEvent) {
+        _enterPasswordRecovery();
+        return;
+      }
       await _handleUnlinkedEmployee();
     } on AppFailure catch (failure) {
-      if (_passwordRecoveryActive || state.isPasswordRecovery) {
+      if (hydrateGeneration != _hydrateGeneration) return;
+      if (_recoveryHeld) {
         _enterPasswordRecovery();
         state = state.copyWith(
           isLoading: false,
@@ -301,7 +336,8 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       }
       await _failHydrate(failure.message);
     } catch (_) {
-      if (_passwordRecoveryActive || state.isPasswordRecovery) {
+      if (hydrateGeneration != _hydrateGeneration) return;
+      if (_recoveryHeld) {
         _enterPasswordRecovery();
         state = state.copyWith(
           isLoading: false,

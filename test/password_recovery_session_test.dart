@@ -122,6 +122,32 @@ void main() {
     );
 
     test(
+      'PASSWORD_RECOVERY during in-flight SIGNED_IN hydrate keeps set-password UI',
+      () async {
+        final user = _user();
+        auth.current = user;
+        // No team-invite metadata so SIGNED_IN is allowed to start hydrating.
+        sessions.delay = const Duration(milliseconds: 40);
+        auth.publish(AuthState(AuthChangeEvent.signedIn, _session(user)));
+
+        final container = createContainer();
+        container.read(authSessionProvider);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        // Simulate recovery arriving while employee context is still loading.
+        auth.publish(
+          AuthState(AuthChangeEvent.passwordRecovery, _session(user)),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        await settle();
+
+        final state = container.read(authSessionProvider);
+        expect(state.isPasswordRecovery, isTrue);
+        expect(state.isAuthenticated, isFalse);
+      },
+    );
+
+    test(
       'SIGNED_IN after recovery stays in password-setup mode',
       () async {
         final user = _user();
@@ -139,6 +165,29 @@ void main() {
 
         final state = container.read(authSessionProvider);
         expect(state.isPasswordRecovery, isTrue);
+        expect(state.isAuthenticated, isFalse);
+        expect(sessions.buildCount, 0);
+      },
+    );
+
+    test(
+      'team invite metadata alone blocks workspace hydrate on cold start',
+      () async {
+        final user = _user(
+          metadata: const {
+            AuthEmailPersonalization.teamInviteKey: true,
+          },
+        );
+        auth.current = user;
+        auth.publish(AuthState(AuthChangeEvent.signedIn, _session(user)));
+
+        final container = createContainer();
+        container.read(authSessionProvider);
+        await settle();
+
+        final state = container.read(authSessionProvider);
+        expect(state.isPasswordRecovery, isTrue);
+        expect(state.isTeamInvitePasswordSetup, isTrue);
         expect(state.isAuthenticated, isFalse);
         expect(sessions.buildCount, 0);
       },
@@ -352,10 +401,14 @@ class _ReplayAuthService extends AuthService {
 
 class _FakeSessionService implements SessionService {
   int buildCount = 0;
+  Duration delay = Duration.zero;
 
   @override
   Future<AppSession> buildSession(User user) async {
     buildCount += 1;
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
     return _appSession(user);
   }
 }

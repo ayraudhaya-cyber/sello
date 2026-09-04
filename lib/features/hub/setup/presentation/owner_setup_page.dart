@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sello/core/animations/app_durations.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
@@ -147,6 +148,8 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
   @override
   Widget build(BuildContext context) {
     final setup = ref.watch(ownerSetupProvider);
+    final showProgress = setup.step != OwnerSetupStep.welcome &&
+        setup.step != OwnerSetupStep.ready;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -157,6 +160,23 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
             const Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(gradient: AppGradients.heroWash),
+              ),
+            ),
+            // Soft ambient blobs — calm depth without visual noise.
+            Positioned(
+              top: -80,
+              right: -40,
+              child: _AmbientOrb(
+                size: 220,
+                color: AppColors.primary.withValues(alpha: 0.08),
+              ),
+            ),
+            Positioned(
+              bottom: -60,
+              left: -50,
+              child: _AmbientOrb(
+                size: 180,
+                color: AppColors.primary.withValues(alpha: 0.06),
               ),
             ),
             SafeArea(
@@ -171,23 +191,20 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
                     child: Column(
                       children: [
                         const SelloBrandMark(size: 28),
-                        const SizedBox(height: 28),
-                        if (setup.step != OwnerSetupStep.welcome &&
-                            setup.step != OwnerSetupStep.ready)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Text(
-                              _stepLabel(setup.step),
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 13,
-                                color: AppColors.textTertiary,
-                              ),
-                            ),
-                          ),
+                        if (showProgress) ...[
+                          const SizedBox(height: 22),
+                          _SetupProgress(step: setup.step),
+                        ] else
+                          const SizedBox(height: 28),
                         Expanded(
-                          child: SingleChildScrollView(
-                            child: _body(setup),
+                          child: AnimatedSwitcher(
+                            duration: AppDurations.normal,
+                            switchInCurve: AppCurves.standard,
+                            switchOutCurve: AppCurves.standard,
+                            child: SingleChildScrollView(
+                              key: ValueKey(setup.step),
+                              child: _body(setup),
+                            ),
                           ),
                         ),
                       ],
@@ -200,16 +217,6 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
         ),
       ),
     );
-  }
-
-  String _stepLabel(OwnerSetupStep step) {
-    return switch (step) {
-      OwnerSetupStep.business => 'Step 2 of 6',
-      OwnerSetupStep.profile => 'Step 3 of 6',
-      OwnerSetupStep.team => 'Step 4 of 6',
-      OwnerSetupStep.sms => 'Step 5 of 6',
-      _ => '',
-    };
   }
 
   Widget _body(OwnerSetupState setup) {
@@ -284,38 +291,72 @@ class _WelcomeStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 48),
-        Text(
-          'Let’s get your business set up.',
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-            height: 1.25,
-            color: AppColors.textPrimary,
+    return _SetupHeroCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: 56,
+              height: 56,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppRadius.dialog),
+                border: Border.all(color: AppColors.outlinePanel),
+              ),
+              child: Icon(
+                Icons.auto_awesome_outlined,
+                color: context.brandAccent,
+                size: 26,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'A few details now will make Sello feel like yours. This only takes a couple of minutes.',
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 15,
-            height: 1.5,
-            color: AppColors.textSecondary,
+          const SizedBox(height: 22),
+          Text(
+            'Let’s get your business set up.',
+            style: context.texts.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
+              height: 1.25,
+              color: AppColors.textPrimary,
+            ),
           ),
-        ),
-        const SizedBox(height: 36),
-        SelloButton(
-          label: 'Get started',
-          onPressed: onStart,
-          expanded: true,
-        ),
-      ],
+          const SizedBox(height: 10),
+          Text(
+            'A few details now will make Sello feel like yours. This only takes a couple of minutes.',
+            style: context.texts.bodyMedium?.copyWith(
+              height: 1.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 28),
+          const _SetupPreviewRow(
+            icon: Icons.storefront_outlined,
+            title: 'Business details',
+            subtitle: 'Name, phone, and how you appear in Sello',
+          ),
+          const SizedBox(height: 10),
+          const _SetupPreviewRow(
+            icon: Icons.person_outline_rounded,
+            title: 'Your profile',
+            subtitle: 'How your team will recognize you',
+          ),
+          const SizedBox(height: 10),
+          const _SetupPreviewRow(
+            icon: Icons.groups_outlined,
+            title: 'Team & notifications',
+            subtitle: 'Invite sales reps and optionally set up SMS',
+          ),
+          const SizedBox(height: 32),
+          SelloButton(
+            label: 'Get started',
+            onPressed: onStart,
+            expanded: true,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -835,50 +876,279 @@ class _ReadyStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 48),
-        Text(
-          'You’re all set.',
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-            height: 1.25,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Your Sello workspace is ready.',
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 15,
-            height: 1.5,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        if (error != null) ...[
-          const SizedBox(height: 16),
-          Text(
-            error!,
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 13,
-              color: AppColors.error,
+    return _SetupHeroCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: 56,
+              height: 56,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.successContainer,
+                borderRadius: BorderRadius.circular(AppRadius.dialog),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.2),
+                ),
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                color: AppColors.success,
+                size: 28,
+              ),
             ),
           ),
+          const SizedBox(height: 22),
+          Text(
+            'You’re all set.',
+            style: context.texts.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
+              height: 1.25,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Your Sello workspace is ready. Open the Hub to start managing orders, products, and your team.',
+            style: context.texts.bodyMedium?.copyWith(
+              height: 1.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          const _SetupPreviewRow(
+            icon: Icons.dashboard_outlined,
+            title: 'Open your Hub',
+            subtitle: 'Dashboard, products, customers, and more',
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              error!,
+              style: context.texts.bodySmall?.copyWith(
+                color: AppColors.error,
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 32),
+          SelloButton(
+            label: 'Go to Sello',
+            onPressed: saving ? null : onFinish,
+            loading: saving,
+            expanded: true,
+          ),
         ],
-        const SizedBox(height: 36),
-        SelloButton(
-          label: 'Go to Sello',
-          onPressed: saving ? null : onFinish,
-          loading: saving,
-          expanded: true,
+      ),
+    );
+  }
+}
+
+class _SetupHeroCard extends StatelessWidget {
+  const _SetupHeroCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.panelAll,
+        border: Border.all(color: AppColors.outlinePanel),
+        boxShadow: AppShadows.panel,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(28, 28, 28, 26),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _SetupPreviewRow extends StatelessWidget {
+  const _SetupPreviewRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.background.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 18, color: context.brandAccent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: context.texts.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: context.texts.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SetupProgress extends StatelessWidget {
+  const _SetupProgress({required this.step});
+
+  final OwnerSetupStep step;
+
+  static const _labels = ['Business', 'Profile', 'Team', 'SMS'];
+
+  int get _index => switch (step) {
+        OwnerSetupStep.business => 0,
+        OwnerSetupStep.profile => 1,
+        OwnerSetupStep.team => 2,
+        OwnerSetupStep.sms => 3,
+        _ => 0,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _index;
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < _labels.length; i++) ...[
+              if (i > 0)
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: i <= active
+                          ? context.brandAccent.withValues(alpha: 0.55)
+                          : AppColors.outlinePanel,
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+              _ProgressDot(
+                done: i < active,
+                current: i == active,
+                label: '${i + 1}',
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '${_labels[active]}  ·  Step ${active + 1} of ${_labels.length}',
+          style: context.texts.bodySmall?.copyWith(
+            color: AppColors.textTertiary,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _ProgressDot extends StatelessWidget {
+  const _ProgressDot({
+    required this.done,
+    required this.current,
+    required this.label,
+  });
+
+  final bool done;
+  final bool current;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = context.brandAccent;
+    final fill = done || current ? accent : AppColors.surface;
+    final border = done || current ? accent : AppColors.outlinePanel;
+    final fg = done || current ? AppColors.onPrimary : AppColors.textTertiary;
+
+    return Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: fill,
+        shape: BoxShape.circle,
+        border: Border.all(color: border),
+        boxShadow: current ? AppShadows.level1 : null,
+      ),
+      child: done
+          ? const Icon(Icons.check_rounded, size: 14, color: AppColors.onPrimary)
+          : Text(
+              label,
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: fg,
+              ),
+            ),
+    );
+  }
+}
+
+class _AmbientOrb extends StatelessWidget {
+  const _AmbientOrb({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+        ),
+      ),
     );
   }
 }

@@ -397,30 +397,35 @@ class _KpiSparkPainter extends CustomPainter {
       oldDelegate.points != points || oldDelegate.color != color;
 }
 
-/// Responsive grid of [SelloStatCard]s — wraps into multiple rows when needed.
+/// Responsive grid of [SelloStatCard]s — one row when possible, equal widths.
+///
+/// Column count tracks the number of cards (up to [maxColumns]) so 3 cards
+/// fill the row instead of leaving empty space, and 5 cards stay on one line
+/// on desktop.
 class SelloStatCardGrid extends StatelessWidget {
   const SelloStatCardGrid({
     super.key,
     required this.children,
     this.gap = AppSpacing.md,
-    this.maxColumns = 4,
+    this.maxColumns = 5,
   });
 
   final List<Widget> children;
   final double gap;
 
-  /// Maximum columns on large screens (e.g. 6 for Reports, 4 for domain lists).
+  /// Maximum columns on large screens (e.g. 6 for Reports, 5 for domain lists).
   final int maxColumns;
 
-  int _columnsForWidth(double width) {
+  int _columnsForWidth(double width, int childCount) {
     final cap = maxColumns.clamp(1, 12);
+    final wanted = childCount.clamp(1, cap);
     if (width < AppBreakpoints.mobile) {
-      return width < 400 ? 1 : 2.clamp(1, cap);
+      return width < 400 ? 1 : 2.clamp(1, wanted);
     }
     if (width < AppBreakpoints.tablet) {
-      return 3.clamp(1, cap);
+      return 3.clamp(1, wanted);
     }
-    return cap;
+    return wanted;
   }
 
   @override
@@ -430,7 +435,7 @@ class SelloStatCardGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = _columnsForWidth(width);
+        final columns = _columnsForWidth(width, children.length);
         final itemWidth = (width - gap * (columns - 1)) / columns;
 
         return Wrap(

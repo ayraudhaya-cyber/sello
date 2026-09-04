@@ -93,7 +93,10 @@ class SelloTextField extends StatelessWidget {
             ? null
             : Icon(prefixIcon, size: 19, color: AppColors.textTertiary),
         prefixIconConstraints: const BoxConstraints(minWidth: 44),
-        suffixIcon: suffixIcon,
+        // Suffix actions (e.g. show/hide password) must not steal Tab focus.
+        suffixIcon: suffixIcon == null
+            ? null
+            : ExcludeFocus(child: suffixIcon!),
       ),
     );
   }
@@ -179,11 +182,13 @@ class _SelloSearchBarState extends State<SelloSearchBar> {
             minHeight: AppSpacing.controlHeight,
           ),
           suffixIcon: _hasText
-              ? IconButton(
-                  tooltip: 'Clear',
-                  onPressed: widget.enabled ? _clear : null,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close_rounded, size: 16),
+              ? ExcludeFocus(
+                  child: IconButton(
+                    tooltip: 'Clear',
+                    onPressed: widget.enabled ? _clear : null,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                  ),
                 )
               : null,
           suffixIconConstraints: const BoxConstraints(

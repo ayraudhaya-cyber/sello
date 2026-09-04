@@ -27,8 +27,11 @@ abstract final class RouteGuards {
     }
 
     // Auth / provisioning in flight — keep user on the public entry screen.
+    // If a workspace session is already loaded (e.g. Owner setup → reloadSession),
+    // stay put so we do not flash /login before hydration finishes.
     if (auth.isAuthenticating) {
       if (isLogin || isOnboarding || isDocument) return null;
+      if (auth.session != null) return null;
       return RoutePaths.login;
     }
 

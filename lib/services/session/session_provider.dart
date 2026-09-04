@@ -197,11 +197,16 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     }
   }
 
-  Future<void> _hydrateSession(User user) async {
+  Future<void> _hydrateSession(User user, {bool quiet = false}) async {
+    // Quiet reload keeps status authenticated so route guards do not bounce
+    // through /login (Owner setup completion, branding refresh, etc.).
+    final quietReload = quiet && state.isAuthenticated && state.session != null;
     state = state.copyWith(
       status: state.isBootstrapping
           ? AuthStatus.unknown
-          : AuthStatus.authenticating,
+          : (quietReload
+              ? AuthStatus.authenticated
+              : AuthStatus.authenticating),
       isLoading: true,
       clearError: true,
       clearInfo: true,
@@ -523,7 +528,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       state = const AuthSessionState(status: AuthStatus.unauthenticated);
       return;
     }
-    await _hydrateSession(user);
+    await _hydrateSession(user, quiet: true);
   }
 
   /// Clears the email-confirmation success screen and returns to a clean

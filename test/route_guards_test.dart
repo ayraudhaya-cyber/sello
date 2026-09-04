@@ -75,6 +75,40 @@ void main() {
       );
     });
 
+    test('authenticating without session still redirects workspace to login', () {
+      const auth = AuthSessionState(
+        status: AuthStatus.authenticating,
+        isLoading: true,
+      );
+
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.hubDashboard),
+        RoutePaths.login,
+      );
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.ownerSetup),
+        RoutePaths.login,
+      );
+    });
+
+    test('authenticating with existing session does not flash login', () {
+      final session = _authenticated(role: 'owner', setupCompleted: false).session!;
+      final auth = AuthSessionState(
+        status: AuthStatus.authenticating,
+        session: session,
+        isLoading: true,
+      );
+
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.ownerSetup),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(auth: auth, location: RoutePaths.hubDashboard),
+        isNull,
+      );
+    });
+
     test('authenticated cold start on splash still goes home', () {
       final auth = _authenticated(role: 'owner', setupCompleted: true);
 

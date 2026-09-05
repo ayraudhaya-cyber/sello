@@ -153,7 +153,7 @@ class OrderDetailsDialog extends ConsumerWidget {
                   value: SelloFormatters.date(order.orderedAt),
                 ),
                 _InfoField(
-                  label: 'Sales representative',
+                  label: 'Sales Rep',
                   value: order.employeeName ?? dash,
                   muted: order.employeeName == null,
                 ),
@@ -381,11 +381,6 @@ class _OrderHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = <String>[
-      if (order.customerName != null) order.customerName!,
-      if (order.employeeName != null) order.employeeName!,
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -416,10 +411,6 @@ class _OrderHero extends StatelessWidget {
             ),
           ],
         ),
-        if (meta.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(meta.join(' · '), style: _Type.subtitle),
-        ],
       ],
     );
   }
@@ -539,33 +530,32 @@ class _InfoBlockView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
         color: AppColors.veil,
         borderRadius: AppRadius.panelAll,
         border: Border.all(color: AppColors.outlinePanel),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(block.title.toUpperCase(), style: _Type.section),
-            const SizedBox(height: 10),
-            for (var i = 0; i < block.fields.length; i++) ...[
-              if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
-              _CompactField(field: block.fields[i]),
-            ],
-            if (block.trailing != null) ...[
-              const SizedBox(height: 12),
-              block.trailing!,
-            ],
-            if (block.account != null) ...[
-              const SizedBox(height: 14),
-              block.account!,
-            ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(block.title.toUpperCase(), style: _Type.section),
+          const SizedBox(height: 10),
+          for (var i = 0; i < block.fields.length; i++) ...[
+            if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
+            _CompactField(field: block.fields[i]),
           ],
-        ),
+          if (block.trailing != null) ...[
+            const SizedBox(height: 12),
+            block.trailing!,
+          ],
+          if (block.account != null) ...[
+            const SizedBox(height: 14),
+            block.account!,
+          ],
+        ],
       ),
     );
   }
@@ -1126,14 +1116,6 @@ abstract final class _Type {
     letterSpacing: -0.4,
     height: 1.15,
     color: AppColors.textPrimary,
-  );
-
-  static const TextStyle subtitle = TextStyle(
-    fontFamily: AppTypography.fontFamily,
-    fontSize: 13.5,
-    fontWeight: FontWeight.w500,
-    height: 1.3,
-    color: AppColors.textSecondary,
   );
 
   static const TextStyle section = TextStyle(

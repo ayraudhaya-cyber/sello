@@ -19,7 +19,7 @@ void printOrderDocument(OrderDocument doc) {
       (() {
         web.URL.revokeObjectURL(url);
       }).toJS,
-      60000.toJS,
+      (60 * 1000).toJS,
     );
     return;
   }

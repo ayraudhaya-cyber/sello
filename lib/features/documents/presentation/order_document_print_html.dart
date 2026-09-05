@@ -15,11 +15,14 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
     ..writeln('<head>')
     ..writeln('<meta charset="utf-8">')
     ..writeln('<meta name="viewport" content="width=device-width, initial-scale=1">')
-    ..writeln('<title>${_esc(doc.documentTitle)}</title>')
+    ..writeln('<title></title>')
     ..writeln('<style>$_printCss</style>')
     ..writeln('</head>')
     ..writeln('<body>')
-    ..writeln('<div class="sheet">');
+    ..writeln('<div class="sheet">')
+    ..writeln(
+      '<div class="doc-ref">${_esc(doc.documentTitle)}</div>',
+    );
 
   _writeIssuer(buffer, identity);
   buffer.writeln('<div class="card">');
@@ -80,17 +83,14 @@ void _writeIssuer(StringBuffer buffer, DocumentIssuerIdentity identity) {
     );
   }
   if (identity.hasContactBlock) {
-    buffer.writeln('<div class="contact">');
-    if (identity.address != null) {
-      buffer.writeln('<div>${_esc(identity.address!)}</div>');
-    }
-    if (identity.phone != null) {
-      buffer.writeln('<div>${_esc(identity.phone!)}</div>');
-    }
-    if (identity.email != null) {
-      buffer.writeln('<div>${_esc(identity.email!)}</div>');
-    }
-    buffer.writeln('</div>');
+    final parts = <String>[
+      if (identity.address != null) identity.address!,
+      if (identity.phone != null) identity.phone!,
+      if (identity.email != null) identity.email!,
+    ];
+    buffer.writeln(
+      '<div class="contact">${parts.map(_esc).join(' <span class="sep">|</span> ')}</div>',
+    );
   }
   buffer.writeln('</header>');
 }
@@ -105,7 +105,7 @@ void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
     _meta(buffer, 'Address', doc.customerAddress!);
   }
   if (doc.salesRepName != null) {
-    _meta(buffer, 'Sales representative', doc.salesRepName!);
+    _meta(buffer, 'Sales Rep', doc.salesRepName!);
   }
   if (doc.outstandingBalance != null) {
     _meta(buffer, 'Outstanding balance', doc.money(doc.outstandingBalance!));
@@ -159,7 +159,7 @@ void _writePaymentBody(StringBuffer buffer, OrderDocument doc) {
     _meta(buffer, 'Phone', doc.customerPhone!);
   }
   if (doc.salesRepName != null) {
-    _meta(buffer, 'Sales representative', doc.salesRepName!);
+    _meta(buffer, 'Sales Rep', doc.salesRepName!);
   }
   if (method != null && method.isNotEmpty) {
     _meta(buffer, 'Method', method);
@@ -238,6 +238,13 @@ html, body {
   max-width: 170mm;
   margin: 0 auto;
 }
+.doc-ref {
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  color: #78716c;
+  margin: 0 0 10px;
+}
 .issuer {
   text-align: center;
   margin: 0 0 14px;
@@ -259,6 +266,10 @@ html, body {
   color: #57534e;
   font-size: 11px;
   line-height: 1.35;
+}
+.contact .sep {
+  color: #a8a29e;
+  padding: 0 2px;
 }
 .card {
   border: 1px solid #e7e5e4;
@@ -293,7 +304,7 @@ html, body {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 .meta-label {
   width: 130px;

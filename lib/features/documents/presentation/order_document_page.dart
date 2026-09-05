@@ -176,31 +176,43 @@ class _DocumentIssuerHeader extends StatelessWidget {
           ),
         if (identity.hasContactBlock) ...[
           const SizedBox(height: 10),
-          if (identity.address != null)
-            Text(
-              identity.address!,
-              textAlign: TextAlign.center,
-              style: _contactStyle,
-            ),
-          if (identity.phone != null) ...[
-            if (identity.address != null) const SizedBox(height: 2),
-            Text(
-              identity.phone!,
-              textAlign: TextAlign.center,
-              style: _contactStyle,
-            ),
-          ],
-          if (identity.email != null) ...[
-            if (identity.address != null || identity.phone != null)
-              const SizedBox(height: 2),
-            Text(
-              identity.email!,
-              textAlign: TextAlign.center,
-              style: _contactStyle,
-            ),
-          ],
+          _IssuerContactLine(identity: identity, style: _contactStyle),
         ],
       ],
+    );
+  }
+}
+
+class _IssuerContactLine extends StatelessWidget {
+  const _IssuerContactLine({required this.identity, required this.style});
+
+  final DocumentIssuerIdentity identity;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[
+      if (identity.address != null) identity.address!,
+      if (identity.phone != null) identity.phone!,
+      if (identity.email != null) identity.email!,
+    ];
+    if (parts.isEmpty) return const SizedBox.shrink();
+
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          for (var i = 0; i < parts.length; i++) ...[
+            if (i > 0)
+              TextSpan(
+                text: '  |  ',
+                style: style.copyWith(color: AppColors.textFaint),
+              ),
+            TextSpan(text: parts[i]),
+          ],
+        ],
+      ),
+      textAlign: TextAlign.center,
     );
   }
 }
@@ -310,7 +322,7 @@ class _PaymentDocumentCard extends StatelessWidget {
           if (doc.customerPhone != null)
             _MetaRow(label: 'Phone', value: doc.customerPhone!),
           if (doc.salesRepName != null)
-            _MetaRow(label: 'Sales representative', value: doc.salesRepName!),
+            _MetaRow(label: 'Sales Rep', value: doc.salesRepName!),
           if (method != null && method.isNotEmpty)
             _MetaRow(label: 'Method', value: method),
           if (doc.reference != null)
@@ -390,7 +402,7 @@ class _OrderDocumentCard extends StatelessWidget {
           if (doc.customerAddress != null)
             _MetaRow(label: 'Address', value: doc.customerAddress!),
           if (doc.salesRepName != null)
-            _MetaRow(label: 'Sales representative', value: doc.salesRepName!),
+            _MetaRow(label: 'Sales Rep', value: doc.salesRepName!),
           if (doc.outstandingBalance != null)
             _MetaRow(
               label: 'Outstanding balance',
@@ -494,7 +506,7 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -505,6 +517,7 @@ class _MetaRow extends StatelessWidget {
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 13,
+                height: 1.25,
                 color: AppColors.textTertiary,
               ),
             ),
@@ -517,6 +530,7 @@ class _MetaRow extends StatelessWidget {
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 13.5,
                 fontWeight: FontWeight.w600,
+                height: 1.25,
                 color: AppColors.textPrimary,
               ),
             ),

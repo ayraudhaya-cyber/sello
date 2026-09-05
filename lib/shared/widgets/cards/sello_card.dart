@@ -159,6 +159,7 @@ class SelloStatCard extends StatelessWidget {
     this.compact = false,
     this.emphasized = false,
     this.quiet = false,
+    this.reserveSparklineSlot = false,
   });
 
   final String label;
@@ -180,6 +181,10 @@ class SelloStatCard extends StatelessWidget {
 
   /// Supporting metric — softer chrome, secondary as plain text (no pill).
   final bool quiet;
+
+  /// Keep empty chart space so siblings with sparklines share one height.
+  /// Use on Dashboard only — list pages should stay content-sized.
+  final bool reserveSparklineSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -321,13 +326,12 @@ class SelloStatCard extends StatelessWidget {
               ),
             ),
           ],
-          if (!compact) ...[
-            // Reserve sparkline height so KPI cards in a row stay aligned.
-            const SizedBox(height: 14),
+          if (_showSparkline || reserveSparklineSlot) ...[
+            SizedBox(height: compact ? 10 : 14),
             SizedBox(
-              height: 30,
+              height: compact ? 24 : 30,
               width: double.infinity,
-              child: sparkPoints != null && sparkPoints!.isNotEmpty
+              child: _showSparkline
                   ? CustomPaint(
                       painter: _KpiSparkPainter(
                         points: sparkPoints!,
@@ -336,23 +340,14 @@ class SelloStatCard extends StatelessWidget {
                     )
                   : null,
             ),
-          ] else if (sparkPoints != null && sparkPoints!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 24,
-              width: double.infinity,
-              child: CustomPaint(
-                painter: _KpiSparkPainter(
-                  points: sparkPoints!,
-                  color: accent,
-                ),
-              ),
-            ),
           ],
         ],
       ),
     );
   }
+
+  bool get _showSparkline =>
+      sparkPoints != null && sparkPoints!.isNotEmpty;
 }
 
 class _KpiSparkPainter extends CustomPainter {

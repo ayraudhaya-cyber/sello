@@ -175,7 +175,7 @@ class _DocumentIssuerHeader extends StatelessWidget {
             style: _nameStyle,
           ),
         if (identity.hasContactBlock) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           _IssuerContactLine(identity: identity, style: _contactStyle),
         ],
       ],

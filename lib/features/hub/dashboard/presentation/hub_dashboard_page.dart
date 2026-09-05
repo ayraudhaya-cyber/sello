@@ -450,6 +450,8 @@ class _KpiGrid extends ConsumerWidget {
                   trendPositive: item.up,
                   sparkPoints:
                       item.spark.isEmpty ? null : item.spark,
+                  // Keep chart-less KPIs aligned with sparkline cards on this page.
+                  reserveSparklineSlot: true,
                   onTap: item.route == null
                       ? null
                       : () => context.go(item.route!),

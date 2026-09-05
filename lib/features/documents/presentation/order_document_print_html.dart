@@ -19,10 +19,7 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
     ..writeln('<style>$_printCss</style>')
     ..writeln('</head>')
     ..writeln('<body>')
-    ..writeln('<div class="sheet">')
-    ..writeln(
-      '<div class="doc-ref">${_esc(doc.documentTitle)}</div>',
-    );
+    ..writeln('<div class="sheet">');
 
   _writeIssuer(buffer, identity);
   buffer.writeln('<div class="card">');
@@ -238,20 +235,13 @@ html, body {
   max-width: 170mm;
   margin: 0 auto;
 }
-.doc-ref {
-  text-align: right;
-  font-size: 11px;
-  font-weight: 600;
-  color: #78716c;
-  margin: 0 0 10px;
-}
 .issuer {
   text-align: center;
   margin: 0 0 14px;
 }
 .logo {
   display: block;
-  margin: 0 auto 8px;
+  margin: 0 auto 14px;
   max-width: 160px;
   max-height: 40px;
   object-fit: contain;
@@ -260,12 +250,13 @@ html, body {
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.2px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 .contact {
   color: #57534e;
   font-size: 11px;
   line-height: 1.35;
+  margin-top: 2px;
 }
 .contact .sep {
   color: #a8a29e;

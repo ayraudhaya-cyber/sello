@@ -16,7 +16,7 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
     ..writeln('<meta charset="utf-8">')
     ..writeln('<meta name="viewport" content="width=device-width, initial-scale=1">')
     ..writeln('<title>${_esc(doc.documentTitle)}</title>')
-    ..writeln('<style>${_printCss}</style>')
+    ..writeln('<style>$_printCss</style>')
     ..writeln('</head>')
     ..writeln('<body>')
     ..writeln('<div class="sheet">');

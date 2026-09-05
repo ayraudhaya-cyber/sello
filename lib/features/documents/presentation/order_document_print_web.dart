@@ -19,7 +19,7 @@ void printOrderDocument(OrderDocument doc) {
       (() {
         web.URL.revokeObjectURL(url);
       }).toJS,
-      60 * 1000,
+      60000.toJS,
     );
     return;
   }
@@ -41,7 +41,7 @@ void printOrderDocument(OrderDocument doc) {
         iframe.remove();
         web.URL.revokeObjectURL(url);
       }).toJS,
-      2500,
+      2500.toJS,
     );
   }.toJS;
   iframe.addEventListener('load', onLoad);

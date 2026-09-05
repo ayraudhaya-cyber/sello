@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/updates/presentation/update_prompt.dart';
+import 'package:sello/features/updates/presentation/whats_new_banner.dart';
+import 'package:sello/services/updates/release_manifest_config.dart';
+import 'package:sello/services/updates/update_presentation_policy.dart';
 import 'package:sello/services/updates/update_providers.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Root overlay for startup update checks. Failures never block the app.
+///
+/// Optional updates use [UpdatePresentationPolicy]: Web/PWA gets a lightweight
+/// What’s New banner; Android / iOS / desktop keep the Update Available modal.
+/// Required updates stay blocking on every platform.
 class UpdateCheckHost extends ConsumerStatefulWidget {
   const UpdateCheckHost({super.key, required this.child});
 
@@ -21,10 +29,16 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   var _optionalVisible = false;
   String? _promptedIdentity;
 
+  UpdatePresentationStyle get _optionalStyle =>
+      UpdatePresentationPolicy.forPlatform(
+        ReleaseManifestConfig.currentPlatform,
+      );
+
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(updateCheckControllerProvider);
     final snapshot = async.valueOrNull;
+    final isMobile = context.isMobile;
 
     ref.listen<AsyncValue<UpdateCheckSnapshot>>(
       updateCheckControllerProvider,
@@ -34,6 +48,13 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
         _maybeShowOptional(data);
       },
     );
+
+    final showOptional = _optionalVisible &&
+        snapshot?.status == UpdateCheckStatus.updateAvailable;
+    final useWhatsNew =
+        showOptional && _optionalStyle == UpdatePresentationStyle.whatsNew;
+    final useModal =
+        showOptional && _optionalStyle == UpdatePresentationStyle.updateModal;
 
     return Stack(
       children: [
@@ -45,8 +66,7 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
               onUpdate: () => _openDestination(snapshot),
             ),
           )
-        else if (_optionalVisible &&
-            snapshot?.status == UpdateCheckStatus.updateAvailable)
+        else if (useModal)
           Positioned.fill(
             child: ColoredBox(
               color: AppColors.textPrimary.withValues(alpha: 0.28),
@@ -60,6 +80,29 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
                       onLater: _postpone,
                       onUpdate: () => _openDestination(snapshot),
                     ),
+                  ),
+                ),
+              ),
+            ),
+          )
+        else if (useWhatsNew)
+          Positioned(
+            right: isMobile ? 16 : 24,
+            left: isMobile ? 16 : null,
+            bottom: 16 + MediaQuery.paddingOf(context).bottom,
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isMobile ? double.infinity : 360,
+                ),
+                child: WhatsNewShortcuts(
+                  onDismiss: _postpone,
+                  child: WhatsNewBanner(
+                    snapshot: snapshot!,
+                    onDismiss: _postpone,
                   ),
                 ),
               ),

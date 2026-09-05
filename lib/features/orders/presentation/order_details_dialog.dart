@@ -19,7 +19,7 @@ import 'package:sello/shared/widgets/feedback/entity_activity_panel.dart';
 abstract final class _OrderGrid {
   static const double sectionGap = 24;
   static const double fieldGap = 12;
-  static const double colGutter = 24;
+  static const double colGutter = 12;
   static const double indexW = 32;
   static const double qtyW = 72;
   static const double priceW = 108;
@@ -509,11 +509,7 @@ class _InfoGrid extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < blocks.length; i++) ...[
-                if (i > 0) ...[
-                  const SizedBox(height: 16),
-                  const Divider(height: 1, color: AppColors.outlinePanel),
-                  const SizedBox(height: 16),
-                ],
+                if (i > 0) const SizedBox(height: _OrderGrid.colGutter),
                 _InfoBlockView(block: blocks[i]),
               ],
             ],
@@ -525,12 +521,7 @@ class _InfoGrid extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < blocks.length; i++) ...[
-                if (i > 0)
-                  const VerticalDivider(
-                    width: _OrderGrid.colGutter,
-                    thickness: 1,
-                    color: AppColors.outlinePanel,
-                  ),
+                if (i > 0) const SizedBox(width: _OrderGrid.colGutter),
                 Expanded(child: _InfoBlockView(block: blocks[i])),
               ],
             ],
@@ -548,24 +539,34 @@ class _InfoBlockView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(block.title.toUpperCase(), style: _Type.section),
-        const SizedBox(height: 10),
-        for (var i = 0; i < block.fields.length; i++) ...[
-          if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
-          _CompactField(field: block.fields[i]),
-        ],
-        if (block.trailing != null) ...[
-          const SizedBox(height: 12),
-          block.trailing!,
-        ],
-        if (block.account != null) ...[
-          const SizedBox(height: 14),
-          block.account!,
-        ],
-      ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.veil,
+        borderRadius: AppRadius.panelAll,
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(block.title.toUpperCase(), style: _Type.section),
+            const SizedBox(height: 10),
+            for (var i = 0; i < block.fields.length; i++) ...[
+              if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
+              _CompactField(field: block.fields[i]),
+            ],
+            if (block.trailing != null) ...[
+              const SizedBox(height: 12),
+              block.trailing!,
+            ],
+            if (block.account != null) ...[
+              const SizedBox(height: 14),
+              block.account!,
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

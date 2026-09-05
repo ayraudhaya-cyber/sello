@@ -133,12 +133,14 @@ class SelloFormDialog extends StatelessWidget {
                   : Padding(padding: bodyPadding, child: body),
             ),
             // Shared inset so custom footers (raw Rows) get the same margins.
+            // Right inset matches the header close control (20) so primary
+            // actions sit on the dialog’s right content edge — not 32 like body.
             Container(
               width: double.infinity,
               padding: EdgeInsets.fromLTRB(
                 isFullscreen ? 20 : 32,
                 16,
-                isFullscreen ? 20 : 32,
+                isFullscreen ? 12 : 20,
                 isFullscreen ? 16 : 24,
               ),
               decoration: const BoxDecoration(
@@ -701,42 +703,45 @@ class SelloDialogFooter extends StatelessWidget {
     // Left actions grow/wrap; Close + primary stay pinned to the right edge.
     // Padding / top rule live on [SelloFormDialog] so every modal footer
     // shares the same inset — including custom Rows.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                if (hasDestructive)
-                  SelloButton(
-                    label: destructiveLabel!,
-                    variant: SelloButtonVariant.danger,
-                    onPressed: onDestructive,
-                  ),
-                ?leading,
-              ],
+    return SizedBox(
+      width: double.infinity,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (hasDestructive)
+                    SelloButton(
+                      label: destructiveLabel!,
+                      variant: SelloButtonVariant.danger,
+                      onPressed: onDestructive,
+                    ),
+                  ?leading,
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 16),
-        SelloButton(
-          label: cancelLabel,
-          variant: cancelVariant,
-          onPressed: onCancel ?? () => Navigator.of(context).maybePop(),
-        ),
-        const SizedBox(width: 12),
-        SelloButton(
-          label: primaryLabel,
-          variant: SelloButtonVariant.primary,
-          loading: primaryLoading,
-          onPressed: primaryEnabled && !primaryLoading ? onPrimary : null,
-        ),
-      ],
+          const SizedBox(width: 16),
+          SelloButton(
+            label: cancelLabel,
+            variant: cancelVariant,
+            onPressed: onCancel ?? () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(width: 12),
+          SelloButton(
+            label: primaryLabel,
+            variant: SelloButtonVariant.primary,
+            loading: primaryLoading,
+            onPressed: primaryEnabled && !primaryLoading ? onPrimary : null,
+          ),
+        ],
+      ),
     );
   }
 }

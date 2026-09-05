@@ -99,20 +99,20 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                     textAlign: TextAlign.left,
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
-                      fontSize: 13.5,
+                      fontSize: 16,
                       fontWeight: FontWeight.w500,
                       height: 1.4,
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 28),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: SelloButton(
                       label: 'Print',
                       variant: SelloButtonVariant.secondary,
                       icon: Icons.print_outlined,
-                      onPressed: printOrderDocument,
+                      onPressed: () => printOrderDocument(doc),
                     ),
                   ),
                 ],
@@ -125,7 +125,7 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
   }
 }
 
-/// Tenant issuer mark — logo/name on the left, contact top-right.
+/// Tenant issuer mark — logo/name and contact centered as one block.
 class _DocumentIssuerHeader extends StatelessWidget {
   const _DocumentIssuerHeader({required this.identity});
 
@@ -134,14 +134,22 @@ class _DocumentIssuerHeader extends StatelessWidget {
   static const _contactStyle = TextStyle(
     fontFamily: AppTypography.fontFamily,
     fontSize: 13,
-    height: 1.2,
+    height: 1.35,
     color: AppColors.textSecondary,
+  );
+
+  static const _nameStyle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 22,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.3,
+    color: AppColors.textPrimary,
   );
 
   @override
   Widget build(BuildContext context) {
-    final mark = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (identity.showLogo && identity.logoUrl != null) ...[
           ConstrainedBox(
@@ -149,73 +157,49 @@ class _DocumentIssuerHeader extends StatelessWidget {
             child: Image.network(
               identity.logoUrl!,
               fit: BoxFit.contain,
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.center,
               filterQuality: FilterQuality.medium,
               errorBuilder: (_, error, stackTrace) => Text(
                 identity.businessName,
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                  color: AppColors.textPrimary,
-                ),
+                textAlign: TextAlign.center,
+                style: _nameStyle,
               ),
             ),
           ),
-          if (identity.showBusinessName) const SizedBox(height: 14),
+          if (identity.showBusinessName) const SizedBox(height: 10),
         ],
         if (identity.showBusinessName)
           Text(
             identity.businessName,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-              color: AppColors.textPrimary,
+            textAlign: TextAlign.center,
+            style: _nameStyle,
+          ),
+        if (identity.hasContactBlock) ...[
+          const SizedBox(height: 10),
+          if (identity.address != null)
+            Text(
+              identity.address!,
+              textAlign: TextAlign.center,
+              style: _contactStyle,
             ),
-          ),
-      ],
-    );
-
-    if (!identity.hasContactBlock) return mark;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        mark,
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (identity.address != null)
-                Text(
-                  identity.address!,
-                  textAlign: TextAlign.right,
-                  style: _contactStyle,
-                ),
-              if (identity.phone != null) ...[
-                if (identity.address != null) const SizedBox(height: 2),
-                Text(
-                  identity.phone!,
-                  textAlign: TextAlign.right,
-                  style: _contactStyle,
-                ),
-              ],
-              if (identity.email != null) ...[
-                if (identity.address != null || identity.phone != null)
-                  const SizedBox(height: 2),
-                Text(
-                  identity.email!,
-                  textAlign: TextAlign.right,
-                  style: _contactStyle,
-                ),
-              ],
-            ],
-          ),
-        ),
+          if (identity.phone != null) ...[
+            if (identity.address != null) const SizedBox(height: 2),
+            Text(
+              identity.phone!,
+              textAlign: TextAlign.center,
+              style: _contactStyle,
+            ),
+          ],
+          if (identity.email != null) ...[
+            if (identity.address != null || identity.phone != null)
+              const SizedBox(height: 2),
+            Text(
+              identity.email!,
+              textAlign: TextAlign.center,
+              style: _contactStyle,
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -528,6 +512,7 @@ class _MetaRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
+              textAlign: TextAlign.right,
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 13.5,

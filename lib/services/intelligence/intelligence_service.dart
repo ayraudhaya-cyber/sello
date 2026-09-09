@@ -68,6 +68,8 @@ class IntelligenceService {
             ),
           );
         case UserRole.manager:
+        case UserRole.storeInCharge:
+        case UserRole.salesInCharge:
           candidates.addAll(
             await _managerCandidates(
               companyId: session.company.id,

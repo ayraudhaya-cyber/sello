@@ -342,7 +342,7 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
                 child: SelloEmptyState(
                   title: 'No team members yet',
                   message:
-                      'Add owners, managers, and sales representatives. '
+                      'Add owners, managers, sales reps, and in-charge roles. '
                       'Sello creates their account and sends an invitation '
                       'automatically.',
                   icon: Icons.groups_rounded,
@@ -524,6 +524,10 @@ extension on Role {
     switch (code) {
       case 'sales_representative':
         return 'Sales Rep';
+      case 'store_in_charge':
+        return 'Store In-charge';
+      case 'sales_in_charge':
+        return 'Sales In-charge';
       default:
         return name;
     }
@@ -626,6 +630,14 @@ class _Toolbar extends StatelessWidget {
           DropdownMenuItem(
             value: EmployeeRoleFilter.salesRepresentative,
             child: Text('Sales Rep'),
+          ),
+          DropdownMenuItem(
+            value: EmployeeRoleFilter.storeInCharge,
+            child: Text('Store In-charge'),
+          ),
+          DropdownMenuItem(
+            value: EmployeeRoleFilter.salesInCharge,
+            child: Text('Sales In-charge'),
           ),
         ],
       ),

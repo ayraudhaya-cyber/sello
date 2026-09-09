@@ -54,7 +54,12 @@ abstract final class QuickActionsCatalog {
       label: 'New Customer',
       icon: Icons.person_add_alt_1_rounded,
       subtitle: 'Add a buyer to your book',
-      roles: {UserRole.owner, UserRole.manager, UserRole.salesRepresentative},
+      roles: {
+        UserRole.owner,
+        UserRole.manager,
+        UserRole.salesRepresentative,
+        UserRole.salesInCharge,
+      },
       shortcutLabel: 'C',
     ),
     QuickActionDefinition(
@@ -62,7 +67,7 @@ abstract final class QuickActionsCatalog {
       label: 'New Product',
       icon: Icons.inventory_2_outlined,
       subtitle: 'Add something you sell',
-      roles: {UserRole.owner, UserRole.manager},
+      roles: {UserRole.owner, UserRole.manager, UserRole.storeInCharge},
       shortcutLabel: 'P',
     ),
     QuickActionDefinition(
@@ -84,14 +89,19 @@ abstract final class QuickActionsCatalog {
       label: 'Schedule Visit',
       icon: Icons.event_available_rounded,
       subtitle: 'Plan a customer stop',
-      roles: {UserRole.owner, UserRole.manager},
+      roles: {UserRole.owner, UserRole.manager, UserRole.salesInCharge},
     ),
     QuickActionDefinition(
       id: QuickActionId.receivePayment,
       label: 'Receive Payment',
       icon: Icons.payments_outlined,
       subtitle: 'Record a collection',
-      roles: {UserRole.owner, UserRole.manager, UserRole.salesRepresentative},
+      roles: {
+        UserRole.owner,
+        UserRole.manager,
+        UserRole.salesRepresentative,
+        UserRole.salesInCharge,
+      },
       shortcutLabel: 'M',
     ),
     QuickActionDefinition(
@@ -99,7 +109,7 @@ abstract final class QuickActionsCatalog {
       label: 'Stock Adjustment',
       icon: Icons.tune_rounded,
       subtitle: 'Correct on-hand quantity',
-      roles: {UserRole.owner, UserRole.manager},
+      roles: {UserRole.owner, UserRole.manager, UserRole.storeInCharge},
     ),
     QuickActionDefinition(
       id: QuickActionId.startVisit,
@@ -121,7 +131,12 @@ abstract final class QuickActionsCatalog {
       label: 'New Order',
       icon: Icons.receipt_long_outlined,
       subtitle: 'Build a basket and sell',
-      roles: {UserRole.owner, UserRole.manager, UserRole.salesRepresentative},
+      roles: {
+        UserRole.owner,
+        UserRole.manager,
+        UserRole.salesRepresentative,
+        UserRole.salesInCharge,
+      },
       shortcutLabel: 'O',
     ),
     QuickActionDefinition(
@@ -149,6 +164,16 @@ abstract final class QuickActionsCatalog {
           QuickActionId.receivePayment,
           QuickActionId.stockAdjustment,
           QuickActionId.newOrder,
+        ],
+      UserRole.storeInCharge => const [
+          QuickActionId.newProduct,
+          QuickActionId.stockAdjustment,
+        ],
+      UserRole.salesInCharge => const [
+          QuickActionId.newCustomer,
+          QuickActionId.newOrder,
+          QuickActionId.receivePayment,
+          QuickActionId.scheduleVisit,
         ],
       UserRole.salesRepresentative => const [
           QuickActionId.startVisit,

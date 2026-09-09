@@ -20,6 +20,8 @@ enum EmployeeRoleFilter {
   owner,
   manager,
   salesRepresentative,
+  storeInCharge,
+  salesInCharge,
 }
 
 extension on EmployeeRoleFilter {
@@ -28,6 +30,8 @@ extension on EmployeeRoleFilter {
         EmployeeRoleFilter.owner => 'owner',
         EmployeeRoleFilter.manager => 'manager',
         EmployeeRoleFilter.salesRepresentative => 'sales_representative',
+        EmployeeRoleFilter.storeInCharge => 'store_in_charge',
+        EmployeeRoleFilter.salesInCharge => 'sales_in_charge',
       };
 }
 

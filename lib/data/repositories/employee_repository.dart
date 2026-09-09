@@ -250,6 +250,8 @@ class EmployeeRepository {
             'owner',
             'manager',
             'sales_representative',
+            'store_in_charge',
+            'sales_in_charge',
           ])
           .order('display_order');
       return (rows as List)

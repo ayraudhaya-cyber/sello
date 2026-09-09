@@ -220,6 +220,10 @@ class RolePermissionProfile extends Equatable {
         'owner' => 'Full access to the business.',
         'manager' => 'Can access the Hub and manage daily operations.',
         'sales_representative' => 'Uses the Sello Sales Rep mobile app.',
+        'store_in_charge' =>
+          'Manages stock, inventory and store deliveries.',
+        'sales_in_charge' =>
+          'Manages sales, customers and the sales team.',
         'warehouse_staff' => 'Manages stock and fulfilment in the warehouse.',
         'supervisor' => 'Oversees field teams and day-to-day operations.',
         'cashier' => 'Handles point-of-sale collections.',
@@ -256,6 +260,94 @@ class RolePermissionProfile extends Equatable {
             'Reports and Sello Intelligence',
           ],
           modules: _hubFull(manageSettings: false, manageEmployees: true),
+        );
+      case 'store_in_charge':
+        return const RolePermissionProfile(
+          roleCode: 'store_in_charge',
+          title: 'Store In-charge',
+          workspace: 'Hub',
+          capabilities: [
+            'Create and edit products (including viewing cost)',
+            'Receive and adjust inventory',
+            'Record store deliveries / fulfillment',
+            'Read customers for delivery context',
+            'No team, settings, or billing access',
+          ],
+          modules: [
+            // Create + edit catalog; no delete. Cost VIEW is SQL-gated
+            // (can_view_product_cost); cost EDIT is not a separate module verb.
+            ModuleAccess(
+              module: AppModule.products,
+              canView: true,
+              canCreate: true,
+              canEdit: true,
+              canDelete: false,
+              canApprove: false,
+            ),
+            ModuleAccess.manage(AppModule.inventory),
+            ModuleAccess(
+              module: AppModule.orders,
+              canView: true,
+              canCreate: false,
+              canEdit: true,
+              canDelete: false,
+              canApprove: true,
+            ),
+            ModuleAccess.view(AppModule.customers),
+            ModuleAccess.view(AppModule.notifications),
+            ModuleAccess(module: AppModule.suppliers),
+            ModuleAccess(module: AppModule.payments),
+            ModuleAccess(module: AppModule.reports),
+            ModuleAccess(module: AppModule.settings),
+            ModuleAccess(module: AppModule.employees),
+            ModuleAccess(module: AppModule.sales),
+            ModuleAccess(module: AppModule.schedule),
+            ModuleAccess(module: AppModule.visits),
+            ModuleAccess(module: AppModule.intelligence),
+          ],
+        );
+      case 'sales_in_charge':
+        return const RolePermissionProfile(
+          roleCode: 'sales_in_charge',
+          title: 'Sales In-charge',
+          workspace: 'Hub',
+          capabilities: [
+            'Manage sales orders and customers',
+            'View sales team and activity',
+            'Sales reporting and Hub KPIs',
+            'View catalog and stock (no adjustments)',
+            'No settings, billing, or team administration',
+          ],
+          modules: [
+            ModuleAccess.full(AppModule.orders),
+            ModuleAccess.manage(AppModule.customers),
+            ModuleAccess.view(AppModule.employees),
+            ModuleAccess.view(AppModule.reports),
+            ModuleAccess.view(AppModule.products),
+            ModuleAccess.view(AppModule.inventory),
+            ModuleAccess(
+              module: AppModule.payments,
+              canView: true,
+              canCreate: true,
+              canEdit: true,
+              canDelete: false,
+              canApprove: false,
+            ),
+            ModuleAccess(
+              module: AppModule.schedule,
+              canView: true,
+              canCreate: true,
+              canEdit: true,
+              canDelete: false,
+              canApprove: false,
+            ),
+            ModuleAccess.view(AppModule.visits),
+            ModuleAccess.view(AppModule.notifications),
+            ModuleAccess.view(AppModule.intelligence),
+            ModuleAccess(module: AppModule.suppliers),
+            ModuleAccess(module: AppModule.settings),
+            ModuleAccess(module: AppModule.sales),
+          ],
         );
       case 'sales_representative':
         return RolePermissionProfile(

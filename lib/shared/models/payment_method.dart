@@ -4,7 +4,8 @@ enum PaymentMethod {
   bankTransfer,
   wallet,
   credit,
-  creditSettlement;
+  creditSettlement,
+  cheque;
 
   String get label => switch (this) {
         PaymentMethod.cash => 'Cash',
@@ -13,6 +14,7 @@ enum PaymentMethod {
         PaymentMethod.wallet => 'Wallet',
         PaymentMethod.credit => 'Credit',
         PaymentMethod.creditSettlement => 'Credit settlement',
+        PaymentMethod.cheque => 'Cheque',
       };
 
   String get dbValue => switch (this) {
@@ -21,7 +23,7 @@ enum PaymentMethod {
         _ => name,
       };
 
-  /// Methods used when recording a collection (not sale intent on an order).
+  /// Methods used when recording a cash-like collection (not cheque instruments).
   bool get isSettlementMethod =>
       this == PaymentMethod.cash ||
       this == PaymentMethod.card ||
@@ -45,6 +47,7 @@ enum PaymentMethod {
       'wallet' => PaymentMethod.wallet,
       'credit' => PaymentMethod.credit,
       'credit_settlement' => PaymentMethod.creditSettlement,
+      'cheque' => PaymentMethod.cheque,
       _ => null,
     };
   }

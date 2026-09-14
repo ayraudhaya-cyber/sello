@@ -115,6 +115,8 @@ abstract final class NotificationTypes {
   static const collectionApproved = 'collection_approved';
   static const collectionRejected = 'collection_rejected';
   static const outstandingDue = 'outstanding_due';
+  static const chequeRecorded = 'cheque_recorded';
+  static const chequeStatusChanged = 'cheque_status_changed';
 
   // Customers
   static const customerCreated = 'customer_created';

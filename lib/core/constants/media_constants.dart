@@ -25,6 +25,7 @@ abstract final class MediaConstants {
   static const String productImagesBucket = 'product-images';
   static const String employeeAvatarsBucket = 'employee-avatars';
   static const String companyBrandingBucket = 'company-branding';
+  static const String chequeImagesBucket = 'cheque-images';
   static const String jpegContentType = 'image/jpeg';
   static const String jpegExtension = 'jpg';
 

@@ -413,6 +413,9 @@ class ReportsOverview extends Equatable {
     this.visitCollectionsAmount = 0,
     this.visitRepPerformance = const [],
     this.comparisonOverview,
+    this.openingBalanceBroughtForward = 0,
+    this.chequesCollectedInPeriod = 0,
+    this.chequesBouncedInPeriod = 0,
   });
 
   final ReportDatePreset preset;
@@ -425,6 +428,9 @@ class ReportsOverview extends Equatable {
   final int ordersInPeriod;
   final num averageOrderValue;
   final num collectionsInPeriod;
+  final num openingBalanceBroughtForward;
+  final num chequesCollectedInPeriod;
+  final num chequesBouncedInPeriod;
 
   final InventoryDashboardStats inventory;
   final PaymentDashboardStats payments;
@@ -486,6 +492,9 @@ class ReportsOverview extends Equatable {
         ordersInPeriod,
         averageOrderValue,
         collectionsInPeriod,
+        openingBalanceBroughtForward,
+        chequesCollectedInPeriod,
+        chequesBouncedInPeriod,
         inventory,
         payments,
         orderCounts,

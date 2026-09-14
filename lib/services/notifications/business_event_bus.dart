@@ -387,6 +387,50 @@ abstract final class BusinessEvents {
     notifyHubRoles: false,
   );
 
+  static BusinessEvent chequeRecorded({
+    required String chequeId,
+    required String customerName,
+    required String amountLabel,
+    bool awaitingCollection = true,
+    bool pendingApproval = false,
+  }) => BusinessEvent(
+    category: NotificationCategory.payments,
+    type: NotificationTypes.chequeRecorded,
+    title: 'New cheque recorded',
+    summary: awaitingCollection
+        ? '$amountLabel cheque from $customerName is awaiting collection.'
+        : pendingApproval
+            ? '$amountLabel cheque from $customerName is pending approval.'
+            : '$amountLabel cheque from $customerName was collected.',
+    body: awaitingCollection
+        ? 'Outstanding is unchanged until the cheque is collected.'
+        : pendingApproval
+            ? 'Outstanding is unchanged until an Owner or Manager approves.'
+            : 'Outstanding was reduced. Clearance is still pending.',
+    priority: NotificationPriority.high,
+    referenceType: 'cheque',
+    referenceId: chequeId,
+    routeHint: '${RoutePaths.hubPayments}?tab=cheques&id=$chequeId',
+  );
+
+  static BusinessEvent chequeStatusChanged({
+    required String chequeId,
+    required String customerName,
+    required String amountLabel,
+    required String title,
+    required String statusLabel,
+  }) => BusinessEvent(
+    category: NotificationCategory.payments,
+    type: NotificationTypes.chequeStatusChanged,
+    title: title,
+    summary: '$amountLabel cheque from $customerName · $statusLabel',
+    body: statusLabel,
+    priority: NotificationPriority.normal,
+    referenceType: 'cheque',
+    referenceId: chequeId,
+    routeHint: '${RoutePaths.hubPayments}?tab=cheques&id=$chequeId',
+  );
+
   // —— Inventory ——————————————————————————————————————————————
 
   static BusinessEvent stockAdjusted({

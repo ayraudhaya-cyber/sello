@@ -12,6 +12,7 @@ import 'package:sello/features/mobile/orders/application/sello_orders_provider.d
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
+import 'package:sello/features/payments/presentation/record_cheque_dialog.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/features/visits/presentation/signature_pad.dart';
 import 'package:sello/features/visits/presentation/visit_basket_bar.dart';
@@ -31,6 +32,7 @@ import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_visit.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_upsert_input.dart';
+import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
@@ -634,8 +636,7 @@ class _CustomerVisitWorkspacePageState
         confirmation = saved.confirmation;
       }
 
-      if (_arrangement == VisitPaymentArrangement.paidToday ||
-          _arrangement == VisitPaymentArrangement.chequeReceived) {
+      if (_arrangement == VisitPaymentArrangement.paidToday) {
         if (!mounted) return;
         final payment = await showDialog<ReceivePaymentInput>(
           context: context,
@@ -647,25 +648,9 @@ class _CustomerVisitWorkspacePageState
         );
         if (!mounted) return;
         if (payment != null) {
-          final reference =
-              _arrangement == VisitPaymentArrangement.chequeReceived
-              ? (payment.reference == null || payment.reference!.trim().isEmpty
-                    ? 'Cheque'
-                    : 'Cheque · ${payment.reference}')
-              : payment.reference;
           final result = await ref
               .read(paymentRepositoryProvider)
-              .receivePayment(
-                ReceivePaymentInput(
-                  customerId: payment.customerId,
-                  amount: payment.amount,
-                  method: payment.method,
-                  allocations: payment.allocations,
-                  reference: reference,
-                  notes: payment.notes,
-                  visitId: payment.visitId,
-                ),
-              );
+              .receivePayment(payment);
           if (!mounted) return;
           if (result.isPendingReview) {
             await presentCollectionAcknowledgement(
@@ -676,9 +661,56 @@ class _CustomerVisitWorkspacePageState
         }
       }
 
+      if (_arrangement == VisitPaymentArrangement.chequeReceived) {
+        if (!mounted) return;
+        final chequeInput = await showDialog<CreateChequeInput>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => RecordChequeDialog(
+            currencySymbol: _currency,
+            visitId: visit.isLocalOnly ? null : visit.id,
+            initialCustomer: customer,
+            markCollected: true,
+          ),
+        );
+        if (!mounted) return;
+        if (chequeInput != null) {
+          try {
+            await ref.read(chequeRepositoryProvider).createCheque(chequeInput);
+          } on AppFailure catch (failure) {
+            if (!mounted) return;
+            SelloSnackbars.error(context, failure.message);
+            setState(() => _saving = false);
+            return;
+          }
+        }
+      }
+
       if (_arrangement.schedulesFollowUp) {
         _chequeFollowUpDate ??= DateTime.now().add(const Duration(days: 3));
         await _scheduleChequeFollowUp();
+        if (!mounted) return;
+        final awaitingInput = await showDialog<CreateChequeInput>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => RecordChequeDialog(
+            currencySymbol: _currency,
+            visitId: visit.isLocalOnly ? null : visit.id,
+            initialCustomer: customer,
+            markCollected: false,
+          ),
+        );
+        if (!mounted) return;
+        if (awaitingInput != null) {
+          try {
+            await ref.read(chequeRepositoryProvider).createCheque(awaitingInput);
+          } on AppFailure catch (failure) {
+            if (!mounted) return;
+            SelloSnackbars.error(context, failure.message);
+            setState(() => _saving = false);
+            return;
+          }
+        }
       }
 
       final signaturePath = _signed

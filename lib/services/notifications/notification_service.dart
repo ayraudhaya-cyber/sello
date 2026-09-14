@@ -130,6 +130,7 @@ abstract final class NotificationDeepLink {
         'product' => '${RoutePaths.hubProducts}?id=$id',
         'supplier' => '${RoutePaths.hubSuppliers}?id=$id',
         'payment' => '${RoutePaths.hubPayments}?id=$id',
+        'cheque' => '${RoutePaths.hubPayments}?tab=cheques&id=$id',
         'customer_visit' || 'visit' => '${RoutePaths.hubVisits}?id=$id',
         'employee' => '${RoutePaths.hubEmployees}?id=$id',
         'scheduled_visit' => RoutePaths.hubSchedule,

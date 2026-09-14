@@ -23,6 +23,7 @@ enum PaymentMethodFilter {
   bankTransfer,
   wallet,
   creditSettlement,
+  cheque,
 }
 
 class HubPaymentsState {
@@ -150,6 +151,7 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
           PaymentMethodFilter.wallet => PaymentMethod.wallet,
           PaymentMethodFilter.creditSettlement =>
             PaymentMethod.creditSettlement,
+          PaymentMethodFilter.cheque => PaymentMethod.cheque,
         },
         page: page,
         pageSize: state.pageSize,

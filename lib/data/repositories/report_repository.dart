@@ -106,6 +106,21 @@ class ReportRepository {
         to: bounds.to,
       );
 
+      num openingBalanceBroughtForward = 0;
+      num chequesCollectedInPeriod = 0;
+      num chequesBouncedInPeriod = 0;
+      try {
+        openingBalanceBroughtForward = await _fetchOpeningBalanceSum();
+        final chequeTotals = await _fetchChequePeriodTotals(
+          from: bounds.from,
+          to: bounds.to,
+        );
+        chequesCollectedInPeriod = chequeTotals.collected;
+        chequesBouncedInPeriod = chequeTotals.bounced;
+      } catch (_) {
+        // Additive — reports still load if cheque migration pending.
+      }
+
       var visitsCompleted = 0;
       var visitsMissed = 0;
       var visitsScheduled = 0;
@@ -171,6 +186,9 @@ class ReportRepository {
         ordersInPeriod: orderCount,
         averageOrderValue: aov,
         collectionsInPeriod: collectionsInPeriod,
+        openingBalanceBroughtForward: openingBalanceBroughtForward,
+        chequesCollectedInPeriod: chequesCollectedInPeriod,
+        chequesBouncedInPeriod: chequesBouncedInPeriod,
         inventory: inventory,
         payments: payments,
         orderCounts: orderCounts,
@@ -312,6 +330,53 @@ class ReportRepository {
       total += _asNum((row as Map)['amount']);
     }
     return total;
+  }
+
+  Future<num> _fetchOpeningBalanceSum() async {
+    final rows = await _client
+        .from('customers')
+        .select('opening_balance')
+        .isFilter('deleted_at', null);
+
+    num total = 0;
+    for (final row in rows as List) {
+      total += _asNum((row as Map)['opening_balance']);
+    }
+    return total;
+  }
+
+  Future<({num collected, num bounced})> _fetchChequePeriodTotals({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final fromIso = from.toIso8601String();
+    final toIso = to.toIso8601String();
+
+    final collectedRows = await _client
+        .from('cheques')
+        .select('amount')
+        .isFilter('deleted_at', null)
+        .not('balance_applied_at', 'is', null)
+        .gte('balance_applied_at', fromIso)
+        .lte('balance_applied_at', toIso);
+
+    final bouncedRows = await _client
+        .from('cheques')
+        .select('amount')
+        .isFilter('deleted_at', null)
+        .not('balance_reversed_at', 'is', null)
+        .gte('balance_reversed_at', fromIso)
+        .lte('balance_reversed_at', toIso);
+
+    num collected = 0;
+    for (final row in collectedRows as List) {
+      collected += _asNum((row as Map)['amount']);
+    }
+    num bounced = 0;
+    for (final row in bouncedRows as List) {
+      bounced += _asNum((row as Map)['amount']);
+    }
+    return (collected: collected, bounced: bounced);
   }
 
   Future<List<ReportNamedValue>> _fetchTopProducts({

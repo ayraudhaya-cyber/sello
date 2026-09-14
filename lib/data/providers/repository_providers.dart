@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/data/repositories/cheque_repository.dart';
 import 'package:sello/data/repositories/company_settings_repository.dart';
 import 'package:sello/data/repositories/customer_repository.dart';
 import 'package:sello/data/repositories/employee_repository.dart';
@@ -132,6 +133,10 @@ final paymentRepositoryProvider = Provider<PaymentRepository>(
     collectionAcknowledgements:
         ref.watch(collectionAcknowledgementDispatcherProvider),
   ),
+);
+
+final chequeRepositoryProvider = Provider<ChequeRepository>(
+  (ref) => ChequeRepository(events: ref.watch(businessEventBusProvider)),
 );
 
 final inventoryRepositoryProvider = Provider<InventoryRepository>(

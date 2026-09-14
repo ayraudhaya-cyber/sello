@@ -1,8 +1,7 @@
 /// How the buyer intends to settle during a customer visit.
 ///
-/// Maps onto existing payment / order methods where possible. Cheque collection
-/// scheduling creates a follow-up planned visit via [VisitRepository.upsertVisit]
-/// — it does not invent a parallel payment pipeline.
+/// Cash/card collections use [ReceivePaymentDialog]. Cheque arrangements use
+/// [RecordChequeDialog] (awaiting or collected) against the cheques domain.
 enum VisitPaymentArrangement {
   paidToday,
   creditSale,

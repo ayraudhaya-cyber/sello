@@ -254,6 +254,18 @@ class ReportDetailDialog extends StatelessWidget {
                   'Collections in period',
                   money(overview.collectionsInPeriod)
                 ),
+                (
+                  'Opening balance / Brought forward',
+                  money(overview.openingBalanceBroughtForward)
+                ),
+                (
+                  'Cheques collected in period',
+                  money(overview.chequesCollectedInPeriod)
+                ),
+                (
+                  'Cheques bounced in period',
+                  money(overview.chequesBouncedInPeriod)
+                ),
                 ('Wallet issued', money(overview.payments.walletIssued)),
               ],
             ),

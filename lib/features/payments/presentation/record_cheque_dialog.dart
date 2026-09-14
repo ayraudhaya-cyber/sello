@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,44 +7,63 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/services/media/media_service.dart';
+import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
-import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
-/// Premium receive-payment workspace dialog.
-class ReceivePaymentDialog extends ConsumerStatefulWidget {
-  const ReceivePaymentDialog({
+/// Record a cheque instrument — returns [CreateChequeInput] for the caller to save.
+class RecordChequeDialog extends ConsumerStatefulWidget {
+  const RecordChequeDialog({
     super.key,
     required this.currencySymbol,
     this.visitId,
     this.initialCustomer,
+    this.markCollected = false,
   });
 
   final String currencySymbol;
   final String? visitId;
   final CustomerSummary? initialCustomer;
+  final bool markCollected;
 
   @override
-  ConsumerState<ReceivePaymentDialog> createState() =>
-      _ReceivePaymentDialogState();
+  ConsumerState<RecordChequeDialog> createState() => _RecordChequeDialogState();
 }
 
-class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
+class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
+  final _media = MediaService();
+
   CustomerSummary? _customer;
   List<ReceivableOrder> _receivables = const [];
   final Map<String, num> _allocations = {};
-  PaymentMethod? _method = PaymentMethod.cash;
+
   final _amount = TextEditingController();
-  final _reference = TextEditingController();
+  final _bank = TextEditingController();
+  final _chequeNumber = TextEditingController();
+  final _holder = TextEditingController();
   final _notes = TextEditingController();
+
+  DateTime _chequeDate = DateTime.now();
+  DateTime? _collectionDate;
+  bool _markCollected = false;
+  Uint8List? _photoBytes;
+  String? _uploadedPhotoPath;
+  bool _uploadingPhoto = false;
   bool _loadingOrders = false;
+  bool _submitting = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _markCollected = widget.markCollected;
+    if (_markCollected) {
+      _collectionDate = DateTime.now();
+    }
     final initial = widget.initialCustomer;
     if (initial != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,7 +75,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   @override
   void dispose() {
     _amount.dispose();
-    _reference.dispose();
+    _bank.dispose();
+    _chequeNumber.dispose();
+    _holder.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -75,9 +97,11 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     setState(() {
       _customer = selected;
       _allocations.clear();
-      _amount.clear();
       _error = null;
       _loadingOrders = true;
+      if (_holder.text.trim().isEmpty) {
+        _holder.text = selected.name;
+      }
     });
     try {
       final orders = await ref
@@ -87,18 +111,14 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       setState(() {
         _receivables = orders;
         _loadingOrders = false;
-        if (orders.isNotEmpty) {
-          final totalDue = orders.fold<num>(0, (sum, o) => sum + o.remaining);
-          _amount.text = totalDue.toStringAsFixed(2);
-          // Default FIFO full allocation
-          var remaining = totalDue;
-          for (final order in orders) {
-            final take = order.remaining.clamp(0, remaining);
-            if (take > 0) {
-              _allocations[order.id] = take;
-              remaining -= take;
-            }
-            if (remaining <= 0) break;
+        if (_markCollected && orders.isNotEmpty) {
+          final amount = num.tryParse(_amount.text.trim()) ?? 0;
+          if (amount > 0) {
+            _rebalanceAllocations(amount);
+          } else {
+            final totalDue = orders.fold<num>(0, (sum, o) => sum + o.remaining);
+            _amount.text = totalDue.toStringAsFixed(2);
+            _rebalanceAllocations(totalDue);
           }
         }
       });
@@ -113,6 +133,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
 
   void _rebalanceAllocations(num paymentAmount) {
     _allocations.clear();
+    if (!_markCollected) return;
     var remaining = paymentAmount;
     for (final order in _receivables) {
       if (remaining <= 0) break;
@@ -124,45 +145,172 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     }
   }
 
-  ReceivePaymentInput? _buildInput() {
+  Future<void> _pickDate({required bool collection}) async {
+    final initial = collection
+        ? (_collectionDate ?? DateTime.now())
+        : _chequeDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (collection) {
+        _collectionDate = picked;
+      } else {
+        _chequeDate = picked;
+      }
+    });
+  }
+
+  Future<void> _pickPhoto() async {
+    final companyId = ref.read(currentSessionProvider)?.company.id;
+    if (companyId == null) {
+      setState(() => _error = 'Your session expired. Sign in again.');
+      return;
+    }
+
+    setState(() {
+      _uploadingPhoto = true;
+      _error = null;
+    });
+    try {
+      final file = await _media.pickWithBestExperience(context);
+      if (file == null || !mounted) {
+        setState(() => _uploadingPhoto = false);
+        return;
+      }
+      final raw = await file.readAsBytes();
+      if (!mounted) return;
+      final prepared = await _media.prepareForUpload(context, raw);
+      if (prepared == null || !mounted) {
+        setState(() => _uploadingPhoto = false);
+        return;
+      }
+
+      final tempKey = 'draft-${DateTime.now().millisecondsSinceEpoch}';
+      final path = await ref.read(chequeRepositoryProvider).uploadChequePhoto(
+            companyId: companyId,
+            chequeKey: tempKey,
+            bytes: prepared.bytes,
+            contentType: prepared.contentType,
+          );
+      if (!mounted) return;
+      setState(() {
+        _photoBytes = prepared.bytes;
+        _uploadedPhotoPath = path;
+        _uploadingPhoto = false;
+      });
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _uploadingPhoto = false;
+        _error = failure.message;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _uploadingPhoto = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  void _clearPhoto() {
+    setState(() {
+      _photoBytes = null;
+      _uploadedPhotoPath = null;
+    });
+  }
+
+  CreateChequeInput? _buildInput() {
     if (_customer == null) {
       setState(() => _error = 'Select a customer.');
       return null;
     }
     final amount = num.tryParse(_amount.text.trim()) ?? 0;
     if (amount <= 0) {
-      setState(() => _error = 'Enter a payment amount.');
+      setState(() => _error = 'Enter a cheque amount greater than zero.');
       return null;
     }
-    if (_method == null) {
-      setState(() => _error = 'Choose a payment method.');
+    if (_bank.text.trim().isEmpty) {
+      setState(() => _error = 'Enter the bank name.');
       return null;
     }
-    if (_method == PaymentMethod.wallet &&
-        amount > (_customer?.walletBalance ?? 0)) {
-      setState(() => _error = 'Wallet balance is insufficient.');
+    if (_chequeNumber.text.trim().isEmpty) {
+      setState(() => _error = 'Enter the cheque number.');
+      return null;
+    }
+    if (_holder.text.trim().isEmpty) {
+      setState(() => _error = 'Enter the cheque holder name.');
+      return null;
+    }
+    if (_markCollected && _collectionDate == null) {
+      setState(() => _error = 'Collection date is required when marked collected.');
       return null;
     }
 
-    return ReceivePaymentInput(
+    return CreateChequeInput(
       customerId: _customer!.id,
       amount: amount,
-      method: _method!,
-      allocations: [
-        for (final entry in _allocations.entries)
-          if (entry.value > 0)
-            PaymentAllocationInput(orderId: entry.key, amount: entry.value),
-      ],
-      reference: _reference.text.trim().isEmpty ? null : _reference.text.trim(),
+      bankName: _bank.text.trim(),
+      chequeNumber: _chequeNumber.text.trim(),
+      holderName: _holder.text.trim(),
+      chequeDate: _chequeDate,
+      collectionDate: _markCollected ? _collectionDate : null,
+      photoPath: _uploadedPhotoPath,
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+      allocations: _markCollected
+          ? [
+              for (final entry in _allocations.entries)
+                if (entry.value > 0)
+                  PaymentAllocationInput(
+                    orderId: entry.key,
+                    amount: entry.value,
+                  ),
+            ]
+          : const [],
       visitId: widget.visitId,
+      markCollected: _markCollected,
     );
   }
 
-  void _confirm() {
+  Future<void> _confirm() async {
+    if (_submitting) return;
     final input = _buildInput();
     if (input == null) return;
+    setState(() => _submitting = true);
+    if (!mounted) return;
     Navigator.of(context).pop(input);
+  }
+
+  Widget _dateField({
+    required String label,
+    required DateTime? value,
+    required VoidCallback onTap,
+    bool required = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          label: SelloFieldLabel(label: label, required: required),
+          border: const OutlineInputBorder(),
+        ),
+        child: Text(
+          value == null ? 'Select date' : SelloFormatters.date(value),
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            color: value == null
+                ? AppColors.textFaint
+                : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -171,9 +319,10 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     final isMobile = context.isMobile;
 
     return SelloFormDialog(
-      title: 'Receive payment',
-      subtitle:
-          'Collect against outstanding orders. Partial and multi-order payments are supported.',
+      title: _markCollected ? 'Record collected cheque' : 'Record cheque',
+      subtitle: _markCollected
+          ? 'Cheque in hand — balances update when recorded as collected.'
+          : 'Promise or scheduled collection — awaiting status until collected.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -215,7 +364,98 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                 ),
             ],
           ),
-          if (_customer != null)
+          SelloDialogSection(
+            title: 'Cheque details',
+            children: [
+              SelloTextField(
+                controller: _amount,
+                label: 'Amount',
+                required: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (value) {
+                  final parsed = num.tryParse(value.trim()) ?? 0;
+                  setState(() {
+                    _error = null;
+                    _rebalanceAllocations(parsed);
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              SelloFormRow(
+                left: SelloTextField(
+                  controller: _bank,
+                  label: 'Bank',
+                  required: true,
+                ),
+                right: SelloTextField(
+                  controller: _chequeNumber,
+                  label: 'Cheque number',
+                  required: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SelloTextField(
+                controller: _holder,
+                label: 'Cheque holder',
+                required: true,
+              ),
+              const SizedBox(height: 12),
+              _dateField(
+                label: 'Cheque date',
+                value: _chequeDate,
+                required: true,
+                onTap: () => _pickDate(collection: false),
+              ),
+            ],
+          ),
+          SelloDialogSection(
+            title: 'Collection',
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Mark as collected',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  SelloSwitch(
+                    value: _markCollected,
+                    onChanged: (value) {
+                      setState(() {
+                        _markCollected = value;
+                        if (value) {
+                          _collectionDate ??= DateTime.now();
+                          final amount =
+                              num.tryParse(_amount.text.trim()) ?? 0;
+                          if (amount > 0) _rebalanceAllocations(amount);
+                        } else {
+                          _collectionDate = null;
+                          _allocations.clear();
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+              if (_markCollected) ...[
+                const SizedBox(height: 12),
+                _dateField(
+                  label: 'Collection date',
+                  value: _collectionDate,
+                  required: true,
+                  onTap: () => _pickDate(collection: true),
+                ),
+              ],
+            ],
+          ),
+          if (_markCollected && _customer != null)
             SelloDialogSection(
               title: 'Outstanding orders',
               children: [
@@ -223,7 +463,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                   const LinearProgressIndicator(minHeight: 2)
                 else if (_receivables.isEmpty)
                   Text(
-                    'No unpaid completed orders. Payment will reduce the '
+                    'No unpaid completed orders. Amount will reduce the '
                     'customer balance / credit the wallet if overpaid.',
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
@@ -257,67 +497,19 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
               ],
             ),
           SelloDialogSection(
-            title: 'Payment amount',
+            title: 'Photo',
             children: [
-              SelloTextField(
-                controller: _amount,
-                label: 'Amount',
-                required: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (value) {
-                  final parsed = num.tryParse(value.trim()) ?? 0;
-                  setState(() {
-                    _error = null;
-                    _rebalanceAllocations(parsed);
-                  });
-                },
-              ),
-            ],
-          ),
-          SelloDialogSection(
-            title: 'Payment method',
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final method in PaymentMethod.settlementMethods)
-                    ChoiceChip(
-                      label: Text(method.label),
-                      selected: _method == method,
-                      onSelected: (selected) {
-                        setState(() {
-                          _method = selected ? method : null;
-                          _error = null;
-                        });
-                      },
-                      selectedColor: context.brandAccentContainer,
-                      labelStyle: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontWeight: FontWeight.w600,
-                        color: _method == method
-                            ? context.brandAccent
-                            : AppColors.textSecondary,
-                      ),
-                      side: BorderSide(
-                        color: _method == method
-                            ? context.brandAccent.withValues(alpha: 0.35)
-                            : AppColors.outlinePanel,
-                      ),
-                      backgroundColor: AppColors.surface,
-                    ),
+              SelloImagePickerPanel(
+                title: 'Cheque image',
+                localBytes: _photoBytes,
+                onUpload: _uploadingPhoto ? () {} : _pickPhoto,
+                onRemove: _photoBytes == null ? null : _clearPhoto,
+                uploadLabel: _uploadingPhoto ? 'Uploading…' : 'Add photo',
+                height: 180,
+                hints: const [
+                  'Optional photo of the physical cheque',
+                  'Supports: PNG, JPG, WEBP',
                 ],
-              ),
-            ],
-          ),
-          SelloDialogSection(
-            title: 'Reference',
-            children: [
-              SelloTextField(
-                controller: _reference,
-                label: 'Payment reference',
-                hint: 'Transfer ref, receipt no…',
               ),
             ],
           ),
@@ -336,8 +528,8 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       ),
       footer: SelloDialogFooter(
         cancelLabel: 'Cancel',
-        primaryLabel: 'Confirm payment',
-        onPrimary: _confirm,
+        primaryLabel: _submitting ? 'Saving…' : 'Save cheque',
+        onPrimary: _submitting || _uploadingPhoto ? null : _confirm,
       ),
     );
   }
@@ -383,9 +575,6 @@ class _CustomerStrip extends StatelessWidget {
                     if (customer.phone != null) customer.phone!,
                     'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: currencySymbol)}',
                     'Wallet ${SelloFormatters.currency(customer.walletBalance, symbol: currencySymbol)}',
-                    customer.creditAllowed
-                        ? 'Credit ${SelloFormatters.currency(customer.creditLimit, symbol: currencySymbol)}'
-                        : 'No credit',
                   ].join(' · '),
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,

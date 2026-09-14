@@ -16,6 +16,7 @@ export 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 export 'package:sello/shared/widgets/feedback/sello_info_hint.dart';
 export 'package:sello/shared/widgets/feedback/sello_intelligence_banner.dart';
 export 'package:sello/shared/widgets/filters/sello_list_toolbar.dart';
+export 'package:sello/shared/widgets/filters/sello_toolbar_body.dart';
 export 'package:sello/shared/widgets/icons/sello_nav_icons.dart';
 export 'package:sello/shared/widgets/inputs/sello_switch.dart';
 export 'package:sello/shared/widgets/inputs/sello_text_field.dart';

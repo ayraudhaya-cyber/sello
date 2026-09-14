@@ -926,50 +926,11 @@ class _OrdersToolbar extends StatelessWidget {
         border: Border.all(color: AppColors.outlinePanel),
         boxShadow: AppShadows.panel,
       ),
-      child: context.isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                search,
-                const SizedBox(height: AppSpacing.sm),
-                status,
-                const SizedBox(height: AppSpacing.sm),
-                payment,
-                const SizedBox(height: AppSpacing.sm),
-                date,
-                const SizedBox(height: AppSpacing.sm),
-                rep,
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(child: refresh),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(child: add),
-                  ],
-                ),
-              ],
-            )
-          : Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: search),
-                    const SizedBox(width: AppSpacing.sm),
-                    status,
-                    const SizedBox(width: AppSpacing.sm),
-                    payment,
-                    const SizedBox(width: AppSpacing.sm),
-                    date,
-                    const SizedBox(width: AppSpacing.sm),
-                    rep,
-                    const SizedBox(width: AppSpacing.sm),
-                    refresh,
-                    const SizedBox(width: AppSpacing.xs),
-                    add,
-                  ],
-                ),
-              ],
-            ),
+      child: SelloToolbarBody(
+        search: search,
+        filters: [status, payment, date, rep],
+        actions: [refresh, add],
+      ),
     );
   }
 }

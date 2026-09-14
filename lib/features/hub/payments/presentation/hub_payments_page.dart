@@ -1070,46 +1070,18 @@ class _PaymentsToolbar extends StatelessWidget {
         border: Border.all(color: AppColors.outlinePanel),
         boxShadow: AppShadows.panel,
       ),
-      child: context.isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                search,
-                const SizedBox(height: AppSpacing.sm),
-                status,
-                const SizedBox(height: AppSpacing.sm),
-                method,
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(child: refresh),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(child: receive),
-                  ],
-                ),
-                if (onRecordCheque != null) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  cheque,
-                ],
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: search),
-                const SizedBox(width: AppSpacing.sm),
-                status,
-                const SizedBox(width: AppSpacing.sm),
-                method,
-                const SizedBox(width: AppSpacing.sm),
-                refresh,
-                if (onRecordCheque != null) ...[
-                  const SizedBox(width: AppSpacing.xs),
-                  cheque,
-                ],
-                const SizedBox(width: AppSpacing.xs),
-                receive,
-              ],
-            ),
+      child: SelloToolbarBody(
+        search: search,
+        filters: [
+          status,
+          method,
+        ],
+        actions: [
+          refresh,
+          if (onRecordCheque != null) cheque,
+          receive,
+        ],
+      ),
     );
   }
 }
@@ -1248,46 +1220,11 @@ class _ChequesToolbar extends StatelessWidget {
         border: Border.all(color: AppColors.outlinePanel),
         boxShadow: AppShadows.panel,
       ),
-      child: context.isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                search,
-                const SizedBox(height: AppSpacing.sm),
-                status,
-                const SizedBox(height: AppSpacing.sm),
-                bank,
-                const SizedBox(height: AppSpacing.sm),
-                Align(alignment: Alignment.centerLeft, child: dueToday),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(child: refresh),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(child: record),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                existing,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: search),
-                const SizedBox(width: AppSpacing.sm),
-                status,
-                const SizedBox(width: AppSpacing.sm),
-                bank,
-                const SizedBox(width: AppSpacing.sm),
-                dueToday,
-                const SizedBox(width: AppSpacing.sm),
-                refresh,
-                const SizedBox(width: AppSpacing.xs),
-                existing,
-                const SizedBox(width: AppSpacing.xs),
-                record,
-              ],
-            ),
+      child: SelloToolbarBody(
+        search: search,
+        filters: [status, bank, dueToday],
+        actions: [refresh, existing, record],
+      ),
     );
   }
 }

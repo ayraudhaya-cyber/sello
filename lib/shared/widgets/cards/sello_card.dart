@@ -88,17 +88,25 @@ class _SelloCardState extends State<SelloCard> {
     final hovered = widget.enableHoverLift && _hovered;
     final shadows = hovered ? AppShadows.hover : baseShadows;
 
-    // Expand to fill when a parent [SelloEqualHeightRow] assigns a shared height.
+    // Stretch to a parent min height (e.g. [SelloEqualHeightRow]) while still
+    // growing with content — never lock a shorter fixed height that lets
+    // children paint outside the rounded surface.
     return LayoutBuilder(
       builder: (context, constraints) {
         final fill = constraints.hasBoundedHeight &&
             constraints.maxHeight < double.infinity;
+        final minH = constraints.minHeight;
+        final stretchToMin = !fill && minH.isFinite && minH > 0;
 
         final painted = AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: const Cubic(0.22, 0.61, 0.36, 1),
+          clipBehavior: Clip.antiAlias,
           width: double.infinity,
           height: fill ? constraints.maxHeight : null,
+          constraints: stretchToMin
+              ? BoxConstraints(minHeight: minH)
+              : const BoxConstraints(),
           alignment: Alignment.topLeft,
           padding:
               widget.padding ?? const EdgeInsets.all(AppSpacing.cardPadding),

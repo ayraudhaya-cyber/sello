@@ -8,6 +8,9 @@ import 'package:sello/core/theme/theme.dart';
 ///
 /// Safe inside scroll views — measures after layout instead of [IntrinsicHeight]
 /// / [Table], which previously blanked the Hub dashboard.
+///
+/// Uses [BoxConstraints.minHeight] (not a fixed [SizedBox] height) so async
+/// content can grow the row instead of painting outside the card.
 class SelloEqualHeightRow extends StatefulWidget {
   const SelloEqualHeightRow({
     super.key,
@@ -69,7 +72,9 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
       maxH = math.max(maxH, box.size.height);
     }
     if (maxH <= 0) return;
-    if (_rowHeight == null || (_rowHeight! - maxH).abs() > 0.5) {
+    // Grow when content needs more room. Fixed [SizedBox] heights previously
+    // prevented growth and caused overflow; minHeight equalization can grow.
+    if (_rowHeight == null || maxH > _rowHeight! + 0.5) {
       setState(() => _rowHeight = maxH);
     }
   }
@@ -118,10 +123,9 @@ class _EqualHeightCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (height == null) return child;
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: child,
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: height!),
+      child: SizedBox(width: double.infinity, child: child),
     );
   }
 }

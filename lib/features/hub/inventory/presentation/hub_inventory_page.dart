@@ -465,30 +465,11 @@ class _Toolbar extends StatelessWidget {
         border: Border.all(color: AppColors.outlinePanel),
         boxShadow: AppShadows.panel,
       ),
-      child: context.isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                search,
-                const SizedBox(height: AppSpacing.sm),
-                status,
-                const SizedBox(height: AppSpacing.sm),
-                category,
-                const SizedBox(height: AppSpacing.sm),
-                refresh,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: search),
-                const SizedBox(width: AppSpacing.sm),
-                status,
-                const SizedBox(width: AppSpacing.sm),
-                category,
-                const SizedBox(width: AppSpacing.sm),
-                refresh,
-              ],
-            ),
+      child: SelloToolbarBody(
+        search: search,
+        filters: [status, category],
+        actions: [refresh],
+      ),
     );
   }
 }

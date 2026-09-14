@@ -642,70 +642,11 @@ class _CustomersToolbar extends StatelessWidget {
         border: Border.all(color: AppColors.outlinePanel),
         boxShadow: AppShadows.panel,
       ),
-      child: context.isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                search,
-                const SizedBox(height: AppSpacing.sm),
-                status,
-                const SizedBox(height: AppSpacing.sm),
-                type,
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    Expanded(child: refresh),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(child: add),
-                  ],
-                ),
-              ],
-            )
-          : context.isTablet
-          ? Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: search),
-                    const SizedBox(width: AppSpacing.sm),
-                    status,
-                    const SizedBox(width: AppSpacing.sm),
-                    type,
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    refresh,
-                    const SizedBox(width: AppSpacing.xs),
-                    add,
-                  ],
-                ),
-              ],
-            )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final searchWidth = (constraints.maxWidth * 0.48).clamp(
-                  280.0,
-                  constraints.maxWidth * 0.55,
-                );
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(width: searchWidth, child: search),
-                    const SizedBox(width: AppSpacing.sm),
-                    status,
-                    const SizedBox(width: AppSpacing.sm),
-                    type,
-                    const Spacer(),
-                    refresh,
-                    const SizedBox(width: AppSpacing.xs),
-                    add,
-                  ],
-                );
-              },
-            ),
+      child: SelloToolbarBody(
+        search: search,
+        filters: [status, type],
+        actions: [refresh, add],
+      ),
     );
   }
 }

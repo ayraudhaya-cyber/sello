@@ -98,8 +98,9 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
             _ActivityCard(range: _range),
             SizedBox(height: gap),
             const _InventoryHealthCard(),
-          ] else
+          ]           else
             SelloEqualHeightRow(
+              key: ValueKey('dash-activity-$_range'),
               children: [
                 _ActivityCard(range: _range),
                 const _InventoryHealthCard(),
@@ -112,6 +113,7 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
             _BestSellersCard(range: _range),
           ] else
             SelloEqualHeightRow(
+              key: ValueKey('dash-lists-$_range'),
               children: [
                 _TopCustomersCard(range: _range),
                 _BestSellersCard(range: _range),

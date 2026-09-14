@@ -119,12 +119,16 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
   }
 
   Future<void> _bounce() async {
+    final historical = _cheque.isTrackingOnly;
     final result = await showDialog<_ReasonResult>(
       context: context,
-      builder: (context) => const _ReasonDialog(
+      builder: (context) => _ReasonDialog(
         title: 'Bounce cheque',
-        subtitle:
-            'Outstanding balance is restored. The payment remains for audit.',
+        subtitle: historical
+            ? 'This cheque was added as historical tracking. Sello never '
+                'recorded a payment for it, so the customer balance will not '
+                'change automatically.'
+            : 'Outstanding balance is restored. The payment remains for audit.',
         confirmLabel: 'Bounce',
       ),
     );

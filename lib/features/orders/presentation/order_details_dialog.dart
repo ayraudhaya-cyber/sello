@@ -218,7 +218,7 @@ class OrderDetailsDialog extends ConsumerWidget {
             child: _TotalsBlock(
               currencySymbol: currencySymbol,
               subtotal: order.subtotal,
-              discount: order.discountAmount,
+              discount: order.displayDiscountAmount,
               tax: order.taxAmount,
               total: order.total,
             ),

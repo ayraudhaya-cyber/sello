@@ -14,6 +14,8 @@ class VisitCheckoutStage extends StatelessWidget {
     required this.itemQuantity,
     required this.total,
     required this.currencySymbol,
+    required this.discountAmount,
+    required this.discountPercent,
     required this.arrangement,
     required this.onArrangementChanged,
     required this.onPickChequeDate,
@@ -25,15 +27,19 @@ class VisitCheckoutStage extends StatelessWidget {
     required this.saving,
     required this.onConfirm,
     this.chequeDate,
+    this.onClearChequeDate,
   });
 
   final String shopName;
   final num itemQuantity;
   final num total;
   final String currencySymbol;
+  final TextEditingController discountAmount;
+  final TextEditingController discountPercent;
   final VisitPaymentArrangement arrangement;
   final ValueChanged<VisitPaymentArrangement> onArrangementChanged;
   final VoidCallback onPickChequeDate;
+  final VoidCallback? onClearChequeDate;
   final VoidCallback onViewDetails;
   final DateTime? chequeDate;
   final TextEditingController notes;
@@ -107,6 +113,37 @@ class VisitCheckoutStage extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 24),
+              const _SectionLabel('Discount'),
+              const SizedBox(height: 10),
+              SelloFormRow(
+                left: SelloTextField(
+                  controller: discountAmount,
+                  label: 'Discount amount',
+                  hint: '0',
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+                right: SelloTextField(
+                  controller: discountPercent,
+                  label: 'Discount %',
+                  hint: '0',
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Use amount, percent, or both. Percent applies first.',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  height: 1.35,
+                  color: AppColors.textTertiary,
+                ),
+              ),
               const SizedBox(height: 28),
               const _SectionLabel('Collection'),
               const SizedBox(height: 10),
@@ -122,16 +159,38 @@ class VisitCheckoutStage extends StatelessWidget {
                     ),
                 ],
               ),
-              if (arrangement.schedulesFollowUp) ...[
+              if (arrangement.allowsOptionalExpectedDate) ...[
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: SelloButton(
-                    label: chequeDate == null
-                        ? 'Collection date'
-                        : DateFormat('d MMM').format(chequeDate!),
-                    variant: SelloButtonVariant.outline,
-                    onPressed: onPickChequeDate,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SelloButton(
+                        label: chequeDate == null
+                            ? 'Expected collection date (optional)'
+                            : DateFormat('d MMM').format(chequeDate!),
+                        variant: SelloButtonVariant.outline,
+                        onPressed: onPickChequeDate,
+                      ),
+                      if (chequeDate != null && onClearChequeDate != null)
+                        TextButton(
+                          onPressed: onClearChequeDate,
+                          child: const Text('Clear date'),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Leave blank if the customer hasn’t given a date.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    height: 1.35,
+                    color: AppColors.textTertiary,
                   ),
                 ),
               ],

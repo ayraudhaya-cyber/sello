@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:sello/shared/models/cheque_source.dart';
 import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
 
@@ -69,6 +70,7 @@ class ChequeSummary extends Equatable {
     this.cancelledAt,
     this.bounceReason,
     this.cancelReason,
+    this.source = ChequeSource.sello,
   });
 
   final String id;
@@ -85,6 +87,7 @@ class ChequeSummary extends Equatable {
   final String? photoPath;
   final String? notes;
   final ChequeStatus status;
+  final ChequeSource source;
   final String? visitId;
   final String? paymentId;
   final String? customerName;
@@ -103,13 +106,19 @@ class ChequeSummary extends Equatable {
   final String? cancelReason;
   final DateTime createdAt;
 
+  /// Pre-Sello instrument with no Sello payment / balance apply yet.
+  bool get isTrackingOnly =>
+      source == ChequeSource.existing && paymentId == null;
+
   bool get isPendingClearance =>
       (status == ChequeStatus.collected || status == ChequeStatus.deposited) &&
       balanceAppliedAt != null;
 
   /// Collected instrument waiting for Owner/Manager collection approval.
   bool get isPendingApproval =>
-      status == ChequeStatus.collected && balanceAppliedAt == null;
+      status == ChequeStatus.collected &&
+      balanceAppliedAt == null &&
+      !isTrackingOnly;
 
   bool get reducesOutstanding =>
       balanceAppliedAt != null &&
@@ -123,14 +132,30 @@ class ChequeSummary extends Equatable {
 
   bool get canApproveCollection => isPendingApproval;
 
+  bool get canCollect => status == ChequeStatus.awaitingCollection;
+
   bool get canBounce =>
-      balanceAppliedAt != null &&
-      balanceReversedAt == null &&
-      (status == ChequeStatus.collected ||
-          status == ChequeStatus.deposited ||
-          status == ChequeStatus.cleared);
+      (balanceAppliedAt != null &&
+          balanceReversedAt == null &&
+          (status == ChequeStatus.collected ||
+              status == ChequeStatus.deposited ||
+              status == ChequeStatus.cleared)) ||
+      (isTrackingOnly &&
+          (status == ChequeStatus.collected ||
+              status == ChequeStatus.deposited ||
+              status == ChequeStatus.cleared));
 
   String get displayLabel {
+    if (isTrackingOnly) {
+      return switch (status) {
+        ChequeStatus.awaitingCollection => 'Awaiting collection',
+        ChequeStatus.collected => 'Collected · Historical',
+        ChequeStatus.deposited => 'Deposited · Historical',
+        ChequeStatus.cleared => 'Cleared · Historical',
+        ChequeStatus.bounced => 'Bounced · Historical',
+        ChequeStatus.cancelled => 'Cancelled · Historical',
+      };
+    }
     if (isPendingApproval) return 'Collected · Pending approval';
     if (status == ChequeStatus.collected && balanceAppliedAt != null) {
       return 'Collected · Pending clearance';
@@ -155,6 +180,7 @@ class ChequeSummary extends Equatable {
       notes: _stringValue(json['notes']),
       status: ChequeStatus.fromDb(json['status'] as String?) ??
           ChequeStatus.awaitingCollection,
+      source: ChequeSource.fromDb(json['source'] as String?),
       visitId: _stringValue(json['visit_id']),
       paymentId: _stringValue(json['payment_id']),
       customerName: _embedName(json['customers'], 'name'),
@@ -176,12 +202,13 @@ class ChequeSummary extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, status, amount, updatedKey];
+  List<Object?> get props => [id, status, amount, source, updatedKey];
 
   String get updatedKey =>
       '${balanceAppliedAt?.millisecondsSinceEpoch}-'
       '${balanceReversedAt?.millisecondsSinceEpoch}-'
-      '${status.dbValue}';
+      '${status.dbValue}-'
+      '${source.dbValue}';
 }
 
 class ChequeDashboardStats extends Equatable {
@@ -278,6 +305,37 @@ class CollectChequeInput {
   final String chequeId;
   final DateTime collectionDate;
   final List<PaymentAllocationInput> allocations;
+  final String? photoPath;
+  final String? notes;
+}
+
+/// Pre-Sello cheque import — tracking only, never creates a payment.
+class CreateExistingChequeInput {
+  const CreateExistingChequeInput({
+    required this.customerId,
+    required this.amount,
+    required this.bankName,
+    required this.chequeNumber,
+    required this.holderName,
+    required this.chequeDate,
+    required this.status,
+    this.collectionDate,
+    this.depositDate,
+    this.clearanceDate,
+    this.photoPath,
+    this.notes,
+  });
+
+  final String customerId;
+  final num amount;
+  final String bankName;
+  final String chequeNumber;
+  final String holderName;
+  final DateTime chequeDate;
+  final ChequeStatus status;
+  final DateTime? collectionDate;
+  final DateTime? depositDate;
+  final DateTime? clearanceDate;
   final String? photoPath;
   final String? notes;
 }

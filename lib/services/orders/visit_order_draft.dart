@@ -14,6 +14,8 @@ class VisitOrderDraft {
     this.arrangement,
     this.chequeFollowUpAt,
     this.runningTotal = 0,
+    this.orderDiscount = 0,
+    this.orderDiscountPercent = 0,
   });
 
   final String companyId;
@@ -29,6 +31,8 @@ class VisitOrderDraft {
   final DateTime? chequeFollowUpAt;
   final DateTime updatedAt;
   final num runningTotal;
+  final num orderDiscount;
+  final num orderDiscountPercent;
 
   bool get hasLines => lines.isNotEmpty;
 
@@ -49,6 +53,8 @@ class VisitOrderDraft {
         'chequeFollowUpAt': chequeFollowUpAt?.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
         'runningTotal': runningTotal,
+        'orderDiscount': orderDiscount,
+        'orderDiscountPercent': orderDiscountPercent,
       };
 
   factory VisitOrderDraft.fromJson(Map<String, dynamic> json) {
@@ -66,6 +72,8 @@ class VisitOrderDraft {
       chequeFollowUpAt: _date(json['chequeFollowUpAt']),
       updatedAt: _date(json['updatedAt']) ?? DateTime.now(),
       runningTotal: _num(json['runningTotal']),
+      orderDiscount: _num(json['orderDiscount']),
+      orderDiscountPercent: _num(json['orderDiscountPercent']),
     );
   }
 

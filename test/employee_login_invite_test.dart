@@ -59,6 +59,18 @@ void main() {
         }),
         contains('another person'),
       );
+      expect(
+        EmployeeLoginInviteResponse.failureMessage({
+          'reason': 'auth_email_in_use',
+        }),
+        contains('another person'),
+      );
+      expect(
+        EmployeeLoginInviteResponse.failureMessage({
+          'reason': 'auth_email_update_failed',
+        }),
+        contains('update the login email'),
+      );
     });
 
     test('asMap accepts nested JSON string', () {

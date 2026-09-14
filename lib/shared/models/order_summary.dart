@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_timeline.dart';
+import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/role_permission_profile.dart';
@@ -59,6 +60,8 @@ class OrderSummary extends Equatable {
     required this.total,
     required this.orderedAt,
     required this.updatedAt,
+    this.discountPercent = 0,
+    this.discountFixedAmount = 0,
     this.paymentMethod,
     this.customerName,
     this.customerPhone,
@@ -78,7 +81,15 @@ class OrderSummary extends Equatable {
   final PaymentStatus paymentStatus;
   final PaymentMethod? paymentMethod;
   final num subtotal;
+
+  /// Resolved combined header discount (persisted for documents).
   final num discountAmount;
+
+  /// Percent header discount 0–100 (raw input).
+  final num discountPercent;
+
+  /// Fixed currency header discount (raw input).
+  final num discountFixedAmount;
   final num taxAmount;
   final num total;
   final DateTime orderedAt;
@@ -90,10 +101,28 @@ class OrderSummary extends Equatable {
   final DateTime? completedAt;
   final DateTime? cancelledAt;
 
+  /// Combined discount for display (percent first, then amount).
+  num get displayDiscountAmount {
+    if (discountPercent > 0 || discountFixedAmount > 0) {
+      return OrderCalculations.resolvedOrderDiscount(
+        subtotal: subtotal,
+        orderDiscountAmount: discountFixedAmount,
+        orderDiscountPercent: discountPercent,
+      );
+    }
+    return discountAmount;
+  }
+
   bool get isDraft => status == OrderStatus.draft;
   bool get isEditable => status == OrderStatus.draft;
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
+    final resolved = _numValue(json['discount_amount']);
+    final percent = _numValue(json['discount_percent']);
+    final hasFixedColumn = json.containsKey('discount_fixed_amount');
+    final fixed = hasFixedColumn
+        ? _numValue(json['discount_fixed_amount'])
+        : (percent > 0 ? 0 : resolved);
     return OrderSummary(
       id: json['id'] as String,
       companyId: json['company_id'] as String,
@@ -109,7 +138,9 @@ class OrderSummary extends Equatable {
       paymentStatus: PaymentStatus.fromDb(json['payment_status'] as String?),
       paymentMethod: PaymentMethod.fromDb(json['payment_method'] as String?),
       subtotal: _numValue(json['subtotal']),
-      discountAmount: _numValue(json['discount_amount']),
+      discountAmount: resolved,
+      discountPercent: percent,
+      discountFixedAmount: fixed,
       taxAmount: _numValue(json['tax_amount']),
       total: _numValue(json['total']),
       orderedAt: _dateValue(json['ordered_at']) ?? DateTime.now().toUtc(),

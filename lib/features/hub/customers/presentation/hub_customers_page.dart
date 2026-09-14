@@ -2,13 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/customers/application/hub_customers_provider.dart';
 import 'package:sello/features/customers/presentation/customer_details_dialog.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
+import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
@@ -66,18 +70,91 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
 
     if (result == null) return;
 
-    final error = await ref
+    final outcome = await ref
         .read(hubCustomersProvider.notifier)
         .saveCustomer(result);
 
     if (!mounted) return;
-    if (error != null) {
-      SelloSnackbars.error(context, error);
-    } else {
-      SelloSnackbars.success(
-        context,
-        customer == null ? 'Customer created.' : 'Customer updated.',
+    if (!outcome.isOk) {
+      SelloSnackbars.error(context, outcome.error ?? 'Unable to save customer.');
+      return;
+    }
+
+    if (customer == null) {
+      final created = await _promptExistingChequeAfterCreate(
+        customerId: outcome.customerId!,
+        customerName: result.name.trim(),
       );
+      if (!mounted) return;
+      if (created) {
+        SelloSnackbars.success(context, 'Customer and existing cheque saved.');
+      } else {
+        SelloSnackbars.success(context, 'Customer created.');
+      }
+    } else {
+      SelloSnackbars.success(context, 'Customer updated.');
+    }
+  }
+
+  Future<bool> _promptExistingChequeAfterCreate({
+    required String customerId,
+    required String customerName,
+  }) async {
+    final choice = await showSelloDialog(
+      context: context,
+      title: '$customerName has been added',
+      message:
+          'Already have cheques from this customer?\n'
+          'Record cheques received before you started using Sello.',
+      confirmLabel: 'Add existing cheque',
+      cancelLabel: 'Done',
+    );
+    if (choice != true || !mounted) return false;
+
+    final listed = ref
+        .read(hubCustomersProvider)
+        .items
+        .where((c) => c.id == customerId)
+        .firstOrNull;
+    final summary = listed ??
+        CustomerSummary(
+          id: customerId,
+          companyId: ref.read(currentSessionProvider)?.company.id ?? '',
+          name: customerName,
+          customerType: CustomerType.retail,
+          creditAllowed: false,
+          creditLimit: 0,
+          openingBalance: 0,
+          outstandingBalance: 0,
+          walletBalance: 0,
+          isActive: true,
+        );
+
+    return _openAddExistingCheque(summary);
+  }
+
+  Future<bool> _openAddExistingCheque(CustomerSummary customer) async {
+    final input = await showDialog<CreateExistingChequeInput>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AddExistingChequeDialog(
+        currencySymbol: _currencySymbol(),
+        initialCustomer: customer,
+        lockCustomer: true,
+      ),
+    );
+    if (input == null || !mounted) return false;
+    try {
+      await ref.read(chequeRepositoryProvider).createExistingCheque(input);
+      return true;
+    } on AppFailure catch (failure) {
+      if (mounted) SelloSnackbars.error(context, failure.message);
+      return false;
+    } catch (_) {
+      if (mounted) {
+        SelloSnackbars.error(context, 'Unable to save that existing cheque.');
+      }
+      return false;
     }
   }
 
@@ -98,22 +175,30 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => CustomerDetailsDialog(
+      builder: (dialogContext) => CustomerDetailsDialog(
         customer: customer,
         currencySymbol: currencySymbol,
         assignedRepresentativeName: assigneeName,
+        onAddExistingCheque: () async {
+          Navigator.of(dialogContext).pop();
+          final saved = await _openAddExistingCheque(customer);
+          if (!mounted) return;
+          if (saved) {
+            SelloSnackbars.success(context, 'Existing cheque saved.');
+          }
+        },
         onEdit: () {
-          Navigator.of(context).pop();
+          Navigator.of(dialogContext).pop();
           _openEditor(customer: customer);
         },
         onToggleArchive: () async {
-          Navigator.of(context).pop();
+          Navigator.of(dialogContext).pop();
           await _toggleArchive(customer);
         },
         onDeletePermanently: customer.isActive
             ? null
             : () async {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 await _deletePermanently(customer);
               },
       ),

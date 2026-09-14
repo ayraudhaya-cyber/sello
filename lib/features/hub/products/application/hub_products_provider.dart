@@ -200,6 +200,9 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
     if (session == null || branchId == null) {
       return 'Your session is missing branch information.';
     }
+    if (state.isSaving) {
+      return 'Another product is still saving. Wait for it to finish.';
+    }
 
     state = state.copyWith(isSaving: true, clearError: true);
     try {

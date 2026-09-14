@@ -10,6 +10,7 @@ import 'package:sello/features/hub/payments/application/hub_cheques_provider.dar
 import 'package:sello/features/hub/payments/application/hub_payments_provider.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
+import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
 import 'package:sello/features/payments/presentation/cheque_details_dialog.dart';
 import 'package:sello/features/payments/presentation/payment_details_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
@@ -149,6 +150,34 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         result.status == ChequeStatus.awaitingCollection
             ? 'Cheque recorded — awaiting collection.'
             : 'Cheque collected.',
+      );
+    }
+  }
+
+  Future<void> _addExistingCheque() async {
+    final input = await showDialog<CreateExistingChequeInput>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AddExistingChequeDialog(
+        currencySymbol: _currencySymbol(),
+      ),
+    );
+    if (input == null) return;
+
+    final result = await ref
+        .read(hubChequesProvider.notifier)
+        .createExistingCheque(input);
+    if (!mounted) return;
+    if (result == null) {
+      final message = ref.read(hubChequesProvider).errorMessage;
+      SelloSnackbars.error(
+        context,
+        message ?? 'Unable to save that existing cheque.',
+      );
+    } else {
+      SelloSnackbars.success(
+        context,
+        'Existing cheque saved — customer balance unchanged.',
       );
     }
   }
@@ -646,6 +675,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             ? null
             : () => ref.read(hubChequesProvider.notifier).refresh(),
         onRecord: state.isSaving ? null : _recordCheque,
+        onAddExisting: state.isSaving ? null : _addExistingCheque,
       ),
       const SizedBox(height: AppSpacing.mdPlus),
       if (state.isLoading && state.items.isEmpty) ...[
@@ -1095,6 +1125,7 @@ class _ChequesToolbar extends StatelessWidget {
     required this.onDueTodayChanged,
     required this.onRefresh,
     required this.onRecord,
+    required this.onAddExisting,
   });
 
   final TextEditingController searchController;
@@ -1106,6 +1137,7 @@ class _ChequesToolbar extends StatelessWidget {
   final ValueChanged<bool> onDueTodayChanged;
   final VoidCallback? onRefresh;
   final VoidCallback? onRecord;
+  final VoidCallback? onAddExisting;
 
   @override
   Widget build(BuildContext context) {
@@ -1195,6 +1227,13 @@ class _ChequesToolbar extends StatelessWidget {
       onPressed: onRecord,
     );
 
+    final existing = SelloButton(
+      label: 'Add existing cheque',
+      icon: Icons.history_edu_outlined,
+      variant: SelloButtonVariant.outline,
+      onPressed: onAddExisting,
+    );
+
     final search = SelloSearchBar(
       controller: searchController,
       hint: 'Search customer, cheque no, bank or holder…',
@@ -1228,6 +1267,8 @@ class _ChequesToolbar extends StatelessWidget {
                     Expanded(child: record),
                   ],
                 ),
+                const SizedBox(height: AppSpacing.xs),
+                existing,
               ],
             )
           : Row(
@@ -1241,6 +1282,8 @@ class _ChequesToolbar extends StatelessWidget {
                 dueToday,
                 const SizedBox(width: AppSpacing.sm),
                 refresh,
+                const SizedBox(width: AppSpacing.xs),
+                existing,
                 const SizedBox(width: AppSpacing.xs),
                 record,
               ],

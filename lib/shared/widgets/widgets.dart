@@ -1,5 +1,6 @@
 library;
 
+export 'package:sello/shared/widgets/auth/change_password_dialog.dart';
 export 'package:sello/shared/widgets/badges/sello_badge.dart';
 export 'package:sello/shared/widgets/branding/branded_logo.dart';
 export 'package:sello/shared/widgets/branding/branded_shell_app_bar.dart';

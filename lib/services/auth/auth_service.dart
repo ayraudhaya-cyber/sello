@@ -147,6 +147,55 @@ class AuthService {
     }
   }
 
+  /// Logged-in password change: verify current password, then set the new one.
+  ///
+  /// Does not change email or any other profile fields.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final email = currentUser?.email?.trim();
+    if (email == null || email.isEmpty) {
+      throw const AuthFailure('No signed-in account found.');
+    }
+    final current = currentPassword.trim();
+    final next = newPassword.trim();
+    if (current.isEmpty) {
+      throw const AuthFailure('Enter your current password.');
+    }
+    if (next.length < 8) {
+      throw const AuthFailure('Password must be at least 8 characters.');
+    }
+    if (current == next) {
+      throw const AuthFailure(
+        'New password must be different from your current password.',
+      );
+    }
+    try {
+      await _auth.signInWithPassword(email: email, password: current);
+      await _auth.updateUser(UserAttributes(password: next));
+    } on AuthException catch (error) {
+      throw AuthFailure(_mapChangePasswordMessage(error.message));
+    } catch (error) {
+      if (error is AuthFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  static String _mapChangePasswordMessage(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('invalid login') ||
+        lower.contains('invalid credentials')) {
+      return 'Current password is incorrect.';
+    }
+    if (lower.contains('password')) {
+      return message.isEmpty
+          ? 'Password must be at least 8 characters.'
+          : message;
+    }
+    return _mapAuthMessage(message);
+  }
+
   String? _redirectUrlFor(String path) => AuthRedirectUrl.forPath(path);
 
   /// Nested [pending_business] for the DB trigger + flat fields for email HTML.

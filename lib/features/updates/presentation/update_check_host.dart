@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/updates/presentation/app_updated_card.dart';
 import 'package:sello/features/updates/presentation/update_prompt.dart';
 import 'package:sello/features/updates/presentation/whats_new_banner.dart';
+import 'package:sello/services/updates/release_highlights_store.dart';
 import 'package:sello/services/updates/release_manifest_config.dart';
 import 'package:sello/services/updates/update_presentation_policy.dart';
 import 'package:sello/services/updates/update_providers.dart';
@@ -15,6 +17,8 @@ import 'package:url_launcher/url_launcher.dart';
 ///
 /// Optional updates use [UpdatePresentationPolicy]: Web/PWA gets a lightweight
 /// What’s New banner; Android / iOS / desktop keep the Update Available modal.
+/// After a new build is already installed, a dismissible “Sello updated” card
+/// shares friendly release notes (bottom-right).
 /// Required updates stay blocking on every platform.
 class UpdateCheckHost extends ConsumerStatefulWidget {
   const UpdateCheckHost({super.key, required this.child});
@@ -27,7 +31,9 @@ class UpdateCheckHost extends ConsumerStatefulWidget {
 
 class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   var _optionalVisible = false;
+  var _highlightsVisible = false;
   String? _promptedIdentity;
+  String? _highlightsIdentity;
 
   UpdatePresentationStyle get _optionalStyle =>
       UpdatePresentationPolicy.forPlatform(
@@ -46,6 +52,7 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
         final data = next.valueOrNull;
         if (data == null) return;
         _maybeShowOptional(data);
+        _maybeShowHighlights(data);
       },
     );
 
@@ -55,6 +62,11 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
         showOptional && _optionalStyle == UpdatePresentationStyle.whatsNew;
     final useModal =
         showOptional && _optionalStyle == UpdatePresentationStyle.updateModal;
+    final showHighlights = _highlightsVisible &&
+        snapshot != null &&
+        snapshot.status != UpdateCheckStatus.updateRequired &&
+        snapshot.status != UpdateCheckStatus.updateAvailable &&
+        !showOptional;
 
     return Stack(
       children: [
@@ -107,6 +119,30 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
                 ),
               ),
             ),
+          )
+        else if (showHighlights)
+          Positioned(
+            right: isMobile ? 16 : 24,
+            left: isMobile ? 16 : null,
+            bottom: 16 + MediaQuery.paddingOf(context).bottom,
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isMobile ? double.infinity : 380,
+                ),
+                child: AppUpdatedShortcuts(
+                  onDismiss: _dismissHighlights,
+                  child: AppUpdatedCard(
+                    versionLabel: snapshot.installed.versionName,
+                    notes: snapshot.notes,
+                    onDismiss: _dismissHighlights,
+                  ),
+                ),
+              ),
+            ),
           ),
       ],
     );
@@ -128,8 +164,40 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
     if (!mounted) return;
     setState(() {
       _optionalVisible = true;
+      _highlightsVisible = false;
       _promptedIdentity = snapshot.latest?.identity;
     });
+  }
+
+  Future<void> _maybeShowHighlights(UpdateCheckSnapshot snapshot) async {
+    if (snapshot.status == UpdateCheckStatus.updateRequired) return;
+    if (snapshot.status == UpdateCheckStatus.updateAvailable) return;
+    if (_highlightsIdentity == snapshot.installed.identity &&
+        _highlightsVisible) {
+      return;
+    }
+
+    final app = ref.read(releaseAppKindProvider);
+    final store = ReleaseHighlightsStore(appKey: app?.jsonKey);
+    final shouldShow = await store.shouldShowHighlights(snapshot.installed);
+    if (!mounted || !shouldShow) return;
+
+    setState(() {
+      _highlightsVisible = true;
+      _highlightsIdentity = snapshot.installed.identity;
+    });
+  }
+
+  Future<void> _dismissHighlights() async {
+    final snapshot = ref.read(updateCheckControllerProvider).valueOrNull;
+    if (snapshot != null) {
+      final app = ref.read(releaseAppKindProvider);
+      await ReleaseHighlightsStore(appKey: app?.jsonKey).markSeen(
+        installed: snapshot.installed,
+      );
+    }
+    if (!mounted) return;
+    setState(() => _highlightsVisible = false);
   }
 
   Future<void> _postpone() async {

@@ -267,7 +267,8 @@ class EmployeeDetailsDialog extends StatelessWidget {
               children: [
                 Text(
                   employee.hasLogin
-                      ? 'This person can open ${profile.workspace} with ${employee.email}.'
+                      ? 'This person can open ${profile.workspace} with ${employee.email}. '
+                            'Send a set-password email if they need to sign in again or after an email change.'
                       : 'Their invitation is pending. Resend so they can get started on ${profile.workspace}.',
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
@@ -278,7 +279,9 @@ class EmployeeDetailsDialog extends StatelessWidget {
                 if (onInvite != null) ...[
                   const SizedBox(height: 12),
                   SelloButton(
-                    label: 'Resend invitation',
+                    label: employee.hasLogin
+                        ? 'Send set-password email'
+                        : 'Resend invitation',
                     variant: SelloButtonVariant.outline,
                     size: SelloButtonSize.small,
                     onPressed: onInvite,

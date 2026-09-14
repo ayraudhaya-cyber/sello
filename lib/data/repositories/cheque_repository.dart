@@ -44,6 +44,7 @@ class ChequeRepository {
     photo_path,
     notes,
     status,
+    source,
     visit_id,
     payment_id,
     applied_ar_amount,
@@ -93,7 +94,9 @@ class ChequeRepository {
       if (pendingApprovalOnly == true) {
         query = query
             .eq('status', ChequeStatus.collected.dbValue)
-            .isFilter('balance_applied_at', null);
+            .isFilter('balance_applied_at', null)
+            .not('payment_id', 'is', null)
+            .eq('source', 'sello');
       } else if (appliedCollectedOnly == true) {
         query = query
             .eq('status', ChequeStatus.collected.dbValue)
@@ -273,6 +276,64 @@ class ChequeRepository {
       final detail = await fetchById(chequeId);
       if (detail == null) {
         throw const UnexpectedFailure('Cheque was created but could not be loaded.');
+      }
+      await _notifyCreated(detail);
+      return detail;
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapChequeError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  Future<ChequeSummary> createExistingCheque(
+    CreateExistingChequeInput input,
+  ) async {
+    if (input.amount <= 0) {
+      throw const ValidationFailure('Enter a cheque amount greater than zero.');
+    }
+    final allowed = {
+      ChequeStatus.awaitingCollection,
+      ChequeStatus.collected,
+      ChequeStatus.deposited,
+      ChequeStatus.cleared,
+    };
+    if (!allowed.contains(input.status)) {
+      throw const ValidationFailure(
+        'Choose awaiting, collected, deposited, or cleared.',
+      );
+    }
+
+    try {
+      final result = await _client.rpc(
+        'create_existing_cheque',
+        params: {
+          'p_customer_id': input.customerId,
+          'p_amount': input.amount,
+          'p_bank_name': input.bankName.trim(),
+          'p_cheque_number': input.chequeNumber.trim(),
+          'p_holder_name': input.holderName.trim(),
+          'p_cheque_date': _dateOnly(input.chequeDate),
+          'p_status': input.status.dbValue,
+          'p_collection_date': input.collectionDate == null
+              ? null
+              : _dateOnly(input.collectionDate!),
+          'p_deposit_date':
+              input.depositDate == null ? null : _dateOnly(input.depositDate!),
+          'p_clearance_date': input.clearanceDate == null
+              ? null
+              : _dateOnly(input.clearanceDate!),
+          'p_photo_path': input.photoPath,
+          'p_notes': input.notes,
+        },
+      );
+      final chequeId = result is String ? result : result.toString();
+      final detail = await fetchById(chequeId);
+      if (detail == null) {
+        throw const UnexpectedFailure(
+          'Existing cheque was saved but could not be loaded.',
+        );
       }
       await _notifyCreated(detail);
       return detail;

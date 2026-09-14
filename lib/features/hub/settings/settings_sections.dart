@@ -10,6 +10,7 @@ enum SettingsSectionId {
   ordersInvoices,
   notifications,
   reliability,
+  account,
   appearance,
   company,
   about,
@@ -80,6 +81,11 @@ const kSettingsSections = <SettingsSectionSpec>[
     label: 'Access',
     icon: Icons.admin_panel_settings_outlined,
     comingSoon: true,
+  ),
+  SettingsSectionSpec(
+    id: SettingsSectionId.account,
+    label: 'Account',
+    icon: Icons.manage_accounts_outlined,
   ),
   SettingsSectionSpec(
     id: SettingsSectionId.appearance,

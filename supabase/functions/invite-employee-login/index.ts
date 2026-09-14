@@ -4,7 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  * invite-employee-login
  *
  * Creates / links a Sales Rep (or other Hub team) Auth user using the service
- * role, then sends a password-recovery email so they can set credentials.
+ * role, syncs Auth email when Hub email changes, then sends a password-recovery
+ * email so they can set credentials for that address.
  *
  * Must never run Auth Admin from the Owner's browser client — that path used
  * a second GoTrue client whose signOut() BroadcastChannel clears the Owner
@@ -153,22 +154,49 @@ Deno.serve(async (req) => {
         }, 200);
       }
     } else {
-      await admin.auth.admin.updateUserById(authUserId, {
-        user_metadata: emailMeta,
+      // Keep Auth identity aligned with Hub email (critical after email edits).
+      // Without this, resetPasswordForEmail targets employees.email while
+      // auth.users may still hold the previous address.
+      await syncLinkedAuthEmail(admin, {
+        authUserId,
+        email,
+        emailMeta,
       });
     }
 
+    // Send recovery the same way Forgot Password does: anon GoTrue client.
+    // Service-role resetPasswordForEmail often returns ok without reliably
+    // enqueueing built-in Auth mail from Edge — matching the Hub/client report
+    // that only login-screen Forgot Password delivers.
+    const mailer = createClient(supabaseUrl, supabaseAnon, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
     let emailDelivered = false;
+    let emailError: string | undefined;
     try {
       const recoverOpts: { redirectTo?: string } = {};
       if (redirectTo) recoverOpts.redirectTo = redirectTo;
-      const { error: recoverError } = await admin.auth.resetPasswordForEmail(
+      const { error: recoverError } = await mailer.auth.resetPasswordForEmail(
         email,
         recoverOpts,
       );
-      emailDelivered = recoverError == null;
-    } catch {
+      if (recoverError == null) {
+        emailDelivered = true;
+      } else {
+        emailError = recoverError.message || "recover_failed";
+        console.error(
+          "[invite-employee-login] resetPasswordForEmail failed:",
+          emailError,
+        );
+      }
+    } catch (error) {
       emailDelivered = false;
+      emailError = error instanceof Error ? error.message : "recover_failed";
+      console.error(
+        "[invite-employee-login] resetPasswordForEmail threw:",
+        emailError,
+      );
     }
 
     await recordInvite(admin, {
@@ -184,6 +212,7 @@ Deno.serve(async (req) => {
       ok: true,
       account_ready: true,
       email_delivered: emailDelivered,
+      ...(emailError ? { email_error: emailError } : {}),
       employee_id: employeeId,
       full_name: fullName || undefined,
     }, 200);
@@ -268,6 +297,50 @@ function emailLocal(email: string): string {
   return email.slice(0, at);
 }
 
+async function syncLinkedAuthEmail(
+  admin: ReturnType<typeof createClient>,
+  args: {
+    authUserId: string;
+    email: string;
+    emailMeta: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { data: existing, error: getError } = await admin.auth.admin.getUserById(
+    args.authUserId,
+  );
+  if (getError || !existing.user) {
+    throw new InviteError("auth_lookup_failed");
+  }
+
+  const currentEmail = (existing.user.email ?? "").trim().toLowerCase();
+  const nextEmail = args.email.trim().toLowerCase();
+  const emailChanged = currentEmail !== nextEmail;
+
+  const { error: updateError } = await admin.auth.admin.updateUserById(
+    args.authUserId,
+    {
+      ...(emailChanged
+        ? { email: nextEmail, email_confirm: true }
+        : {}),
+      user_metadata: args.emailMeta,
+    },
+  );
+
+  if (!updateError) return;
+
+  const message = (updateError.message ?? "").toLowerCase();
+  const conflict = message.includes("already") ||
+    message.includes("registered") ||
+    message.includes("exists") ||
+    message.includes("duplicate") ||
+    updateError.status === 422;
+
+  if (conflict) {
+    throw new InviteError("auth_email_in_use");
+  }
+  throw new InviteError("auth_email_update_failed");
+}
+
 async function ensureAuthUser(
   admin: ReturnType<typeof createClient>,
   email: string,
@@ -295,14 +368,10 @@ async function ensureAuthUser(
     throw new InviteError("auth_create_failed");
   }
 
-  const { data: linkData, error: linkError } = await admin.auth.admin
-    .generateLink({
-      type: "recovery",
-      email,
-    });
-
-  const userId = linkData?.user?.id;
-  if (linkError || !userId) {
+  // Do not use generateLink(type: recovery) for lookup — that mints a recovery
+  // token without emailing and can interfere with the real recover send below.
+  const userId = await findAuthUserIdByEmail(admin, email);
+  if (!userId) {
     throw new InviteError("auth_lookup_failed");
   }
 
@@ -311,6 +380,30 @@ async function ensureAuthUser(
   });
 
   return { userId, created: false };
+}
+
+async function findAuthUserIdByEmail(
+  admin: ReturnType<typeof createClient>,
+  email: string,
+): Promise<string | null> {
+  const normalized = email.trim().toLowerCase();
+  const perPage = 200;
+  for (let page = 1; page <= 25; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      console.error(
+        "[invite-employee-login] listUsers failed:",
+        error.message,
+      );
+      return null;
+    }
+    const hit = data.users.find(
+      (user) => (user.email ?? "").trim().toLowerCase() === normalized,
+    );
+    if (hit?.id) return hit.id;
+    if (data.users.length < perPage) return null;
+  }
+  return null;
 }
 
 async function recordInvite(

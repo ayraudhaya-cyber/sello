@@ -9,37 +9,42 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
-import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
-/// Record a cheque instrument — returns [CreateChequeInput] for the caller to save.
-class RecordChequeDialog extends ConsumerStatefulWidget {
-  const RecordChequeDialog({
+const _existingChequeStatuses = <ChequeStatus>[
+  ChequeStatus.awaitingCollection,
+  ChequeStatus.collected,
+  ChequeStatus.deposited,
+  ChequeStatus.cleared,
+];
+
+/// Record a pre-Sello cheque for tracking only — returns [CreateExistingChequeInput].
+class AddExistingChequeDialog extends ConsumerStatefulWidget {
+  const AddExistingChequeDialog({
     super.key,
     required this.currencySymbol,
-    this.visitId,
     this.initialCustomer,
-    this.markCollected = false,
+    this.lockCustomer = false,
   });
 
   final String currencySymbol;
-  final String? visitId;
   final CustomerSummary? initialCustomer;
-  final bool markCollected;
+  final bool lockCustomer;
 
   @override
-  ConsumerState<RecordChequeDialog> createState() => _RecordChequeDialogState();
+  ConsumerState<AddExistingChequeDialog> createState() =>
+      _AddExistingChequeDialogState();
 }
 
-class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
+class _AddExistingChequeDialogState
+    extends ConsumerState<AddExistingChequeDialog> {
   final _media = MediaService();
 
   CustomerSummary? _customer;
-  List<ReceivableOrder> _receivables = const [];
-  final Map<String, num> _allocations = {};
 
   final _amount = TextEditingController();
   final _bank = TextEditingController();
@@ -49,21 +54,29 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
 
   DateTime _chequeDate = DateTime.now();
   DateTime? _collectionDate;
-  bool _markCollected = false;
+  DateTime? _depositDate;
+  DateTime? _clearanceDate;
+  ChequeStatus _status = ChequeStatus.awaitingCollection;
+
   Uint8List? _photoBytes;
   String? _uploadedPhotoPath;
   bool _uploadingPhoto = false;
-  bool _loadingOrders = false;
   bool _submitting = false;
   String? _error;
+
+  bool get _showCollectionDate =>
+      _status == ChequeStatus.collected ||
+      _status == ChequeStatus.deposited ||
+      _status == ChequeStatus.cleared;
+
+  bool get _showDepositDate =>
+      _status == ChequeStatus.deposited || _status == ChequeStatus.cleared;
+
+  bool get _showClearanceDate => _status == ChequeStatus.cleared;
 
   @override
   void initState() {
     super.initState();
-    _markCollected = widget.markCollected;
-    if (_markCollected) {
-      _collectionDate = DateTime.now();
-    }
     final initial = widget.initialCustomer;
     if (initial != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -83,6 +96,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
   }
 
   Future<void> _pickCustomer() async {
+    if (widget.lockCustomer) return;
     final selected = await showDialog<CustomerSummary>(
       context: context,
       builder: (context) => _CustomerPicker(
@@ -90,79 +104,31 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       ),
     );
     if (selected == null || !mounted) return;
-    await _applyCustomer(selected);
+    _applyCustomer(selected);
   }
 
-  Future<void> _applyCustomer(CustomerSummary selected) async {
+  void _applyCustomer(CustomerSummary selected) {
     setState(() {
       _customer = selected;
-      _allocations.clear();
       _error = null;
-      _loadingOrders = true;
       if (_holder.text.trim().isEmpty) {
         _holder.text = selected.name;
       }
     });
-    try {
-      final orders = await ref
-          .read(paymentRepositoryProvider)
-          .fetchReceivableOrders(selected.id);
-      if (!mounted) return;
-      setState(() {
-        _receivables = orders;
-        _loadingOrders = false;
-        if (_markCollected && orders.isNotEmpty) {
-          final amount = num.tryParse(_amount.text.trim()) ?? 0;
-          if (amount > 0) {
-            _rebalanceAllocations(amount);
-          } else {
-            final totalDue = orders.fold<num>(0, (sum, o) => sum + o.remaining);
-            _amount.text = totalDue.toStringAsFixed(2);
-            _rebalanceAllocations(totalDue);
-          }
-        }
-      });
-    } on AppFailure catch (failure) {
-      if (!mounted) return;
-      setState(() {
-        _loadingOrders = false;
-        _error = failure.message;
-      });
-    }
   }
 
-  void _rebalanceAllocations(num paymentAmount) {
-    _allocations.clear();
-    if (!_markCollected) return;
-    var remaining = paymentAmount;
-    for (final order in _receivables) {
-      if (remaining <= 0) break;
-      final take = order.remaining.clamp(0, remaining);
-      if (take > 0) {
-        _allocations[order.id] = take;
-        remaining -= take;
-      }
-    }
-  }
-
-  Future<void> _pickDate({required bool collection}) async {
-    final initial = collection
-        ? (_collectionDate ?? DateTime.now())
-        : _chequeDate;
+  Future<void> _pickDate({
+    required DateTime? current,
+    required ValueChanged<DateTime> onPicked,
+  }) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
+      initialDate: current ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
     if (picked == null || !mounted) return;
-    setState(() {
-      if (collection) {
-        _collectionDate = picked;
-      } else {
-        _chequeDate = picked;
-      }
-    });
+    setState(() => onPicked(picked));
   }
 
   Future<void> _pickPhoto() async {
@@ -225,7 +191,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
     });
   }
 
-  CreateChequeInput? _buildInput() {
+  CreateExistingChequeInput? _buildInput() {
     if (_customer == null) {
       setState(() => _error = 'Select a customer.');
       return null;
@@ -247,33 +213,20 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       setState(() => _error = 'Enter the cheque holder name.');
       return null;
     }
-    if (_markCollected && _collectionDate == null) {
-      setState(() => _error = 'Collection date is required when marked collected.');
-      return null;
-    }
 
-    return CreateChequeInput(
+    return CreateExistingChequeInput(
       customerId: _customer!.id,
       amount: amount,
       bankName: _bank.text.trim(),
       chequeNumber: _chequeNumber.text.trim(),
       holderName: _holder.text.trim(),
       chequeDate: _chequeDate,
-      collectionDate: _markCollected ? _collectionDate : null,
+      status: _status,
+      collectionDate: _showCollectionDate ? _collectionDate : null,
+      depositDate: _showDepositDate ? _depositDate : null,
+      clearanceDate: _showClearanceDate ? _clearanceDate : null,
       photoPath: _uploadedPhotoPath,
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-      allocations: _markCollected
-          ? [
-              for (final entry in _allocations.entries)
-                if (entry.value > 0)
-                  PaymentAllocationInput(
-                    orderId: entry.key,
-                    amount: entry.value,
-                  ),
-            ]
-          : const [],
-      visitId: widget.visitId,
-      markCollected: _markCollected,
     );
   }
 
@@ -315,14 +268,12 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final symbol = widget.currencySymbol;
     final isMobile = context.isMobile;
 
     return SelloFormDialog(
-      title: 'Record cheque',
-      subtitle: _markCollected
-          ? 'Record the cheque received from this customer.'
-          : 'Enter the cheque details. Leave collected off until the cheque is in hand.',
+      title: 'Add existing cheque',
+      subtitle:
+          'Record a cheque received before you started using Sello. This won’t change the customer’s balance.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -359,8 +310,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
               else
                 _CustomerStrip(
                   customer: _customer!,
-                  currencySymbol: symbol,
-                  onChange: _pickCustomer,
+                  onChange: widget.lockCustomer ? null : _pickCustomer,
                 ),
             ],
           ),
@@ -373,13 +323,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
                 required: true,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (value) {
-                  final parsed = num.tryParse(value.trim()) ?? 0;
-                  setState(() {
-                    _error = null;
-                    _rebalanceAllocations(parsed);
-                  });
-                },
+                onChanged: (_) => setState(() => _error = null),
               ),
               const SizedBox(height: 12),
               SelloFormRow(
@@ -405,97 +349,83 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
                 label: 'Cheque date',
                 value: _chequeDate,
                 required: true,
-                onTap: () => _pickDate(collection: false),
+                onTap: () => _pickDate(
+                  current: _chequeDate,
+                  onPicked: (value) => _chequeDate = value,
+                ),
               ),
             ],
           ),
           SelloDialogSection(
-            title: 'Collection',
+            title: 'Current status',
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'Mark as collected',
-                      style: TextStyle(
+                  for (final status in _existingChequeStatuses)
+                    ChoiceChip(
+                      label: Text(status.shortLabel),
+                      selected: _status == status,
+                      onSelected: (selected) {
+                        if (!selected) return;
+                        setState(() {
+                          _status = status;
+                          _error = null;
+                        });
+                      },
+                      selectedColor: context.brandAccentContainer,
+                      labelStyle: TextStyle(
                         fontFamily: AppTypography.fontFamily,
-                        fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                        color: _status == status
+                            ? context.brandAccent
+                            : AppColors.textSecondary,
                       ),
+                      side: BorderSide(
+                        color: _status == status
+                            ? context.brandAccent.withValues(alpha: 0.35)
+                            : AppColors.outlinePanel,
+                      ),
+                      backgroundColor: AppColors.surface,
                     ),
-                  ),
-                  SelloSwitch(
-                    value: _markCollected,
-                    onChanged: (value) {
-                      setState(() {
-                        _markCollected = value;
-                        if (value) {
-                          _collectionDate ??= DateTime.now();
-                          final amount =
-                              num.tryParse(_amount.text.trim()) ?? 0;
-                          if (amount > 0) _rebalanceAllocations(amount);
-                        } else {
-                          _collectionDate = null;
-                          _allocations.clear();
-                        }
-                      });
-                    },
-                  ),
                 ],
               ),
-              if (_markCollected) ...[
+              if (_showCollectionDate) ...[
                 const SizedBox(height: 12),
                 _dateField(
                   label: 'Collection date',
                   value: _collectionDate,
-                  required: true,
-                  onTap: () => _pickDate(collection: true),
+                  onTap: () => _pickDate(
+                    current: _collectionDate,
+                    onPicked: (value) => _collectionDate = value,
+                  ),
+                ),
+              ],
+              if (_showDepositDate) ...[
+                const SizedBox(height: 12),
+                _dateField(
+                  label: 'Deposit date',
+                  value: _depositDate,
+                  onTap: () => _pickDate(
+                    current: _depositDate,
+                    onPicked: (value) => _depositDate = value,
+                  ),
+                ),
+              ],
+              if (_showClearanceDate) ...[
+                const SizedBox(height: 12),
+                _dateField(
+                  label: 'Clearance date',
+                  value: _clearanceDate,
+                  onTap: () => _pickDate(
+                    current: _clearanceDate,
+                    onPicked: (value) => _clearanceDate = value,
+                  ),
                 ),
               ],
             ],
           ),
-          if (_markCollected && _customer != null)
-            SelloDialogSection(
-              title: 'Outstanding orders',
-              children: [
-                if (_loadingOrders)
-                  const LinearProgressIndicator(minHeight: 2)
-                else if (_receivables.isEmpty)
-                  Text(
-                    'No unpaid completed orders. Amount will reduce the '
-                    'customer balance / credit the wallet if overpaid.',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 13.5,
-                      color: AppColors.textFaint,
-                    ),
-                  )
-                else
-                  Column(
-                    children: [
-                      for (final order in _receivables) ...[
-                        _OrderAllocRow(
-                          order: order,
-                          currencySymbol: symbol,
-                          allocated: _allocations[order.id] ?? 0,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value <= 0) {
-                                _allocations.remove(order.id);
-                              } else {
-                                _allocations[order.id] =
-                                    value.clamp(0, order.remaining);
-                              }
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
-                  ),
-              ],
-            ),
           SelloDialogSection(
             title: 'Photo',
             children: [
@@ -528,7 +458,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       ),
       footer: SelloDialogFooter(
         cancelLabel: 'Cancel',
-        primaryLabel: _submitting ? 'Saving…' : 'Save cheque',
+        primaryLabel: _submitting ? 'Saving…' : 'Save existing cheque',
         onPrimary: _submitting || _uploadingPhoto ? null : _confirm,
       ),
     );
@@ -538,13 +468,11 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
 class _CustomerStrip extends StatelessWidget {
   const _CustomerStrip({
     required this.customer,
-    required this.currencySymbol,
-    required this.onChange,
+    this.onChange,
   });
 
   final CustomerSummary customer;
-  final String currencySymbol;
-  final VoidCallback onChange;
+  final VoidCallback? onChange;
 
   @override
   Widget build(BuildContext context) {
@@ -569,129 +497,28 @@ class _CustomerStrip extends StatelessWidget {
                     fontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  [
-                    if (customer.phone != null) customer.phone!,
-                    'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: currencySymbol)}',
-                    'Wallet ${SelloFormatters.currency(customer.walletBalance, symbol: currencySymbol)}',
-                  ].join(' · '),
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 13,
-                    height: 1.4,
-                    color: AppColors.textSecondary,
+                if (customer.phone != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    customer.phone!,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 13,
+                      height: 1.4,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
-          SelloButton(
-            label: 'Change',
-            size: SelloButtonSize.small,
-            variant: SelloButtonVariant.ghost,
-            onPressed: onChange,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderAllocRow extends StatefulWidget {
-  const _OrderAllocRow({
-    required this.order,
-    required this.currencySymbol,
-    required this.allocated,
-    required this.onChanged,
-  });
-
-  final ReceivableOrder order;
-  final String currencySymbol;
-  final num allocated;
-  final ValueChanged<num> onChanged;
-
-  @override
-  State<_OrderAllocRow> createState() => _OrderAllocRowState();
-}
-
-class _OrderAllocRowState extends State<_OrderAllocRow> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(
-      text: widget.allocated > 0 ? widget.allocated.toStringAsFixed(2) : '',
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _OrderAllocRow oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final next =
-        widget.allocated > 0 ? widget.allocated.toStringAsFixed(2) : '';
-    if (_controller.text != next) {
-      _controller.text = next;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final order = widget.order;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.outlinePanel),
-        borderRadius: BorderRadius.circular(AppRadius.panel),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  order.orderNumber,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Due ${SelloFormatters.currency(order.remaining, symbol: widget.currencySymbol)} · '
-                  '${SelloFormatters.date(order.orderedAt)}',
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-              ],
+          if (onChange != null)
+            SelloButton(
+              label: 'Change',
+              size: SelloButtonSize.small,
+              variant: SelloButtonVariant.ghost,
+              onPressed: onChange,
             ),
-          ),
-          SizedBox(
-            width: 120,
-            child: TextField(
-              controller: _controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Allocate',
-                isDense: true,
-              ),
-              onChanged: (value) {
-                widget.onChanged(num.tryParse(value.trim()) ?? 0);
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -756,7 +583,7 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
   Widget build(BuildContext context) {
     return SelloFormDialog(
       title: 'Select customer',
-      subtitle: 'Active customers with receivables or wallet activity.',
+      subtitle: 'Choose the customer this cheque belongs to.',
       maxWidth: 720,
       fullscreenOnMobile: true,
       body: Column(

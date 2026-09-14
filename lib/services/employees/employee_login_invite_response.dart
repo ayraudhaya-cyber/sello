@@ -44,12 +44,15 @@ abstract final class EmployeeLoginInviteResponse {
       case 'inactive':
         return 'Only active team members can receive an invitation.';
       case 'auth_user_in_use':
+      case 'auth_email_in_use':
         return 'This email already has a Sello login linked to another person.';
       case 'already_linked_other':
         return 'This team member is already linked to a different login.';
       case 'auth_create_failed':
       case 'auth_lookup_failed':
         return 'Unable to create a login for this email. Try a different email.';
+      case 'auth_email_update_failed':
+        return 'Unable to update the login email. Try again or use a different email.';
       case 'link_failed':
         return 'Login was created but could not be linked. Try Send invite again.';
       case 'server_misconfigured':

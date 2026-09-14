@@ -7,6 +7,7 @@ import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/customers/presentation/customer_details_dialog.dart';
 import 'package:sello/features/mobile/customers/application/sello_customers_provider.dart';
+import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
@@ -171,7 +172,7 @@ class _SelloCustomersPageState extends ConsumerState<SelloCustomersPage> {
   }
 }
 
-class _CustomerRow extends StatelessWidget {
+class _CustomerRow extends ConsumerWidget {
   const _CustomerRow({
     required this.customer,
     required this.onVisit,
@@ -183,7 +184,8 @@ class _CustomerRow extends StatelessWidget {
   final VoidCallback onDetails;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currencySymbol = ref.watch(selloCurrencySymbolProvider);
     final areaPhone = [
       if (customer.city != null) customer.city!,
       if (customer.phone != null) PhoneNumber.displayOf(customer.phone),
@@ -228,7 +230,10 @@ class _CustomerRow extends StatelessWidget {
             if (customer.outstandingBalance > 0) ...[
               const SizedBox(width: AppSpacing.sm),
               Text(
-                SelloFormatters.currency(customer.outstandingBalance),
+                SelloFormatters.currency(
+                  customer.outstandingBalance,
+                  symbol: currencySymbol,
+                ),
                 style: context.texts.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: AppColors.warning,

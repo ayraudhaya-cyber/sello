@@ -164,6 +164,63 @@ class ProductRepository {
     }
   }
 
+  /// Loads specific products by id (visit draft restore, etc.).
+  Future<List<ProductSummary>> fetchProductsByIds({
+    required List<String> ids,
+    String? branchId,
+    bool? isActive = true,
+  }) async {
+    final unique = <String>{
+      for (final id in ids)
+        if (id.trim().isNotEmpty) id.trim(),
+    }.toList();
+    if (unique.isEmpty) return const [];
+
+    try {
+      var query = _client
+          .from('products')
+          .select(_productSelect)
+          .isFilter('deleted_at', null)
+          .inFilter('id', unique);
+
+      if (isActive != null) {
+        query = query.eq('is_active', isActive);
+      }
+
+      final response = await query;
+      final list = response as List;
+      final items = <ProductSummary>[];
+      for (final row in list) {
+        final item = ProductSummary.fromQueryRow(
+          Map<String, dynamic>.from(row),
+          branchId: branchId,
+        );
+        if (item.imageStoragePath != null && item.imageStoragePath!.isNotEmpty) {
+          try {
+            final imageUrl =
+                await _imageStorage.signProductImage(item.imageStoragePath!);
+            items.add(item.copyWith(imageUrl: imageUrl));
+          } catch (_) {
+            items.add(item);
+          }
+        } else {
+          items.add(item);
+        }
+      }
+      return items;
+    } on PostgrestException catch (error) {
+      throw AuthFailure(
+        error.message.trim().isEmpty
+            ? 'Unable to load products. Please try again.'
+            : error.message,
+      );
+    } catch (_) {
+      throw const UnexpectedFailure(
+        'Unable to load products. Please try again.',
+      );
+    }
+  }
+
   /// Inserts/updates product + inventory and returns the product id.
   /// Does not upload gallery images — call [syncProductGallery] separately.
   Future<String> upsertProductRecord({
@@ -299,7 +356,9 @@ class ProductRepository {
 
       return savedProductId;
     } on PostgrestException catch (error) {
-      throw ValidationFailure(_mapProductError(error.message));
+      throw ValidationFailure(
+        _mapProductError(error.message, code: error.code),
+      );
     } on AppFailure {
       rethrow;
     } catch (error) {
@@ -520,19 +579,34 @@ class ProductRepository {
     return normalized;
   }
 
-  String _mapProductError(String message) {
+  String _mapProductError(String message, {String? code}) {
     final upper = message.toUpperCase();
-    if (upper.contains('PRODUCTS_COMPANY_SKU_ACTIVE_KEY')) {
-      return 'That SKU already exists in your catalog.';
+    final isDuplicate = code == '23505' ||
+        upper.contains('23505') ||
+        upper.contains('DUPLICATE KEY') ||
+        upper.contains('UNIQUE CONSTRAINT');
+
+    if (upper.contains('PRODUCTS_COMPANY_SKU_ACTIVE_KEY') ||
+        (isDuplicate && upper.contains('SKU'))) {
+      return 'That item code (SKU) already exists in your catalog. '
+          'Use a unique code for each product.';
     }
-    if (upper.contains('PRODUCTS_COMPANY_BARCODE_ACTIVE_KEY')) {
+    if (upper.contains('PRODUCTS_COMPANY_BARCODE_ACTIVE_KEY') ||
+        (isDuplicate && upper.contains('BARCODE'))) {
       return 'That barcode already exists in your catalog.';
+    }
+    if (isDuplicate) {
+      return 'A product with the same item code or barcode already exists.';
     }
     if (upper.contains('CATEGORIES_COMPANY_NAME_ACTIVE_KEY')) {
       return 'That category already exists.';
     }
     if (upper.contains('VALIDATE_PRODUCT_CATEGORY_COMPANY')) {
       return 'Choose a category from your company.';
+    }
+    if (upper.contains('PRODUCTS_SKU_NOT_BLANK') ||
+        upper.contains('SKU_NOT_BLANK')) {
+      return 'Enter an item code.';
     }
     if (upper.contains('PRODUCT_IMAGES')) {
       return 'Unable to update the product image.';

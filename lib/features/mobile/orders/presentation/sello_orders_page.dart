@@ -15,7 +15,6 @@ import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
 import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/notifications/outbound/outbound_sms.dart';
-import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
@@ -66,11 +65,7 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     super.dispose();
   }
 
-  String get _currencySymbol {
-    final settings = ref.read(selloCompanySettingsProvider).valueOrNull ??
-        CompanySettings.defaults;
-    return SelloFormatters.currencySymbol(settings.currency);
-  }
+  String get _currencySymbol => ref.watch(selloCurrencySymbolProvider);
 
   Future<void> _openEditor({
     OrderDetail? existing,

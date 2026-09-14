@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.4",
-        "build": 5,
-        "released_at": "2026-09-05",
-        "notes": "Improved invoice & receipt layout\nCleaner order details\nBetter PWA experience"
+        "version": "1.0.5",
+        "build": 6,
+        "released_at": "2026-09-14",
+        "notes": "Orders can use amount and percent discounts together\nCheque later no longer asks for a cheque you don’t have yet\nExpected cheque dates are optional — leave blank when the customer hasn’t said\nYou can change your own password from Profile\nAdd existing cheques from before you started Sello without changing balances"
       },
       "minimum": {
         "version": "1.0.0",
@@ -31,10 +31,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.4",
-        "build": 5,
-        "released_at": "2026-09-05",
-        "notes": "Improved invoice & receipt layout\nCleaner order details\nBetter PWA experience"
+        "version": "1.0.5",
+        "build": 6,
+        "released_at": "2026-09-14",
+        "notes": "Orders can use amount and percent discounts together\nTeam members can change their own password from Account settings\nCheque later is clearer — no fake cheque until one is really received\nAdd existing cheques for customers who already paid by cheque before Sello\nInvite and password emails are easier to understand"
       },
       "minimum": {
         "version": "1.0.0",

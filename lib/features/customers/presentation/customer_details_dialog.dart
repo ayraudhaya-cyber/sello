@@ -24,6 +24,7 @@ class CustomerDetailsDialog extends StatelessWidget {
     this.onEdit,
     this.onToggleArchive,
     this.onDeletePermanently,
+    this.onAddExistingCheque,
     this.readOnly = false,
     this.currencySymbol = '\$',
     this.assignedRepresentativeName,
@@ -34,6 +35,7 @@ class CustomerDetailsDialog extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onToggleArchive;
   final VoidCallback? onDeletePermanently;
+  final VoidCallback? onAddExistingCheque;
   final bool readOnly;
   final String currencySymbol;
 
@@ -121,6 +123,29 @@ class CustomerDetailsDialog extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onAddExistingCheque != null) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SelloButton(
+                      label: 'Add existing cheque',
+                      icon: Icons.account_balance_outlined,
+                      variant: SelloButtonVariant.outline,
+                      size: SelloButtonSize.small,
+                      onPressed: onAddExistingCheque,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Record a cheque received before you started using Sello.',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12.5,
+                      height: 1.35,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 const SelloFormRow(
                   left: _ProfileField(

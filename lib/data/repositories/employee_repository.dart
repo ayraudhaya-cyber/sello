@@ -531,6 +531,7 @@ class EmployeeRepository {
       };
 
       String employeeId;
+      String? previousEmail;
       if (input.isCreate) {
         payload['created_by'] = actorEmployeeId;
         if (payload['employee_code'] == null) {
@@ -545,6 +546,11 @@ class EmployeeRepository {
         employeeId = inserted['id'] as String;
       } else {
         employeeId = input.id!;
+        final existing = await fetchEmployeeById(
+          companyId: companyId,
+          employeeId: employeeId,
+        );
+        previousEmail = existing?.email.trim().toLowerCase();
         await _client
             .from('employees')
             .update(payload)
@@ -579,24 +585,36 @@ class EmployeeRepository {
         referenceId: employeeId,
       );
 
+      final nextEmail = input.email.trim().toLowerCase();
+      final emailChanged = !input.isCreate &&
+          previousEmail != null &&
+          previousEmail.isNotEmpty &&
+          previousEmail != nextEmail;
+
       TeamInviteResult? invite;
-      if (input.isCreate) {
-        onProgress?.call('Sending invitation…');
+      if (input.isCreate || emailChanged) {
+        onProgress?.call(
+          emailChanged
+              ? 'Sending set-password email…'
+              : 'Sending invitation…',
+        );
         invite = await sendLoginInvite(
           companyId: companyId,
           actorEmployeeId: actorEmployeeId,
           employeeId: employeeId,
         );
 
-        await _events.publish(
-          companyId: companyId,
-          actorEmployeeId: actorEmployeeId,
-          event: BusinessEvents.teamMemberJoined(
-            employeeId: employeeId,
-            fullName: input.fullName.trim(),
-            excludeEmployeeId: employeeId,
-          ),
-        );
+        if (input.isCreate) {
+          await _events.publish(
+            companyId: companyId,
+            actorEmployeeId: actorEmployeeId,
+            event: BusinessEvents.teamMemberJoined(
+              employeeId: employeeId,
+              fullName: input.fullName.trim(),
+              excludeEmployeeId: employeeId,
+            ),
+          );
+        }
       }
 
       onProgress?.call('Refreshing team…');

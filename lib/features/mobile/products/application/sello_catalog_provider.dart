@@ -123,10 +123,13 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
     );
 
     try {
+      final session = ref.read(currentSessionProvider);
+      final branchId = session?.branch?.id ?? session?.employee.branchId;
       final result = await _repo.fetchProducts(
         search: state.search,
         categoryId: state.categoryId,
         isActive: true,
+        branchId: branchId,
         page: page,
         pageSize: state.pageSize,
       );

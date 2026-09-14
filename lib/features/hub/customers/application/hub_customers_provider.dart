@@ -158,13 +158,15 @@ class HubCustomersNotifier extends Notifier<HubCustomersState> {
     await loadCustomers();
   }
 
-  Future<String?> saveCustomer(CustomerUpsertInput input) async {
+  Future<HubCustomerSaveResult> saveCustomer(CustomerUpsertInput input) async {
     final session = ref.read(currentSessionProvider);
-    if (session == null) return 'No active session found.';
+    if (session == null) {
+      return const HubCustomerSaveResult.fail('No active session found.');
+    }
 
     state = state.copyWith(isSaving: true, clearError: true);
     try {
-      await _repo.upsertCustomer(
+      final customerId = await _repo.upsertCustomer(
         input: input,
         companyId: session.company.id,
         employeeId: session.employee.id,
@@ -172,13 +174,16 @@ class HubCustomersNotifier extends Notifier<HubCustomersState> {
       );
       await loadCustomers(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
-      return null;
+      return HubCustomerSaveResult.ok(
+        customerId: customerId,
+        isNew: input.customerId == null,
+      );
     } on AppFailure catch (failure) {
       state = state.copyWith(
         isSaving: false,
         errorMessage: failure.message,
       );
-      return failure.message;
+      return HubCustomerSaveResult.fail(failure.message);
     }
   }
 
@@ -232,6 +237,23 @@ class HubCustomersNotifier extends Notifier<HubCustomersState> {
       return failure.message;
     }
   }
+}
+
+class HubCustomerSaveResult {
+  const HubCustomerSaveResult.ok({
+    required this.customerId,
+    required this.isNew,
+  }) : error = null;
+
+  const HubCustomerSaveResult.fail(this.error)
+      : customerId = null,
+        isNew = false;
+
+  final String? customerId;
+  final String? error;
+  final bool isNew;
+
+  bool get isOk => error == null && customerId != null;
 }
 
 final hubCustomersProvider =

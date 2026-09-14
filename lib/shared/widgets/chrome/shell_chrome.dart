@@ -8,8 +8,7 @@ import 'package:sello/features/notifications/application/notifications_provider.
 import 'package:sello/features/notifications/presentation/notification_center_panel.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/providers/theme_mode_provider.dart';
-import 'package:sello/shared/widgets/buttons/sello_button.dart';
-import 'package:sello/shared/widgets/chrome/quick_actions_button.dart';
+import 'package:sello/shared/widgets/auth/change_password_dialog.dart';
 import 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 
 /// Premium command-style global search control for shell chrome.
@@ -178,6 +177,8 @@ class UserProfileMenu extends ConsumerWidget {
             } else {
               context.go(RoutePaths.selloProfile);
             }
+          case _ProfileAction.changePassword:
+            await showChangePasswordDialog(context);
           case _ProfileAction.theme:
             ref.read(themeModeProvider.notifier).toggleLightDark();
             SelloSnackbars.info(
@@ -228,6 +229,15 @@ class UserProfileMenu extends ConsumerWidget {
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.settings_outlined),
             title: Text('Settings'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _ProfileAction.changePassword,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.lock_outline_rounded),
+            title: Text('Change password'),
           ),
         ),
         const PopupMenuItem(
@@ -296,4 +306,4 @@ class UserProfileMenu extends ConsumerWidget {
   }
 }
 
-enum _ProfileAction { settings, theme, signOut }
+enum _ProfileAction { settings, changePassword, theme, signOut }

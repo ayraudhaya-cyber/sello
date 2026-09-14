@@ -102,6 +102,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   PaymentMethod? _paymentMethod;
   final _notes = TextEditingController();
   final _orderDiscount = TextEditingController(text: '0');
+  final _orderDiscountPercent = TextEditingController(text: '0');
   final _customerSearch = TextEditingController();
   final _productSearch = TextEditingController();
   final _customerFocus = FocusNode();
@@ -195,7 +196,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     if (existing != null) {
       _paymentMethod = existing.summary.paymentMethod;
       _notes.text = existing.summary.notes ?? '';
-      _orderDiscount.text = existing.summary.discountAmount.toString();
+      _orderDiscount.text = existing.summary.discountFixedAmount.toString();
+      _orderDiscountPercent.text =
+          existing.summary.discountPercent.toString();
       for (final line in existing.lines) {
         _lines.add(
           OrderLineDraft(
@@ -239,6 +242,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     _productDebounce?.cancel();
     _notes.dispose();
     _orderDiscount.dispose();
+    _orderDiscountPercent.dispose();
     _customerSearch.dispose();
     _productSearch.dispose();
     _customerFocus.dispose();
@@ -501,15 +505,29 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     widget.onBasketChanged?.call(_lines.length);
   }
 
-  num get _orderDiscountValue =>
-      num.tryParse(_orderDiscount.text.trim()) ?? 0;
+  num get _orderDiscountValue {
+    final value = num.tryParse(_orderDiscount.text.trim()) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  num get _orderDiscountPercentValue {
+    final value = num.tryParse(_orderDiscountPercent.text.trim()) ?? 0;
+    return value.clamp(0, 100);
+  }
 
   num get _subtotal =>
       OrderCalculations.subtotal(_lines.map((line) => line.lineTotal));
 
+  num get _resolvedDiscount => OrderCalculations.resolvedOrderDiscount(
+        subtotal: _subtotal,
+        orderDiscountAmount: _orderDiscountValue,
+        orderDiscountPercent: _orderDiscountPercentValue,
+      );
+
   num get _total => OrderCalculations.grandTotal(
         subtotal: _subtotal,
         orderDiscount: _orderDiscountValue,
+        orderDiscountPercent: _orderDiscountPercentValue,
       );
 
   OrderUpsertInput _buildInput() {
@@ -524,6 +542,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           ? PaymentStatus.unpaid
           : PaymentStatus.unpaid,
       orderDiscount: _orderDiscountValue,
+      orderDiscountPercent: _orderDiscountPercentValue,
       taxAmount: 0,
       visitId: widget.visitId,
     );
@@ -533,6 +552,21 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   List<OrderLineDraft> get lines => List.unmodifiable(_lines);
   num get runningTotal => _total;
   num get itemQuantity => _lines.fold<num>(0, (sum, line) => sum + line.quantity);
+  num get orderDiscountAmount => _orderDiscountValue;
+  num get orderDiscountPercent => _orderDiscountPercentValue;
+
+  void setOrderDiscounts({num? amount, num? percent}) {
+    setState(() {
+      if (amount != null) {
+        _orderDiscount.text = amount == 0 ? '0' : amount.toString();
+      }
+      if (percent != null) {
+        _orderDiscountPercent.text =
+            percent == 0 ? '0' : percent.toString();
+      }
+    });
+    _notifyBasketChanged();
+  }
 
   void setLineQuantity(String productId, num quantity) =>
       _setLineQuantity(productId, quantity);
@@ -544,12 +578,13 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   ) async {
     if (lines.isEmpty) return 0;
     try {
-      final result = await ref.read(productRepositoryProvider).fetchProducts(
-            pageSize: 200,
-            isActive: true,
+      final ids = [for (final line in lines) line.productId];
+      final products = await ref.read(productRepositoryProvider).fetchProductsByIds(
+            ids: ids,
             branchId: _branchId,
+            isActive: true,
           );
-      final byId = {for (final product in result.items) product.id: product};
+      final byId = {for (final product in products) product.id: product};
       final stockWarnings = <String>[];
       setState(() {
         _lines.clear();
@@ -1356,22 +1391,49 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             SelloFormRow(
               left: SelloTextField(
                 controller: _orderDiscount,
-                label: 'Order discount',
+                label: 'Discount amount',
                 hint: '0',
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (_) => setState(() {}),
               ),
-              right: const _TotalReadout(
-                label: 'Tax',
-                value: 'Reserved',
-                muted: true,
+              right: SelloTextField(
+                controller: _orderDiscountPercent,
+                label: 'Discount %',
+                hint: '0',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
               ),
             ),
             const SizedBox(height: 8),
+            Text(
+              'You can use amount, percent, or both. Percent applies first, then amount.',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12,
+                height: 1.35,
+                color: AppColors.textTertiary,
+              ),
+            ),
+            const SizedBox(height: 12),
             _TotalReadout(
               label: 'Subtotal',
               value: SelloFormatters.currency(_subtotal, symbol: symbol),
+            ),
+            if (_resolvedDiscount > 0) ...[
+              const SizedBox(height: 8),
+              _TotalReadout(
+                label: 'Discount',
+                value:
+                    '- ${SelloFormatters.currency(_resolvedDiscount, symbol: symbol)}',
+              ),
+            ],
+            const SizedBox(height: 8),
+            const _TotalReadout(
+              label: 'Tax',
+              value: 'Reserved',
+              muted: true,
             ),
             const SizedBox(height: 8),
             _TotalReadout(

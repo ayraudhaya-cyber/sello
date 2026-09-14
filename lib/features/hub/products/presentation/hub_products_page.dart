@@ -70,22 +70,11 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
       ),
     );
 
-    if (result == null) return;
-
-    final error = await ref.read(hubProductsProvider.notifier).saveProduct(
-          input: result.input,
-          gallery: result.gallery,
-        );
-
-    if (!mounted) return;
-    if (error != null) {
-      SelloSnackbars.error(context, error);
-    } else {
-      SelloSnackbars.success(
-        context,
-        product == null ? 'Product created.' : 'Product updated.',
-      );
-    }
+    if (result == null || !mounted) return;
+    SelloSnackbars.success(
+      context,
+      result.created ? 'Product created.' : 'Product updated.',
+    );
   }
 
   Future<void> _openDetails(ProductSummary product) async {
@@ -1089,13 +1078,10 @@ class _ProductStatusBadge extends StatelessWidget {
 }
 
 class _EditorResult {
-  const _EditorResult({
-    required this.input,
-    this.gallery = const [],
-  });
+  const _EditorResult({required this.created});
 
-  final ProductUpsertInput input;
-  final List<MediaGalleryDraft> gallery;
+  /// True when a new catalog row was inserted (not an edit).
+  final bool created;
 }
 
 class _ProductEditorDialog extends ConsumerStatefulWidget {
@@ -1137,6 +1123,9 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
   bool _galleryLoading = false;
   bool _galleryProcessing = false;
   bool _submitted = false;
+  bool _saving = false;
+  String? _skuFieldError;
+  String? _barcodeFieldError;
   late Map<String, String> _attributes;
   String? _preferredSupplierId;
   List<({String id, String name})> _suppliers = const [];
@@ -1303,8 +1292,13 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     return null;
   }
 
-  void _submit(ProductFieldConfig fieldConfig) {
-    setState(() => _submitted = true);
+  Future<void> _submit(ProductFieldConfig fieldConfig) async {
+    if (_saving || _galleryProcessing) return;
+    setState(() {
+      _submitted = true;
+      _skuFieldError = null;
+      _barcodeFieldError = null;
+    });
     if (!_formKey.currentState!.validate()) return;
 
     final selectedCategory = _selectedCategory == '__new__'
@@ -1331,36 +1325,58 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       }
     }
 
-    Navigator.of(context).pop(
-      _EditorResult(
-        input: ProductUpsertInput(
-          productId: widget.product?.id,
-          name: _name.text.trim(),
-          sku: _sku.text.trim(),
-          categoryName: selectedCategory,
-          barcode: fieldConfig.isEnabled('barcode')
-              ? _barcode.text.trim()
-              : (widget.product?.barcode ?? ''),
-          brand: fieldConfig.isEnabled('brand')
-              ? _brand.text.trim()
-              : (widget.product?.brand ?? ''),
-          unitLabel: fieldConfig.isEnabled('unit_label')
-              ? (_selectedUnit ?? '').trim()
-              : (widget.product?.unitLabel ?? 'piece'),
-          sellingPrice: num.parse(_sellingPrice.text.trim()),
-          costPrice: num.parse(_costPrice.text.trim()),
-          currentStockQuantity: num.parse(_stockQty.text.trim()),
-          reorderLevel: fieldConfig.isEnabled('reorder_level')
-              ? (num.tryParse(_reorderLevel.text.trim()) ?? 0)
-              : (widget.product?.reorderLevel ?? widget.defaultReorderLevel),
-          description: _description.text.trim(),
-          isActive: _isActive,
-          preferredSupplierId: _preferredSupplierId,
-          attributes: Map<String, String>.from(_attributes),
-        ),
-        gallery: _gallery,
-      ),
+    final input = ProductUpsertInput(
+      productId: widget.product?.id,
+      name: _name.text.trim(),
+      sku: _sku.text.trim(),
+      categoryName: selectedCategory,
+      barcode: fieldConfig.isEnabled('barcode')
+          ? _barcode.text.trim()
+          : (widget.product?.barcode ?? ''),
+      brand: fieldConfig.isEnabled('brand')
+          ? _brand.text.trim()
+          : (widget.product?.brand ?? ''),
+      unitLabel: fieldConfig.isEnabled('unit_label')
+          ? (_selectedUnit ?? '').trim()
+          : (widget.product?.unitLabel ?? 'piece'),
+      sellingPrice: num.parse(_sellingPrice.text.trim()),
+      costPrice: num.parse(_costPrice.text.trim()),
+      currentStockQuantity: num.parse(_stockQty.text.trim()),
+      reorderLevel: fieldConfig.isEnabled('reorder_level')
+          ? (num.tryParse(_reorderLevel.text.trim()) ?? 0)
+          : (widget.product?.reorderLevel ?? widget.defaultReorderLevel),
+      description: _description.text.trim(),
+      isActive: _isActive,
+      preferredSupplierId: _preferredSupplierId,
+      attributes: Map<String, String>.from(_attributes),
     );
+
+    setState(() => _saving = true);
+    final error = await ref.read(hubProductsProvider.notifier).saveProduct(
+          input: input,
+          gallery: _gallery,
+        );
+    if (!mounted) return;
+
+    if (error != null) {
+      final lower = error.toLowerCase();
+      setState(() {
+        _saving = false;
+        if (lower.contains('sku') ||
+            lower.contains('item code') ||
+            lower.contains('unique code')) {
+          _skuFieldError = error;
+        }
+        if (lower.contains('barcode')) {
+          _barcodeFieldError = error;
+        }
+      });
+      _formKey.currentState?.validate();
+      SelloSnackbars.error(context, error);
+      return;
+    }
+
+    Navigator.of(context).pop(_EditorResult(created: _isCreate));
   }
 
   @override
@@ -1489,8 +1505,11 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       footer: SelloDialogFooter(
         cancelLabel: 'Cancel',
         primaryLabel: _isCreate ? 'Create Product' : 'Save Changes',
-        primaryEnabled: !_galleryProcessing,
-        onPrimary: _galleryProcessing ? null : () => _submit(fieldConfig),
+        primaryEnabled: !_galleryProcessing && !_saving,
+        primaryLoading: _saving,
+        onPrimary: (_galleryProcessing || _saving)
+            ? null
+            : () => _submit(fieldConfig),
       ),
     );
   }
@@ -1530,16 +1549,25 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
                   controller: _sku,
                   label: 'Item code',
                   required: true,
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Enter an item code.'
-                      : null,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Enter an item code.';
+                    }
+                    return _skuFieldError;
+                  },
                 ),
                 right: SelloTextField(
                   controller: _barcode,
                   label: 'Barcode',
                   required: fieldConfig.byKey('barcode')?.required == true,
-                  validator: (value) =>
-                      _requiredMessage(fieldConfig.byKey('barcode'), value),
+                  validator: (value) {
+                    final requiredError = _requiredMessage(
+                      fieldConfig.byKey('barcode'),
+                      value,
+                    );
+                    if (requiredError != null) return requiredError;
+                    return _barcodeFieldError;
+                  },
                 ),
               )
             else
@@ -1547,9 +1575,12 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
                 controller: _sku,
                 label: 'Item code',
                 required: true,
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Enter an item code.'
-                    : null,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Enter an item code.';
+                  }
+                  return _skuFieldError;
+                },
               ),
           ],
         ),

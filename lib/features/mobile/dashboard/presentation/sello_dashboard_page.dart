@@ -33,8 +33,7 @@ class SelloDashboardPage extends ConsumerWidget {
     final active = ref.watch(activeCustomerVisitProvider).valueOrNull;
     final consider = ref.watch(selloConsiderCustomersProvider);
     final nearArea = ref.watch(selloHomeNearAreaProvider);
-    final settings = ref.watch(selloCompanySettingsProvider).valueOrNull;
-    final currency = SelloFormatters.currencySymbol(settings?.currency);
+    final currency = ref.watch(selloCurrencySymbolProvider);
     final pad = context.pagePadding;
 
     void openVisit({

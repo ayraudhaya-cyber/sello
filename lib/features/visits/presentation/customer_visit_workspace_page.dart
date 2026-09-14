@@ -14,6 +14,7 @@ import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
 import 'package:sello/features/payments/presentation/record_cheque_dialog.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
+import 'package:sello/features/visits/application/visit_checkout_payment_rules.dart';
 import 'package:sello/features/visits/presentation/signature_pad.dart';
 import 'package:sello/features/visits/presentation/visit_basket_bar.dart';
 import 'package:sello/features/visits/presentation/visit_basket_sheet.dart';
@@ -36,7 +37,6 @@ import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
-import 'package:sello/shared/models/scheduled_visit.dart';
 import 'package:sello/shared/models/visit_payment_arrangement.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -76,6 +76,8 @@ class _CustomerVisitWorkspacePageState
   final _orderKey = GlobalKey<OrderEditorDialogState>();
   final _signatureKey = GlobalKey<SelloSignaturePadState>();
   final _visitNotes = TextEditingController();
+  final _orderDiscount = TextEditingController(text: '0');
+  final _orderDiscountPercent = TextEditingController(text: '0');
 
   CustomerSummary? _customer;
   bool _booting = true;
@@ -98,6 +100,8 @@ class _CustomerVisitWorkspacePageState
     super.initState();
     _isWalkIn = widget.walkIn;
     _visitNotes.addListener(_onVisitNotesChanged);
+    _orderDiscount.addListener(_onDiscountChanged);
+    _orderDiscountPercent.addListener(_onDiscountChanged);
     Future.microtask(_bootstrap);
   }
 
@@ -105,10 +109,23 @@ class _CustomerVisitWorkspacePageState
     unawaited(_persistDraft());
   }
 
+  void _onDiscountChanged() {
+    _orderKey.currentState?.setOrderDiscounts(
+      amount: num.tryParse(_orderDiscount.text.trim()) ?? 0,
+      percent: num.tryParse(_orderDiscountPercent.text.trim()) ?? 0,
+    );
+    _syncBasketFromEditor();
+    unawaited(_persistDraft());
+  }
+
   @override
   void dispose() {
     _visitNotes.removeListener(_onVisitNotesChanged);
+    _orderDiscount.removeListener(_onDiscountChanged);
+    _orderDiscountPercent.removeListener(_onDiscountChanged);
     _visitNotes.dispose();
+    _orderDiscount.dispose();
+    _orderDiscountPercent.dispose();
     super.dispose();
   }
 
@@ -264,6 +281,26 @@ class _CustomerVisitWorkspacePageState
       return;
     }
     setState(() => _pendingDraft = draft);
+    // Home "Continue" only restores the visit/customer. Cart is local — put
+    // lines back automatically once the order editor is on screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_autoRestoreDraftIfNeeded());
+    });
+  }
+
+  Future<void> _autoRestoreDraftIfNeeded() async {
+    if (!mounted || _pendingDraft == null) return;
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (!mounted || _pendingDraft == null) return;
+      final editor = _orderKey.currentState;
+      if (editor != null) {
+        if (editor.lines.isNotEmpty) return;
+        final expected = _pendingDraft!.lines.length;
+        await _continueDraft(announce: true, expectedLines: expected);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
   }
 
   Future<void> _persistDraft() async {
@@ -306,12 +343,18 @@ class _CustomerVisitWorkspacePageState
       chequeFollowUpAt: _chequeFollowUpDate,
       updatedAt: DateTime.now(),
       runningTotal: editor?.runningTotal ?? 0,
+      orderDiscount: num.tryParse(_orderDiscount.text.trim()) ?? 0,
+      orderDiscountPercent:
+          num.tryParse(_orderDiscountPercent.text.trim()) ?? 0,
     );
     await _draftStore.save(draft);
     if (mounted) setState(() => _draftSaved = true);
   }
 
-  Future<void> _continueDraft() async {
+  Future<void> _continueDraft({
+    bool announce = false,
+    int? expectedLines,
+  }) async {
     final draft = _pendingDraft;
     if (draft == null) return;
     final restored = await _orderKey.currentState?.restoreFromProductLines(
@@ -330,16 +373,38 @@ class _CustomerVisitWorkspacePageState
       );
     }
     _chequeFollowUpDate = draft.chequeFollowUpAt;
+    _orderDiscount.text = draft.orderDiscount == 0
+        ? '0'
+        : draft.orderDiscount.toString();
+    _orderDiscountPercent.text = draft.orderDiscountPercent == 0
+        ? '0'
+        : draft.orderDiscountPercent.toString();
+    _orderKey.currentState?.setOrderDiscounts(
+      amount: draft.orderDiscount,
+      percent: draft.orderDiscountPercent,
+    );
     if (draft.stage == VisitOrderDraftStage.checkout && (restored ?? 0) > 0) {
       _stage = _VisitStage.checkout;
     }
     setState(() => _pendingDraft = null);
     _syncBasketFromEditor();
     await _persistDraft();
-    if (mounted && restored == 0 && draft.lines.isNotEmpty) {
+    if (!mounted) return;
+    if (restored == 0 && draft.lines.isNotEmpty) {
       SelloSnackbars.warning(
         context,
         'Some products from your draft could not be loaded.',
+      );
+      return;
+    }
+    if (announce && (restored ?? 0) > 0) {
+      final count = restored ?? 0;
+      final partial = expectedLines != null && count < expectedLines;
+      SelloSnackbars.success(
+        context,
+        partial
+            ? 'Order restored · $count of $expectedLines items'
+            : 'Order restored · $count items',
       );
     }
   }
@@ -502,33 +567,7 @@ class _CustomerVisitWorkspacePageState
   }
 
   String get _currency {
-    final settings =
-        ref.read(selloCompanySettingsProvider).valueOrNull ??
-        CompanySettings.defaults;
-    return SelloFormatters.currencySymbol(settings.currency);
-  }
-
-  Future<void> _scheduleChequeFollowUp() async {
-    final session = ref.read(currentSessionProvider);
-    final customer = _customer;
-    final when = _chequeFollowUpDate;
-    if (session == null || customer == null || when == null) return;
-
-    await ref
-        .read(visitRepositoryProvider)
-        .upsertVisit(
-          companyId: session.company.id,
-          actorEmployeeId: session.employee.id,
-          input: VisitUpsertInput(
-            customerId: customer.id,
-            employeeId: session.employee.id,
-            branchId: _branchIdFor(session),
-            visitDate: when,
-            priority: VisitPriority.high,
-            purpose: 'Cheque collection',
-            notes: 'Follow-up scheduled from visit — collect cheque.',
-          ),
-        );
+    return ref.watch(selloCurrencySymbolProvider);
   }
 
   Future<void> _finishVisit() async {
@@ -572,6 +611,10 @@ class _CustomerVisitWorkspacePageState
 
       OrderConfirmationOutcome? confirmation;
       if (hasLines && orderState != null) {
+        orderState.setOrderDiscounts(
+          amount: num.tryParse(_orderDiscount.text.trim()) ?? 0,
+          percent: num.tryParse(_orderDiscountPercent.text.trim()) ?? 0,
+        );
         final result = orderState.tryBuildResult(place: true);
         if (result == null) {
           setState(() => _saving = false);
@@ -587,6 +630,7 @@ class _CustomerVisitWorkspacePageState
             paymentMethod: PaymentMethod.credit,
             paymentStatus: PaymentStatus.unpaid,
             orderDiscount: input.orderDiscount,
+            orderDiscountPercent: input.orderDiscountPercent,
             taxAmount: input.taxAmount,
             status: input.status,
             visitId: visit.isLocalOnly ? null : visit.id,
@@ -601,6 +645,7 @@ class _CustomerVisitWorkspacePageState
             paymentMethod: input.paymentMethod,
             paymentStatus: input.paymentStatus,
             orderDiscount: input.orderDiscount,
+            orderDiscountPercent: input.orderDiscountPercent,
             taxAmount: input.taxAmount,
             status: input.status,
             visitId: visit.id,
@@ -661,7 +706,7 @@ class _CustomerVisitWorkspacePageState
         }
       }
 
-      if (_arrangement == VisitPaymentArrangement.chequeReceived) {
+      if (VisitCheckoutPaymentRules.shouldOpenRecordCheque(_arrangement)) {
         if (!mounted) return;
         final chequeInput = await showDialog<CreateChequeInput>(
           context: context,
@@ -686,32 +731,8 @@ class _CustomerVisitWorkspacePageState
         }
       }
 
-      if (_arrangement.schedulesFollowUp) {
-        _chequeFollowUpDate ??= DateTime.now().add(const Duration(days: 3));
-        await _scheduleChequeFollowUp();
-        if (!mounted) return;
-        final awaitingInput = await showDialog<CreateChequeInput>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => RecordChequeDialog(
-            currencySymbol: _currency,
-            visitId: visit.isLocalOnly ? null : visit.id,
-            initialCustomer: customer,
-            markCollected: false,
-          ),
-        );
-        if (!mounted) return;
-        if (awaitingInput != null) {
-          try {
-            await ref.read(chequeRepositoryProvider).createCheque(awaitingInput);
-          } on AppFailure catch (failure) {
-            if (!mounted) return;
-            SelloSnackbars.error(context, failure.message);
-            setState(() => _saving = false);
-            return;
-          }
-        }
-      }
+      // Cheque later: arrangement note only — no Record cheque, no ledger row,
+      // no scheduled follow-up visit, no forced date.
 
       final signaturePath = _signed
           ? 'pending:visit-signature:${visit.id}:${DateTime.now().millisecondsSinceEpoch}'
@@ -719,17 +740,15 @@ class _CustomerVisitWorkspacePageState
 
       final outcome = hasLines
           ? VisitOutcome.orderCreated
-          : (_arrangement == VisitPaymentArrangement.paidToday ||
-                    _arrangement == VisitPaymentArrangement.chequeReceived
-                ? VisitOutcome.paymentCollected
-                : (_arrangement.schedulesFollowUp
-                      ? VisitOutcome.followUpRequired
-                      : VisitOutcome.noOrderToday));
+          : VisitCheckoutPaymentRules.resolveOutcomeWithoutOrder(_arrangement);
 
       final noteParts = <String>[
         if (_visitNotes.text.trim().isNotEmpty) _visitNotes.text.trim(),
-        if (_arrangement != VisitPaymentArrangement.noneYet)
-          'Payment: ${_arrangement.label}',
+        ...VisitCheckoutPaymentRules.arrangementNoteLines(
+          arrangement: _arrangement,
+          expectedChequeDate: _chequeFollowUpDate,
+          formatDate: SelloFormatters.date,
+        ),
       ];
 
       await ref
@@ -774,14 +793,22 @@ class _CustomerVisitWorkspacePageState
       context: context,
       firstDate: now,
       lastDate: now.add(const Duration(days: 90)),
-      initialDate: _chequeFollowUpDate ?? now.add(const Duration(days: 3)),
+      initialDate: _chequeFollowUpDate ?? now,
     );
     if (picked == null) return;
     setState(() => _chequeFollowUpDate = picked);
+    unawaited(_persistDraft());
+  }
+
+  void _clearChequeDate() {
+    setState(() => _chequeFollowUpDate = null);
+    unawaited(_persistDraft());
   }
 
   @override
   Widget build(BuildContext context) {
+    // Keep currency in sync when company settings resolve (LKR vs USD).
+    ref.watch(selloCompanySettingsProvider);
     final active = ref.watch(activeCustomerVisitProvider).valueOrNull;
 
     final shopName = _isWalkIn && _customer == null
@@ -892,21 +919,21 @@ class _CustomerVisitWorkspacePageState
                                   _orderKey.currentState?.runningTotal ??
                                   _basketTotal,
                               currencySymbol: _currency,
+                              discountAmount: _orderDiscount,
+                              discountPercent: _orderDiscountPercent,
                               arrangement: _arrangement,
                               chequeDate: _chequeFollowUpDate,
                               onArrangementChanged: (value) {
                                 setState(() {
                                   _arrangement = value;
-                                  if (value.schedulesFollowUp &&
-                                      _chequeFollowUpDate == null) {
-                                    _chequeFollowUpDate = DateTime.now().add(
-                                      const Duration(days: 3),
-                                    );
+                                  if (!value.allowsOptionalExpectedDate) {
+                                    _chequeFollowUpDate = null;
                                   }
                                 });
                                 unawaited(_persistDraft());
                               },
                               onPickChequeDate: _pickChequeDate,
+                              onClearChequeDate: _clearChequeDate,
                               onViewDetails: () =>
                                   _openBasketReview(fromCheckout: true),
                               notes: _visitNotes,

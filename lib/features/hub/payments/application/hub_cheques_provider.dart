@@ -205,6 +205,21 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     }
   }
 
+  Future<ChequeSummary?> createExistingCheque(
+    CreateExistingChequeInput input,
+  ) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      final result = await _repo.createExistingCheque(input);
+      await loadCheques(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return result;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return null;
+    }
+  }
+
   Future<ChequeSummary?> collectCheque(CollectChequeInput input) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {

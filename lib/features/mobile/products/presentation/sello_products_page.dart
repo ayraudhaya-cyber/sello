@@ -7,8 +7,10 @@ import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/mobile/products/application/sello_catalog_provider.dart';
 import 'package:sello/features/mobile/products/presentation/sello_product_present_sheet.dart';
+import 'package:sello/features/orders/presentation/widgets/order_catalog_stock_chip.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
@@ -52,6 +54,7 @@ class _SelloProductsPageState extends ConsumerState<SelloProductsPage> {
     return showSelloProductPresentSheet(
       context,
       product: product,
+      currencySymbol: ref.read(selloCurrencySymbolProvider),
       repository: ref.read(productRepositoryProvider),
     );
   }
@@ -247,6 +250,10 @@ class _CatalogProductCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(productFieldConfigProvider).valueOrNull;
+    final defaultReorder =
+        ref.watch(selloCompanySettingsProvider).valueOrNull?.defaultReorderLevel;
+    final reorderLevel = product.reorderLevel ?? defaultReorder;
+    final currencySymbol = ref.watch(selloCurrencySymbolProvider);
     final specLine = config == null
         ? product.sku
         : () {
@@ -296,6 +303,14 @@ class _CatalogProductCard extends ConsumerWidget {
                       )
                     else
                       _Monogram(name: product.name),
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: OrderCatalogStockChip(
+                        available: product.availableStockQuantity,
+                        reorderLevel: reorderLevel,
+                      ),
+                    ),
                     if (onOpenPhotos != null)
                       Positioned(
                         right: 8,
@@ -338,7 +353,10 @@ class _CatalogProductCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    SelloFormatters.currency(product.sellingPrice),
+                    SelloFormatters.currency(
+                      product.sellingPrice,
+                      symbol: currencySymbol,
+                    ),
                     style: context.texts.bodyMedium?.copyWith(
                       color: context.brandAccent,
                       fontWeight: FontWeight.w600,

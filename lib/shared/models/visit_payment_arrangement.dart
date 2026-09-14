@@ -1,7 +1,8 @@
 /// How the buyer intends to settle during a customer visit.
 ///
-/// Cash/card collections use [ReceivePaymentDialog]. Cheque arrangements use
-/// [RecordChequeDialog] (awaiting or collected) against the cheques domain.
+/// [paidToday] opens the receive-payment dialog.
+/// [chequeReceived] opens [RecordChequeDialog] for an actual cheque in hand.
+/// [chequeCollectionScheduled] records intent only — no cheque ledger row.
 enum VisitPaymentArrangement {
   paidToday,
   creditSale,
@@ -22,10 +23,14 @@ enum VisitPaymentArrangement {
         VisitPaymentArrangement.creditSale => 'On account',
         VisitPaymentArrangement.chequeReceived => 'Cheque in hand',
         VisitPaymentArrangement.chequeCollectionScheduled =>
-          'Come back for the cheque',
+          'Customer will give the cheque later',
         VisitPaymentArrangement.noneYet => 'Settle later',
       };
 
-  bool get schedulesFollowUp =>
+  /// Opens Record cheque and creates a cheque ledger row.
+  bool get opensRecordCheque => this == VisitPaymentArrangement.chequeReceived;
+
+  /// Optional expected-around date for cheque-later (informational only).
+  bool get allowsOptionalExpectedDate =>
       this == VisitPaymentArrangement.chequeCollectionScheduled;
 }

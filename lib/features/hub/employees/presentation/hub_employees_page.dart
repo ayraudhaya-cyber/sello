@@ -8,6 +8,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/data/repositories/branch_repository.dart';
 import 'package:sello/features/employees/presentation/employee_details_dialog.dart';
 import 'package:sello/features/hub/employees/application/hub_employees_provider.dart';
 import 'package:sello/services/media/media_service.dart';
@@ -53,30 +54,43 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
     super.dispose();
   }
 
-  void _toastInvite(TeamInviteResult invite, {required bool isCreate}) {
+  void _toastInvite(
+    TeamInviteResult invite, {
+    required bool isCreate,
+    bool emailChanged = false,
+  }) {
     if (invite.emailDelivered) {
       SelloSnackbars.success(
         context,
         isCreate
             ? 'Team member added. Invitation email sent.'
-            : 'Invitation email sent.',
+            : emailChanged
+                ? 'Email updated. Set-password email sent to the new address.'
+                : 'Set-password email sent.',
       );
       return;
     }
     if (invite.emailUnavailable) {
-      SelloSnackbars.success(
+      SelloSnackbars.error(
         context,
         isCreate
             ? 'Team member added, but the invitation email could not be sent. '
-                  'Check email delivery settings, then resend from their profile.'
-            : 'Account is ready, but the invitation email could not be sent. '
-                  'Check email delivery settings and try again.',
+                  'Check Auth email / rate limits, then resend from their profile.'
+            : emailChanged
+                ? 'Email updated, but the set-password email could not be sent. '
+                      'Check Auth email / rate limits, then send it from their profile.'
+                : 'Account is ready, but the set-password email could not be sent. '
+                      'Check Auth email / rate limits and try again.',
       );
       return;
     }
     SelloSnackbars.success(
       context,
-      isCreate ? 'Team member added.' : 'Invitation updated.',
+      isCreate
+          ? 'Team member added.'
+          : emailChanged
+              ? 'Email updated.'
+              : 'Invitation updated.',
     );
   }
 
@@ -93,16 +107,30 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
     );
     if (result == null) return;
 
+    final isCreate = employee == null;
+    final previous = employee;
+    final emailChanged = previous != null &&
+        previous.email.trim().toLowerCase() !=
+            result.email.trim().toLowerCase();
+    var inviteToasted = false;
+
     final error = await ref
         .read(hubEmployeesProvider.notifier)
         .saveEmployee(
           result,
-          onInvite: (invite) => _toastInvite(invite, isCreate: true),
+          onInvite: (invite) {
+            inviteToasted = true;
+            _toastInvite(
+              invite,
+              isCreate: isCreate,
+              emailChanged: emailChanged,
+            );
+          },
         );
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
-    } else if (employee != null) {
+    } else if (!isCreate && !inviteToasted) {
       SelloSnackbars.success(context, 'Team member updated.');
     }
   }
@@ -123,19 +151,23 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
           Navigator.of(context).pop();
           _openEditor(employee: employee);
         },
-        onInvite: employee.hasLogin
-            ? null
-            : () async {
+        onInvite: employee.employmentStatus == EmploymentStatus.active
+            ? () async {
                 Navigator.of(context).pop();
                 final error = await notifier.sendLoginInvite(
                   employee,
-                  onInvite: (invite) => _toastInvite(invite, isCreate: false),
+                  onInvite: (invite) => _toastInvite(
+                    invite,
+                    isCreate: false,
+                    emailChanged: false,
+                  ),
                 );
                 if (!mounted) return;
                 if (error != null) {
                   SelloSnackbars.error(context, error);
                 }
-              },
+              }
+            : null,
         onAssignCustomer: () async {
           await _assignCustomer(employee);
         },
@@ -322,7 +354,7 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
             if (context.isMobile)
               const SelloListSkeleton()
             else
-              const SelloTableSkeleton(columns: 8),
+              const SelloTableSkeleton(columns: 9),
           ] else ...[
             _SummaryRow(stats: state.stats),
             const SizedBox(height: AppSpacing.lg),
@@ -421,6 +453,7 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
                 child: SelloDataTable(
                   columns: [
                     selloDataColumn('Team member'),
+                    selloDataColumn('Email'),
                     selloDataColumn('ID'),
                     selloDataColumn('Role'),
                     selloDataColumn('Phone'),
@@ -451,6 +484,11 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
                                   ),
                                 ),
                               ],
+                            ),
+                          ),
+                          DataCell(
+                            SelloTableText(
+                              emp.email.trim().isEmpty ? '—' : emp.email,
                             ),
                           ),
                           DataCell(SelloTableText(emp.displayEmployeeId)),
@@ -865,9 +903,24 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
     _notes = TextEditingController(text: e?.notes ?? '');
     _roleId =
         e?.roleId ?? (widget.roles.isNotEmpty ? widget.roles.first.id : null);
-    _branchId = e?.branchId;
+    _branchId = e?.branchId ?? (_isCreate ? _defaultHeadOfficeId() : null);
     _status = e?.employmentStatus ?? EmploymentStatus.active;
     _joinedAt = e?.joinedAt ?? DateTime.now();
+  }
+
+  /// Prefer provisioned Head Office (`code = HO`, then name) for new members.
+  String? _defaultHeadOfficeId() {
+    for (final branch in widget.branches) {
+      if (branch.code.toUpperCase() == BranchRepository.defaultHeadOfficeCode) {
+        return branch.id;
+      }
+    }
+    for (final branch in widget.branches) {
+      if (branch.name == BranchRepository.defaultHeadOfficeName) {
+        return branch.id;
+      }
+    }
+    return null;
   }
 
   @override

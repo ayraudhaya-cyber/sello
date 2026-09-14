@@ -128,8 +128,17 @@ class _SelloToastHostState extends State<SelloToastHost> {
 
     setState(() {
       _toasts.insert(0, entry);
+      // Prefer dropping auto-dismiss toasts so sticky errors (SKU conflicts,
+      // save failures) are not silently pushed out by later successes.
       while (_toasts.length > _maxVisible) {
-        _toasts.removeLast();
+        final autoIdx = _toasts.lastIndexWhere(
+          (toast) => toast.duration > Duration.zero,
+        );
+        if (autoIdx >= 0) {
+          _toasts.removeAt(autoIdx);
+        } else {
+          _toasts.removeLast();
+        }
       }
     });
   }

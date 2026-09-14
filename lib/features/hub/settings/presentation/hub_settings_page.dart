@@ -6,6 +6,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/hub/settings/presentation/about_settings_section.dart';
+import 'package:sello/features/hub/settings/presentation/account_settings_section.dart';
 import 'package:sello/features/hub/settings/presentation/branding_settings_section.dart';
 import 'package:sello/features/hub/settings/presentation/document_identity_settings_section.dart';
 import 'package:sello/features/hub/settings/presentation/outbound_messaging_settings.dart';
@@ -309,6 +310,9 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
             SettingsSectionId.notifications => const _NotificationsSection(),
             SettingsSectionId.reliability => SettingsSectionScaffold(
               body: const ReliabilitySettingsSection(),
+            ),
+            SettingsSectionId.account => SettingsSectionScaffold(
+              body: const AccountSettingsSection(),
             ),
             SettingsSectionId.about => SettingsSectionScaffold(
               body: const AboutSettingsSection(),
@@ -1966,6 +1970,7 @@ class _ComingSoonPanel extends StatelessWidget {
     SettingsSectionId.ordersInvoices ||
     SettingsSectionId.notifications ||
     SettingsSectionId.reliability ||
+    SettingsSectionId.account ||
     SettingsSectionId.about => 'Coming soon',
   };
 
@@ -1984,6 +1989,7 @@ class _ComingSoonPanel extends StatelessWidget {
     SettingsSectionId.ordersInvoices ||
     SettingsSectionId.notifications ||
     SettingsSectionId.reliability ||
+    SettingsSectionId.account ||
     SettingsSectionId.about => 'This section is on the roadmap.',
   };
 

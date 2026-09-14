@@ -78,7 +78,7 @@ Future<List<SelloPhotoSource>> loadSelloProductPhotos(
 Future<void> showSelloProductPresentSheet(
   BuildContext context, {
   required ProductSummary product,
-  String currencySymbol = '\$',
+  required String currencySymbol,
   ProductRepository? repository,
 }) {
   return showModalBottomSheet<void>(

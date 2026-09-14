@@ -38,12 +38,32 @@ abstract final class OrderCalculations {
   static num subtotal(Iterable<num> lineTotals) =>
       lineTotals.fold<num>(0, (sum, value) => sum + value);
 
+  /// Percent off [subtotal] first, then fixed [orderDiscountAmount].
+  static num resolvedOrderDiscount({
+    required num subtotal,
+    num orderDiscountAmount = 0,
+    num orderDiscountPercent = 0,
+  }) {
+    if (subtotal <= 0) return 0;
+    final percent = orderDiscountPercent.clamp(0, 100);
+    final afterPercent =
+        (subtotal * (1 - (percent / 100))).clamp(0, double.infinity);
+    final amount = orderDiscountAmount.clamp(0, afterPercent);
+    return (subtotal - (afterPercent - amount)).clamp(0, subtotal);
+  }
+
   static num grandTotal({
     required num subtotal,
     num orderDiscount = 0,
+    num orderDiscountPercent = 0,
     num taxAmount = 0,
   }) {
-    final afterDiscount = (subtotal - orderDiscount).clamp(0, double.infinity);
+    final discount = resolvedOrderDiscount(
+      subtotal: subtotal,
+      orderDiscountAmount: orderDiscount,
+      orderDiscountPercent: orderDiscountPercent,
+    );
+    final afterDiscount = (subtotal - discount).clamp(0, double.infinity);
     return afterDiscount + taxAmount;
   }
 }
@@ -121,6 +141,7 @@ class OrderUpsertInput {
     this.paymentMethod,
     this.paymentStatus = PaymentStatus.unpaid,
     this.orderDiscount = 0,
+    this.orderDiscountPercent = 0,
     this.taxAmount = 0,
     this.status = OrderStatus.draft,
     this.visitId,
@@ -133,7 +154,12 @@ class OrderUpsertInput {
   final String? notes;
   final PaymentMethod? paymentMethod;
   final PaymentStatus paymentStatus;
+
+  /// Fixed currency header discount (applied after [orderDiscountPercent]).
   final num orderDiscount;
+
+  /// Percent header discount 0–100 (applied before [orderDiscount]).
+  final num orderDiscountPercent;
   final num taxAmount;
   final OrderStatus status;
 
@@ -146,9 +172,16 @@ class OrderUpsertInput {
   num get subtotal =>
       OrderCalculations.subtotal(lines.map((line) => line.lineTotal));
 
+  num get resolvedDiscount => OrderCalculations.resolvedOrderDiscount(
+        subtotal: subtotal,
+        orderDiscountAmount: orderDiscount,
+        orderDiscountPercent: orderDiscountPercent,
+      );
+
   num get total => OrderCalculations.grandTotal(
         subtotal: subtotal,
         orderDiscount: orderDiscount,
+        orderDiscountPercent: orderDiscountPercent,
         taxAmount: taxAmount,
       );
 }

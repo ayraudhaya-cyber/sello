@@ -97,6 +97,14 @@ class SelloProfilePage extends ConsumerWidget {
           const _SelloAboutCard(),
           const SizedBox(height: AppSpacing.lg),
           SelloButton(
+            label: 'Change password',
+            icon: Icons.lock_outline_rounded,
+            variant: SelloButtonVariant.secondary,
+            expanded: true,
+            onPressed: () => showChangePasswordDialog(context),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SelloButton(
             label: 'Sign out',
             icon: Icons.logout_rounded,
             variant: SelloButtonVariant.outline,

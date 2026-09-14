@@ -40,12 +40,13 @@
                 </tr>
               </table>
               {{ end }}
-              <p style="margin:0 0 16px 0;">You've been invited to join Sello.</p>
-              <p style="margin:0;">Your business has invited you to access Sello. Set your password to get started.</p>
+              <p style="margin:0 0 8px 0;font-size:20px;font-weight:700;letter-spacing:-0.02em;line-height:1.3;color:#191333;">Welcome to Sello</p>
+              <p style="margin:0 0 16px 0;">You've been invited to join your team's workspace{{ if .Data.company_name }} at <strong style="font-weight:700;">{{ .Data.company_name }}</strong>{{ end }}{{ if .Data.role_label }} as <strong style="font-weight:700;">{{ .Data.role_label }}</strong>{{ end }}.</p>
+              <p style="margin:0;">Create your password to get started — it only takes a moment.</p>
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 16px 0;">
                 <tr>
                   <td bgcolor="#6C4FF2" style="border-radius:8px;">
-                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#FFFFFF;text-decoration:none;">Set up your password</a>
+                    <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#FFFFFF;text-decoration:none;">Set your password</a>
                   </td>
                 </tr>
               </table>

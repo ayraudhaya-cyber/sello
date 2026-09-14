@@ -261,8 +261,8 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
 
   /// Returns null on success, or an error message.
   ///
-  /// [onInvite] is called after a successful create with the invitation
-  /// delivery outcome (for owner-friendly toasts).
+  /// [onInvite] is called after a successful create, or after an email change
+  /// on update, with the invitation / set-password delivery outcome.
   Future<String?> saveEmployee(
     EmployeeUpsertInput input, {
     void Function(TeamInviteResult invite)? onInvite,

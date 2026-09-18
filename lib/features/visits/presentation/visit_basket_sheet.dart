@@ -100,13 +100,13 @@ class _VisitBasketSheetState extends State<_VisitBasketSheet> {
                   separatorBuilder: (_, _) => const SizedBox(height: 4),
                   itemBuilder: (context, index) {
                     final line = lines[index];
+                    final key = line.lineKey;
                     return _BasketLine(
                       line: line,
                       currencySymbol: widget.currencySymbol,
-                      maxQuantity: editor?.maxQuantityForProduct(line.productId),
+                      maxQuantity: editor?.maxQuantityForVariant(key),
                       onStockLimitReached: () {
-                        final max =
-                            editor?.maxQuantityForProduct(line.productId);
+                        final max = editor?.maxQuantityForVariant(key);
                         if (max != null && context.mounted) {
                           SelloSnackbars.warning(
                             context,
@@ -115,11 +115,11 @@ class _VisitBasketSheetState extends State<_VisitBasketSheet> {
                         }
                       },
                       onQuantity: (qty) {
-                        editor?.setLineQuantity(line.productId, qty);
+                        editor?.setLineQuantity(key, qty);
                         _refresh();
                       },
                       onRemove: () {
-                        editor?.removeLine(line.productId);
+                        editor?.removeLine(key);
                         _refresh();
                       },
                     );
@@ -189,6 +189,16 @@ class _BasketLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sku = line.displaySku;
+    final unitPrice = SelloFormatters.currency(
+      line.unitPrice,
+      symbol: currencySymbol,
+    );
+    final meta = [
+      ?sku,
+      unitPrice,
+    ].join(' · ');
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -198,7 +208,7 @@ class _BasketLine extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line.productName,
+                  line.displayTitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -206,6 +216,17 @@ class _BasketLine extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  meta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12.5,
+                    color: AppColors.textTertiary,
                   ),
                 ),
                 const SizedBox(height: 2),

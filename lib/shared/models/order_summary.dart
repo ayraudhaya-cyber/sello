@@ -204,6 +204,17 @@ class OrderLineItem extends Equatable {
   final String? productBrand;
   final Map<String, String> productAttributes;
 
+  /// Parent name · option when labeled; never shows "Default".
+  String get displayTitle {
+    final label = variantLabel?.trim();
+    if (label != null &&
+        label.isNotEmpty &&
+        label.toLowerCase() != 'default') {
+      return '${productName ?? 'Product'} · $label';
+    }
+    return productName ?? 'Product';
+  }
+
   /// Outstanding quantity still open for delivery or cancel.
   num get remainingQuantity {
     final value = quantity - deliveredQuantity - cancelledQuantity;

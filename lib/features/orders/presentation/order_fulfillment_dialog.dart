@@ -108,7 +108,7 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
       if (accepted == null) {
         setState(() {
           _error =
-              '${line.productName ?? 'Product'}: only '
+              '${line.displayTitle}: only '
               '${SelloFormatters.quantity(line.remainingQuantity)} remaining.';
         });
         return;
@@ -238,7 +238,7 @@ class _FulfillmentLineRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            line.productName ?? 'Product',
+            line.displayTitle,
             style: const TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 15,
@@ -246,6 +246,17 @@ class _FulfillmentLineRow extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
+          if (line.productSku != null && line.productSku!.trim().isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              'SKU: ${line.productSku!.trim()}',
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12.5,
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             '${SelloFormatters.quantity(line.quantity)} ordered · '

@@ -99,6 +99,18 @@ class ProductSummary extends Equatable {
 
   String? get defaultVariantId => defaultVariant?.id;
 
+  /// Draft/catalog resolve: keep [variantId] only when it belongs to this
+  /// product; otherwise fall back to the live default. Never invents an id.
+  ProductVariant? resolveSellableVariant(String? variantId) {
+    if (variantId != null && variantId.trim().isNotEmpty) {
+      final wanted = variantId.trim();
+      for (final variant in variants) {
+        if (variant.id == wanted) return variant;
+      }
+    }
+    return defaultVariant;
+  }
+
   List<ProductVariant> get activeVariants => [
         for (final variant in variants)
           if (variant.isActive) variant,
@@ -121,7 +133,13 @@ class ProductSummary extends Equatable {
     return value;
   }
 
-  ProductSummary copyWith({String? imageUrl, num? costPrice}) {
+  ProductSummary copyWith({
+    String? imageUrl,
+    num? costPrice,
+    num? sellingPrice,
+    num? availableStockQuantity,
+    List<ProductVariant>? variants,
+  }) {
     return ProductSummary(
       id: id,
       companyId: companyId,
@@ -134,9 +152,10 @@ class ProductSummary extends Equatable {
       unitLabel: unitLabel,
       description: description,
       costPrice: costPrice ?? this.costPrice,
-      sellingPrice: sellingPrice,
+      sellingPrice: sellingPrice ?? this.sellingPrice,
       currentStockQuantity: currentStockQuantity,
-      availableStockQuantity: availableStockQuantity,
+      availableStockQuantity:
+          availableStockQuantity ?? this.availableStockQuantity,
       reorderLevel: reorderLevel,
       preferredSupplierId: preferredSupplierId,
       preferredSupplierName: preferredSupplierName,
@@ -144,7 +163,7 @@ class ProductSummary extends Equatable {
       attributes: attributes,
       imageStoragePath: imageStoragePath,
       imageUrl: imageUrl ?? this.imageUrl,
-      variants: variants,
+      variants: variants ?? this.variants,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );

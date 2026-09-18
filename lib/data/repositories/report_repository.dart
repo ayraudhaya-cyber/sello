@@ -387,6 +387,8 @@ class ReportRepository {
   }) async {
     var query = _client.from('order_items').select('''
       product_id,
+      product_name,
+      sku,
       quantity,
       line_total,
       products (id, name, sku, category_id, categories (name)),
@@ -412,10 +414,13 @@ class ReportRepository {
       final productId = map['product_id'] as String? ??
           (product is Map ? product['id'] as String? : null);
       if (productId == null) continue;
-      final name = product is Map
-          ? (_asString(product['name']) ?? 'Product')
-          : 'Product';
-      final sku = product is Map ? _asString(product['sku']) : null;
+      // Parent grain; prefer order-line snapshots for stable historical names.
+      final snapshotName = _asString(map['product_name']);
+      final snapshotSku = _asString(map['sku']);
+      final liveName = product is Map ? _asString(product['name']) : null;
+      final liveSku = product is Map ? _asString(product['sku']) : null;
+      final name = snapshotName ?? liveName ?? 'Product';
+      final sku = snapshotSku ?? liveSku;
       final agg = totals.putIfAbsent(
         productId,
         () => _NamedAgg(id: productId, name: name, subtitle: sku),

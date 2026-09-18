@@ -7,6 +7,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/mobile/products/presentation/sello_product_present_sheet.dart';
+import 'package:sello/features/orders/presentation/widgets/order_catalog_option_matrix.dart';
 import 'package:sello/features/orders/presentation/widgets/order_catalog_product_views.dart';
 import 'package:sello/features/orders/presentation/widgets/product_layout_switcher.dart';
 import 'package:sello/features/orders/presentation/widgets/product_quantity_control.dart';
@@ -124,6 +125,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
   ProductCatalogLayoutMode _layoutMode = ProductCatalogLayoutMode.gridTwo;
   final _layoutPreferences = SalesCatalogLayoutPreferencesStore();
+  final Set<String> _expandedCatalogProductIds = {};
 
   String? _error;
 
@@ -132,8 +134,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
   bool get _isEdit => widget.existing != null;
 
-  Map<String, OrderLineDraft> get _linesByProduct => {
-        for (final line in _lines) line.productId: line,
+  Map<String, OrderLineDraft> get _linesByVariant => {
+        for (final line in _lines) line.lineKey: line,
       };
 
   CompanySettings get _settings =>
@@ -157,15 +159,65 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     return null;
   }
 
-  num? _availableForProduct(ProductSummary product) =>
-      product.availableStockQuantity;
+  ProductVariant? _variantOnProduct(ProductSummary product, String? variantId) {
+    return product.resolveSellableVariant(variantId);
+  }
 
-  num? maxQuantityForProduct(String productId) => _maxQuantityForProduct(productId);
+  ({ProductSummary product, ProductVariant variant})? _catalogVariant(
+    String variantId,
+  ) {
+    for (final product in _catalog) {
+      for (final variant in product.variants) {
+        if (variant.id == variantId) {
+          return (product: product, variant: variant);
+        }
+      }
+    }
+    return null;
+  }
 
-  num? _maxQuantityForProduct(String productId) {
-    final product = _catalogProduct(productId);
-    final available = product?.availableStockQuantity ??
-        _linesByProduct[productId]?.availableStock;
+  num? _availableForVariant(ProductSummary product, ProductVariant? variant) {
+    if (variant != null) {
+      return variant.availableStockQuantity ?? product.availableStockQuantity;
+    }
+    return product.availableStockQuantity;
+  }
+
+  num _priceForVariant(ProductSummary product, ProductVariant? variant) {
+    if (variant != null) return variant.sellingPrice;
+    return product.sellingPrice;
+  }
+
+  String? _skuForVariant(ProductSummary product, ProductVariant? variant) {
+    final sku = variant?.sku.trim();
+    if (sku != null && sku.isNotEmpty) return sku;
+    return product.sku.isEmpty ? null : product.sku;
+  }
+
+  String? _labelForVariant(ProductVariant? variant) {
+    if (variant == null || !variant.hasLabel) return null;
+    final label = variant.label!.trim();
+    if (label.toLowerCase() == 'default') return null;
+    return label;
+  }
+
+  num? maxQuantityForVariant(String variantId) =>
+      _maxQuantityForVariant(variantId);
+
+  num? _maxQuantityForVariant(String variantId) {
+    final line = _linesByVariant[variantId];
+    ProductSummary? product =
+        line != null ? _catalogProduct(line.productId) : null;
+    ProductVariant? variant =
+        product == null ? null : _variantOnProduct(product, variantId);
+    if (product == null || variant == null) {
+      final hit = _catalogVariant(variantId);
+      product = hit?.product;
+      variant = hit?.variant;
+    }
+    final available = product == null
+        ? line?.availableStock
+        : _availableForVariant(product, variant);
     return OrderStockPolicy.maxOrderQuantity(
       allowOrdersAboveAvailableStock:
           _settings.allowOrdersAboveAvailableStock,
@@ -183,10 +235,10 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     );
   }
 
-  void _onStockLimitReached(String productId) {
-    final max = _maxQuantityForProduct(productId);
+  void _onStockLimitReached(String variantId) {
+    final max = _maxQuantityForVariant(variantId);
     _showStockLimitFeedback(
-      max ?? _linesByProduct[productId]?.availableStock,
+      max ?? _linesByVariant[variantId]?.availableStock,
     );
   }
 
@@ -392,7 +444,16 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   }
 
   void _addProduct(ProductSummary product) {
-    final available = _availableForProduct(product);
+    final variant = product.defaultVariant;
+    if (variant == null) {
+      _showStockLimitFeedback(0);
+      return;
+    }
+    _addOrIncrementVariant(product, variant);
+  }
+
+  void _addOrIncrementVariant(ProductSummary product, ProductVariant variant) {
+    final available = _availableForVariant(product, variant);
     final max = OrderStockPolicy.maxOrderQuantity(
       allowOrdersAboveAvailableStock:
           _settings.allowOrdersAboveAvailableStock,
@@ -403,7 +464,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       return;
     }
 
-    final index = _lines.indexWhere((l) => l.productId == product.id);
+    final key = variant.id;
+    final index = _lines.indexWhere((l) => l.lineKey == key);
     if (index >= 0) {
       final next = _lines[index].quantity + 1;
       if (max != null && next > max) {
@@ -417,16 +479,15 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         final existing = _lines[index];
         _lines[index] = existing.copyWith(quantity: existing.quantity + 1);
       } else {
-        final variant = product.defaultVariant;
         _lines.add(
           OrderLineDraft(
             productId: product.id,
-            variantId: variant?.id,
-            variantLabel: variant?.label,
+            variantId: variant.id,
+            variantLabel: _labelForVariant(variant),
             productName: product.name,
-            productSku: product.sku.isEmpty ? null : product.sku,
+            productSku: _skuForVariant(product, variant),
             imageUrl: product.imageUrl,
-            unitPrice: product.sellingPrice,
+            unitPrice: _priceForVariant(product, variant),
             quantity: 1,
             availableStock: available,
             unitLabel: product.unitLabel,
@@ -440,47 +501,58 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     _notifyBasketChanged();
   }
 
-  void _applyLineQuantity(String productId, num quantity) {
+  void _applyLineQuantity(String variantId, num quantity) {
     if (quantity < 1) {
-      final line = _linesByProduct[productId];
+      final line = _linesByVariant[variantId];
       if (line != null) _removeLineWithUndo(line);
       return;
     }
 
-    final max = _maxQuantityForProduct(productId);
+    final max = _maxQuantityForVariant(variantId);
     final accepted = OrderStockPolicy.acceptQuantity(
       requested: quantity,
       max: max,
     );
     if (accepted == null) {
       _showStockLimitFeedback(
-        max ?? _linesByProduct[productId]?.availableStock,
+        max ?? _linesByVariant[variantId]?.availableStock,
       );
       return;
     }
 
     setState(() {
-      final index = _lines.indexWhere((l) => l.productId == productId);
+      final index = _lines.indexWhere((l) => l.lineKey == variantId);
       if (index < 0) return;
-      final product = _catalogProduct(productId);
+      final product = _catalogProduct(_lines[index].productId);
+      final variant = product == null
+          ? null
+          : _variantOnProduct(product, variantId);
       _lines[index] = _lines[index].copyWith(
         quantity: accepted,
         availableStock: product != null
-            ? _availableForProduct(product)
+            ? _availableForVariant(product, variant)
             : _lines[index].availableStock,
+        unitPrice: product != null
+            ? _priceForVariant(product, variant)
+            : _lines[index].unitPrice,
+        productSku: product != null
+            ? _skuForVariant(product, variant)
+            : _lines[index].productSku,
+        variantLabel: _labelForVariant(variant) ?? _lines[index].variantLabel,
       );
       _error = null;
     });
     _notifyBasketChanged();
   }
 
-  void _setLineQuantity(String productId, num quantity) {
-    _applyLineQuantity(productId, quantity);
+  void _setLineQuantity(String variantId, num quantity) {
+    _applyLineQuantity(variantId, quantity);
   }
 
   void _removeLineWithUndo(OrderLineDraft line) {
+    final key = line.lineKey;
     setState(() {
-      _lines.removeWhere((l) => l.productId == line.productId);
+      _lines.removeWhere((l) => l.lineKey == key);
       _error = null;
     });
     _notifyBasketChanged();
@@ -492,7 +564,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       actionLabel: 'Undo',
       onAction: () {
         setState(() {
-          if (!_lines.any((l) => l.productId == line.productId)) {
+          if (!_lines.any((l) => l.lineKey == key)) {
             _lines.add(line);
           }
         });
@@ -502,8 +574,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     );
   }
 
-  void _removeLine(String productId) {
-    final line = _linesByProduct[productId];
+  void _removeLine(String variantId) {
+    final line = _linesByVariant[variantId];
     if (line != null) _removeLineWithUndo(line);
   }
 
@@ -574,10 +646,10 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     _notifyBasketChanged();
   }
 
-  void setLineQuantity(String productId, num quantity) =>
-      _setLineQuantity(productId, quantity);
+  void setLineQuantity(String variantId, num quantity) =>
+      _setLineQuantity(variantId, quantity);
 
-  void removeLine(String productId) => _removeLine(productId);
+  void removeLine(String variantId) => _removeLine(variantId);
 
   /// Rebuilds the basket from a saved draft.
   ///
@@ -602,7 +674,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         for (final line in lines) {
           final product = byId[line.productId];
           if (product == null) continue;
-          final available = _availableForProduct(product);
+          final variant = _resolveDraftVariant(product, line.variantId);
+          if (variant == null) continue;
+          final available = _availableForVariant(product, variant);
           final qty = line.quantity;
           final max = OrderStockPolicy.maxOrderQuantity(
             allowOrdersAboveAvailableStock:
@@ -615,16 +689,15 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             );
           }
           if (qty < 1) continue;
-          final variant = _resolveDraftVariant(product, line.variantId);
           _lines.add(
             OrderLineDraft(
               productId: product.id,
-              variantId: variant?.id,
-              variantLabel: variant?.label,
+              variantId: variant.id,
+              variantLabel: _labelForVariant(variant),
               productName: product.name,
-              productSku: product.sku.isEmpty ? null : product.sku,
+              productSku: _skuForVariant(product, variant),
               imageUrl: product.imageUrl,
-              unitPrice: product.sellingPrice,
+              unitPrice: _priceForVariant(product, variant),
               quantity: qty,
               availableStock: available,
               unitLabel: product.unitLabel,
@@ -653,12 +726,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     ProductSummary product,
     String? draftVariantId,
   ) {
-    if (draftVariantId != null && draftVariantId.isNotEmpty) {
-      for (final variant in product.variants) {
-        if (variant.id == draftVariantId) return variant;
-      }
-    }
-    return product.defaultVariant;
+    return product.resolveSellableVariant(draftVariantId);
   }
 
   Future<void> refreshCatalogStock() async {
@@ -668,8 +736,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       for (var i = 0; i < _lines.length; i++) {
         final product = _catalogProduct(_lines[i].productId);
         if (product == null) continue;
+        final variant = _variantOnProduct(product, _lines[i].variantId);
         _lines[i] = _lines[i].copyWith(
-          availableStock: _availableForProduct(product),
+          availableStock: _availableForVariant(product, variant),
+          unitPrice: _priceForVariant(product, variant),
+          productSku: _skuForVariant(product, variant),
+          variantLabel: _labelForVariant(variant) ?? _lines[i].variantLabel,
         );
       }
     });
@@ -677,7 +749,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   }
 
   bool _lineExceedsAvailable(OrderLineDraft line) {
-    final max = _maxQuantityForProduct(line.productId);
+    final max = _maxQuantityForVariant(line.lineKey);
     return max != null && line.quantity > max;
   }
 
@@ -685,7 +757,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     for (final line in _lines) {
       if (_lineExceedsAvailable(line)) {
         final product = _catalogProduct(line.productId);
-        final max = _maxQuantityForProduct(line.productId);
+        final max = _maxQuantityForVariant(line.lineKey);
         final name = product?.name ?? line.productName;
         if (max != null) {
           return '$name now has only ${SelloFormatters.quantity(max)} available. Adjust the quantity and try again.';
@@ -1155,19 +1227,11 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final product = _catalog[index];
-              final line = _linesByProduct[product.id];
-              return OrderCatalogListTile(
+              return _buildCatalogEntry(
                 product: product,
-                currencySymbol: symbol,
-                quantity: line?.quantity ?? 0,
-                maxQuantity: _maxQuantityForProduct(product.id),
-                onStockLimitReached: () => _onStockLimitReached(product.id),
-                offlineStockHint: _offlineStockHint,
-                reorderLevel: _settings.defaultReorderLevel,
-                onAdd: () => _addProduct(product),
-                onQuantityChanged: (qty) =>
-                    _setLineQuantity(product.id, qty),
-                onOpenPhotos: () => _openProductPhotos(product),
+                symbol: symbol,
+                listLayout: true,
+                large: false,
               );
             },
           );
@@ -1175,7 +1239,17 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
         final isLarge = _layoutMode == ProductCatalogLayoutMode.gridOne;
         final crossAxisCount = isLarge ? 1 : 2;
-        final mainAxisExtent = isLarge ? 380.0 : 300.0;
+        var mainAxisExtent = isLarge ? 380.0 : 300.0;
+        for (final product in _catalog) {
+          if (!product.hasMultipleActiveVariants) continue;
+          final expanded =
+              _expandedCatalogProductIds.contains(product.id);
+          final n = product.activeVariants.length;
+          final candidate = expanded
+              ? (isLarge ? 250.0 : 210.0) + (n * 82.0)
+              : (isLarge ? 310.0 : 270.0);
+          if (candidate > mainAxisExtent) mainAxisExtent = candidate;
+        }
 
         return GridView.builder(
           padding: const EdgeInsets.only(bottom: AppSpacing.xl),
@@ -1188,23 +1262,108 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           itemCount: _catalog.length,
           itemBuilder: (context, index) {
             final product = _catalog[index];
-            final line = _linesByProduct[product.id];
-            return OrderCatalogGridCard(
+            return _buildCatalogEntry(
               product: product,
-              currencySymbol: symbol,
-              quantity: line?.quantity ?? 0,
+              symbol: symbol,
+              listLayout: false,
               large: isLarge,
-              maxQuantity: _maxQuantityForProduct(product.id),
-              onStockLimitReached: () => _onStockLimitReached(product.id),
-              offlineStockHint: _offlineStockHint,
-              reorderLevel: _settings.defaultReorderLevel,
-              onAdd: () => _addProduct(product),
-              onQuantityChanged: (qty) => _setLineQuantity(product.id, qty),
-              onOpenPhotos: () => _openProductPhotos(product),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildCatalogEntry({
+    required ProductSummary product,
+    required String symbol,
+    required bool listLayout,
+    required bool large,
+  }) {
+    if (product.hasMultipleActiveVariants) {
+      return OrderCatalogMultiOptionCard(
+        product: product,
+        currencySymbol: symbol,
+        expanded: _expandedCatalogProductIds.contains(product.id),
+        onToggleExpanded: () {
+          setState(() {
+            if (_expandedCatalogProductIds.contains(product.id)) {
+              _expandedCatalogProductIds.remove(product.id);
+            } else {
+              _expandedCatalogProductIds.add(product.id);
+            }
+          });
+        },
+        quantityForVariant: (variant) =>
+            _linesByVariant[variant.id]?.quantity ?? 0,
+        maxQuantityForVariant: (variant) =>
+            _maxQuantityForVariant(variant.id),
+        onAddVariant: (variant) =>
+            _addOrIncrementVariant(product, variant),
+        onVariantQuantityChanged: (variant, qty) =>
+            _setLineQuantity(variant.id, qty),
+        onStockLimitReached: (variant) =>
+            _onStockLimitReached(variant.id),
+        offlineStockHint: _offlineStockHint,
+        reorderLevel: _settings.defaultReorderLevel,
+        large: large,
+        listLayout: listLayout,
+        onOpenPhotos: () => _openProductPhotos(product),
+      );
+    }
+
+    final variant = product.defaultVariant;
+    final line =
+        variant == null ? null : _linesByVariant[variant.id];
+    final max =
+        variant == null ? 0 : _maxQuantityForVariant(variant.id);
+
+    // Prefer default-variant price/stock on simple catalog cards.
+    final displayProduct = variant == null
+        ? product
+        : product.copyWith(
+            sellingPrice: variant.sellingPrice,
+            availableStockQuantity:
+                variant.availableStockQuantity ?? product.availableStockQuantity,
+          );
+
+    if (listLayout) {
+      return OrderCatalogListTile(
+        product: displayProduct,
+        currencySymbol: symbol,
+        quantity: line?.quantity ?? 0,
+        maxQuantity: max,
+        onStockLimitReached: variant == null
+            ? null
+            : () => _onStockLimitReached(variant.id),
+        offlineStockHint: _offlineStockHint,
+        reorderLevel: _settings.defaultReorderLevel,
+        onAdd: () => _addProduct(product),
+        onQuantityChanged: (qty) {
+          if (variant == null) return;
+          _setLineQuantity(variant.id, qty);
+        },
+        onOpenPhotos: () => _openProductPhotos(product),
+      );
+    }
+
+    return OrderCatalogGridCard(
+      product: displayProduct,
+      currencySymbol: symbol,
+      quantity: line?.quantity ?? 0,
+      large: large,
+      maxQuantity: max,
+      onStockLimitReached: variant == null
+          ? null
+          : () => _onStockLimitReached(variant.id),
+      offlineStockHint: _offlineStockHint,
+      reorderLevel: _settings.defaultReorderLevel,
+      onAdd: () => _addProduct(product),
+      onQuantityChanged: (qty) {
+        if (variant == null) return;
+        _setLineQuantity(variant.id, qty);
+      },
+      onOpenPhotos: () => _openProductPhotos(product),
     );
   }
 
@@ -1339,12 +1498,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
                         line: line,
                         currencySymbol: symbol,
                         compact: true,
-                        maxQuantity: _maxQuantityForProduct(line.productId),
+                        maxQuantity: _maxQuantityForVariant(line.lineKey),
                         onStockLimitReached: () =>
-                            _onStockLimitReached(line.productId),
+                            _onStockLimitReached(line.lineKey),
                         onQuantityChanged: (qty) =>
-                            _setLineQuantity(line.productId, qty),
-                        onRemove: () => _removeLine(line.productId),
+                            _setLineQuantity(line.lineKey, qty),
+                        onRemove: () => _removeLine(line.lineKey),
                       );
                     },
                   ),
@@ -1392,12 +1551,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             _LineEditorTile(
               line: _lines[i],
               currencySymbol: symbol,
-              maxQuantity: _maxQuantityForProduct(_lines[i].productId),
+              maxQuantity: _maxQuantityForVariant(_lines[i].lineKey),
               onStockLimitReached: () =>
-                  _onStockLimitReached(_lines[i].productId),
+                  _onStockLimitReached(_lines[i].lineKey),
               onQuantityChanged: (qty) =>
-                  _setLineQuantity(_lines[i].productId, qty),
-              onRemove: () => _removeLine(_lines[i].productId),
+                  _setLineQuantity(_lines[i].lineKey, qty),
+              onRemove: () => _removeLine(_lines[i].lineKey),
             ),
           ],
           const SizedBox(height: 16),
@@ -1813,6 +1972,16 @@ class _LineEditorTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sku = line.displaySku;
+    final unitPrice = SelloFormatters.currency(
+      line.unitPrice,
+      symbol: currencySymbol,
+    );
+    final meta = [
+      ?sku,
+      unitPrice,
+    ].join(' · ');
+
     return Container(
       padding: EdgeInsets.all(compact ? 8 : 12),
       decoration: BoxDecoration(
@@ -1833,7 +2002,7 @@ class _LineEditorTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line.productName,
+                  line.displayTitle,
                   maxLines: compact ? 1 : 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1843,6 +2012,17 @@ class _LineEditorTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
+                Text(
+                  meta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                const SizedBox(height: 2),
                 Text(
                   SelloFormatters.currency(
                     line.lineTotal,

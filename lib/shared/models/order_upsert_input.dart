@@ -109,6 +109,29 @@ class OrderLineDraft {
   final String? productBrand;
   final Map<String, String> productAttributes;
 
+  /// Basket identity — prefer [variantId]; fall back to product for legacy rows.
+  String get lineKey =>
+      (variantId != null && variantId!.trim().isNotEmpty)
+          ? variantId!.trim()
+          : productId;
+
+  /// Parent name · option label when labeled; never shows "Default".
+  String get displayTitle {
+    final label = variantLabel?.trim();
+    if (label != null &&
+        label.isNotEmpty &&
+        label.toLowerCase() != 'default') {
+      return '$productName · $label';
+    }
+    return productName;
+  }
+
+  String? get displaySku {
+    final sku = productSku?.trim();
+    if (sku == null || sku.isEmpty) return null;
+    return sku;
+  }
+
   num get lineTotal => OrderCalculations.lineTotal(
         quantity: quantity,
         unitPrice: unitPrice,
@@ -117,6 +140,9 @@ class OrderLineDraft {
       );
 
   OrderLineDraft copyWith({
+    String? variantId,
+    String? variantLabel,
+    String? productSku,
     num? unitPrice,
     num? quantity,
     num? availableStock,
@@ -127,9 +153,9 @@ class OrderLineDraft {
     return OrderLineDraft(
       productId: productId,
       productName: productName,
-      variantId: variantId,
-      variantLabel: variantLabel,
-      productSku: productSku,
+      variantId: variantId ?? this.variantId,
+      variantLabel: variantLabel ?? this.variantLabel,
+      productSku: productSku ?? this.productSku,
       imageUrl: imageUrl,
       unitPrice: unitPrice ?? this.unitPrice,
       quantity: quantity ?? this.quantity,

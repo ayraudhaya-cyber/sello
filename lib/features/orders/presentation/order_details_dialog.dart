@@ -778,7 +778,7 @@ TableRow _productTableRow({
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(line.productName ?? 'Product', style: _Type.productName),
+            Text(line.displayTitle, style: _Type.productName),
             if (specs != null) ...[
               const SizedBox(height: 2),
               Text(specs, style: _Type.meta),
@@ -848,7 +848,7 @@ class _ProductMobileRow extends StatelessWidget {
             ),
             Expanded(
               child: Text(
-                line.productName ?? 'Product',
+                line.displayTitle,
                 style: _Type.productName,
               ),
             ),

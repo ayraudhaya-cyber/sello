@@ -114,9 +114,9 @@ void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
     buffer
       ..writeln('<div class="line">')
       ..writeln('<div class="line-main">')
-      ..writeln('<div class="line-name">${_esc(line.name)}</div>')
+      ..writeln('<div class="line-name">${_esc(line.displayTitle)}</div>')
       ..writeln(
-        '<div class="line-sub">${_esc(SelloFormatters.quantity(line.quantity))} × ${_esc(doc.money(line.unitPrice))}</div>',
+        '<div class="line-sub">${_esc(line.displayMeta(doc.money(line.unitPrice), SelloFormatters.quantity))}</div>',
       )
       ..writeln('</div>')
       ..writeln('<div class="line-total">${_esc(doc.money(line.lineTotal))}</div>')

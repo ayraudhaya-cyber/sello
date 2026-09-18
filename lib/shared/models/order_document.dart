@@ -254,18 +254,39 @@ class OrderDocumentLine extends Equatable {
     required this.unitPrice,
     required this.lineTotal,
     this.sku,
+    this.variantLabel,
   });
 
   final String name;
   final String? sku;
+
+  /// Option label snapshot — null for simple/default sellables.
+  final String? variantLabel;
+
   final num quantity;
   final num unitPrice;
   final num lineTotal;
+
+  /// Parent name · option when labeled; never shows "Default".
+  String get displayTitle {
+    final label = _usableVariantLabel(variantLabel);
+    if (label != null) return '$name · $label';
+    return name;
+  }
+
+  /// Secondary line: qty × price · SKU (SKU omitted when blank).
+  String displayMeta(String moneyUnitPrice, String Function(num) formatQty) {
+    final qtyPrice = '${formatQty(quantity)} × $moneyUnitPrice';
+    final code = sku?.trim();
+    if (code != null && code.isNotEmpty) return '$qtyPrice · $code';
+    return qtyPrice;
+  }
 
   factory OrderDocumentLine.fromJson(Map<String, dynamic> json) {
     return OrderDocumentLine(
       name: _stringValue(json['name']) ?? 'Item',
       sku: _stringValue(json['sku']),
+      variantLabel: _usableVariantLabel(_stringValue(json['variant_label'])),
       quantity: _numValue(json['quantity']),
       unitPrice: _numValue(json['unit_price']),
       lineTotal: _numValue(json['line_total']),
@@ -273,7 +294,14 @@ class OrderDocumentLine extends Equatable {
   }
 
   @override
-  List<Object?> get props => [name, quantity, lineTotal];
+  List<Object?> get props => [name, variantLabel, sku, quantity, lineTotal];
+}
+
+String? _usableVariantLabel(String? raw) {
+  final label = raw?.trim();
+  if (label == null || label.isEmpty) return null;
+  if (label.toLowerCase() == 'default') return null;
+  return label;
 }
 
 class OrderConfirmationPrepareResult {

@@ -430,7 +430,7 @@ class _OrderDocumentCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        line.name,
+                        line.displayTitle,
                         style: const TextStyle(
                           fontFamily: AppTypography.fontFamily,
                           fontSize: 14,
@@ -440,7 +440,10 @@ class _OrderDocumentCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${SelloFormatters.quantity(line.quantity)} × ${doc.money(line.unitPrice)}',
+                        line.displayMeta(
+                          doc.money(line.unitPrice),
+                          SelloFormatters.quantity,
+                        ),
                         style: const TextStyle(
                           fontFamily: AppTypography.fontFamily,
                           fontSize: 12.5,

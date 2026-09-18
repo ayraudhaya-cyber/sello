@@ -72,6 +72,8 @@ class OrderLineDraft {
   OrderLineDraft({
     required this.productId,
     required this.productName,
+    this.variantId,
+    this.variantLabel,
     this.productSku,
     this.imageUrl,
     required this.unitPrice,
@@ -86,6 +88,14 @@ class OrderLineDraft {
   });
 
   final String productId;
+
+  /// Sellable unit being ordered. Null lets the server resolve the product's
+  /// default variant — valid only while the product has a single variant.
+  final String? variantId;
+
+  /// Variant label for display; the stored snapshot is written server-side.
+  final String? variantLabel;
+
   final String productName;
   final String? productSku;
   final String? imageUrl;
@@ -117,6 +127,8 @@ class OrderLineDraft {
     return OrderLineDraft(
       productId: productId,
       productName: productName,
+      variantId: variantId,
+      variantLabel: variantLabel,
       productSku: productSku,
       imageUrl: imageUrl,
       unitPrice: unitPrice ?? this.unitPrice,

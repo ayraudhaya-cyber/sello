@@ -1,4 +1,5 @@
 import 'package:sello/core/error/app_failure.dart';
+import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/supplier_summary.dart';
@@ -217,7 +218,6 @@ class SupplierRepository {
             name,
             sku,
             unit_label,
-            cost_price,
             selling_price,
             is_active,
             categories (name),
@@ -229,13 +229,27 @@ class SupplierRepository {
           .order('name')
           .limit(limit);
 
-      return (rows as List)
+      final links = (rows as List)
           .map(
             (row) => SupplierProductLink.fromQueryRow(
               Map<String, dynamic>.from(row as Map),
             ),
           )
           .toList();
+
+      // Cost is not selectable from products; resolve it for cost-visible roles.
+      final costs = await fetchProductUnitCosts(
+        _client,
+        [for (final link in links) link.id],
+      );
+      if (costs.isEmpty) return links;
+
+      return [
+        for (final link in links)
+          costs.containsKey(link.id)
+              ? link.copyWith(costPrice: costs[link.id])
+              : link,
+      ];
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty

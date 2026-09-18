@@ -217,6 +217,7 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
   Future<List<StockMovement>> loadMovements(InventoryItem item) {
     return _repo.fetchMovements(
       productId: item.productId,
+      variantId: item.variantId,
       branchId: item.branchId,
     );
   }

@@ -29,6 +29,9 @@ class InventoryItem extends Equatable {
     required this.sku,
     required this.quantity,
     required this.isActive,
+    this.variantId,
+    this.variantLabel,
+    this.variantSku,
     this.reservedQuantity = 0,
     this.categoryId,
     this.categoryName,
@@ -45,6 +48,17 @@ class InventoryItem extends Equatable {
 
   final String inventoryId;
   final String productId;
+
+  /// Sellable unit this stock row belongs to. Null only for rows read through
+  /// a legacy select that did not request `variant_id`.
+  final String? variantId;
+
+  /// Variant label — null for a simple product's hidden default variant.
+  final String? variantLabel;
+
+  /// Sellable SKU from the variant; [sku] stays the parent/catalog code.
+  final String? variantSku;
+
   final String companyId;
   final String branchId;
   final String name;
@@ -57,6 +71,9 @@ class InventoryItem extends Equatable {
   final String? categoryId;
   final String? categoryName;
   final String? unitLabel;
+
+  /// Null unless the caller may view cost — resolved through
+  /// `product_unit_costs()`, not selected from the product row.
   final num? costPrice;
   final String? preferredSupplierId;
   final String? preferredSupplierName;
@@ -84,10 +101,13 @@ class InventoryItem extends Equatable {
   bool get isLowStock => stockStatus == StockStatus.low;
   bool get isOutOfStock => stockStatus == StockStatus.out;
 
-  InventoryItem copyWith({String? imageUrl}) {
+  InventoryItem copyWith({String? imageUrl, num? costPrice}) {
     return InventoryItem(
       inventoryId: inventoryId,
       productId: productId,
+      variantId: variantId,
+      variantLabel: variantLabel,
+      variantSku: variantSku,
       companyId: companyId,
       branchId: branchId,
       name: name,
@@ -99,7 +119,7 @@ class InventoryItem extends Equatable {
       categoryId: categoryId,
       categoryName: categoryName,
       unitLabel: unitLabel,
-      costPrice: costPrice,
+      costPrice: costPrice ?? this.costPrice,
       preferredSupplierId: preferredSupplierId,
       preferredSupplierName: preferredSupplierName,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -117,6 +137,10 @@ class InventoryItem extends Equatable {
     } else if (product is Map) {
       productMap = Map<String, dynamic>.from(product);
     }
+
+    final variant = json['product_variants'];
+    Map<String, dynamic>? variantMap;
+    if (variant is Map) variantMap = Map<String, dynamic>.from(variant);
 
     String? categoryName;
     String? categoryId;
@@ -150,6 +174,9 @@ class InventoryItem extends Equatable {
     return InventoryItem(
       inventoryId: json['id'] as String,
       productId: json['product_id'] as String,
+      variantId: json['variant_id'] as String?,
+      variantLabel: _stringValue(variantMap?['label']),
+      variantSku: _stringValue(variantMap?['sku']),
       companyId: json['company_id'] as String,
       branchId: json['branch_id'] as String,
       name: productMap?['name'] as String? ?? 'Product',
@@ -163,9 +190,6 @@ class InventoryItem extends Equatable {
       categoryId: categoryId ?? productMap?['category_id'] as String?,
       categoryName: categoryName,
       unitLabel: _stringValue(productMap?['unit_label']),
-      costPrice: productMap?['cost_price'] == null
-          ? null
-          : _numValue(productMap?['cost_price']),
       preferredSupplierId: productMap?['preferred_supplier_id'] as String?,
       preferredSupplierName: preferredSupplierName,
       imageStoragePath: imagePath,
@@ -175,7 +199,8 @@ class InventoryItem extends Equatable {
   }
 
   @override
-  List<Object?> get props => [inventoryId, productId, quantity, reservedQuantity, updatedAt];
+  List<Object?> get props =>
+      [inventoryId, productId, variantId, quantity, reservedQuantity, updatedAt];
 }
 
 class StockMovement extends Equatable {
@@ -187,6 +212,8 @@ class StockMovement extends Equatable {
     required this.quantityDelta,
     required this.quantityAfter,
     required this.createdAt,
+    this.variantId,
+    this.variantLabel,
     this.reason,
     this.notes,
     this.referenceType,
@@ -198,6 +225,13 @@ class StockMovement extends Equatable {
 
   final String id;
   final String productId;
+
+  /// Sellable unit the movement was recorded against.
+  final String? variantId;
+
+  /// Variant label — null for a simple product's hidden default variant.
+  final String? variantLabel;
+
   final String branchId;
   final StockMovementType movementType;
   final num quantityDelta;
@@ -253,9 +287,17 @@ class StockMovement extends Equatable {
       productSku = _stringValue(product['sku']);
     }
 
+    String? variantLabel;
+    final variant = json['product_variants'];
+    if (variant is Map) {
+      variantLabel = _stringValue(variant['label']);
+    }
+
     return StockMovement(
       id: json['id'] as String,
       productId: json['product_id'] as String,
+      variantId: json['variant_id'] as String?,
+      variantLabel: variantLabel,
       branchId: json['branch_id'] as String,
       movementType: StockMovementType.fromDb(json['movement_type'] as String?),
       quantityDelta: _numValue(json['quantity_delta']),
@@ -304,12 +346,18 @@ class StockAdjustInput {
     required this.productId,
     required this.quantityDelta,
     required this.movementType,
+    this.variantId,
     this.reason,
     this.notes,
   });
 
   final String branchId;
   final String productId;
+
+  /// Sellable unit to adjust. When null the server resolves the product's
+  /// default variant — only valid for products that have a single variant.
+  final String? variantId;
+
   final num quantityDelta;
   final StockMovementType movementType;
   final String? reason;

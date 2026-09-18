@@ -23,6 +23,7 @@ import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/product_summary.dart';
+import 'package:sello/shared/models/product_variant.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -203,6 +204,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         _lines.add(
           OrderLineDraft(
             productId: line.productId,
+            variantId: line.variantId,
+            variantLabel: line.variantLabel,
             productName: line.productName ?? 'Product',
             productSku: line.productSku,
             unitPrice: line.unitPrice,
@@ -414,9 +417,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         final existing = _lines[index];
         _lines[index] = existing.copyWith(quantity: existing.quantity + 1);
       } else {
+        final variant = product.defaultVariant;
         _lines.add(
           OrderLineDraft(
             productId: product.id,
+            variantId: variant?.id,
+            variantLabel: variant?.label,
             productName: product.name,
             productSku: product.sku.isEmpty ? null : product.sku,
             imageUrl: product.imageUrl,
@@ -573,8 +579,13 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
   void removeLine(String productId) => _removeLine(productId);
 
+  /// Rebuilds the basket from a saved draft.
+  ///
+  /// Legacy drafts carry only a product id; those restore onto that product's
+  /// default variant. Drafts that already stored a variant keep it, as long as
+  /// the variant still belongs to the product.
   Future<int> restoreFromProductLines(
-    List<({String productId, num quantity})> lines,
+    List<({String productId, String? variantId, num quantity})> lines,
   ) async {
     if (lines.isEmpty) return 0;
     try {
@@ -604,9 +615,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             );
           }
           if (qty < 1) continue;
+          final variant = _resolveDraftVariant(product, line.variantId);
           _lines.add(
             OrderLineDraft(
               productId: product.id,
+              variantId: variant?.id,
+              variantLabel: variant?.label,
               productName: product.name,
               productSku: product.sku.isEmpty ? null : product.sku,
               imageUrl: product.imageUrl,
@@ -632,6 +646,19 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     } catch (_) {
       return 0;
     }
+  }
+
+  /// Draft variant if it is still live under [product]; otherwise the default.
+  ProductVariant? _resolveDraftVariant(
+    ProductSummary product,
+    String? draftVariantId,
+  ) {
+    if (draftVariantId != null && draftVariantId.isNotEmpty) {
+      for (final variant in product.variants) {
+        if (variant.id == draftVariantId) return variant;
+      }
+    }
+    return product.defaultVariant;
   }
 
   Future<void> refreshCatalogStock() async {

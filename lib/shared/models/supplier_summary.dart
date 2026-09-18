@@ -197,7 +197,11 @@ class SupplierProductLink extends Equatable {
   final String sku;
   final bool isActive;
   final num currentStockQuantity;
+
+  /// Zero unless the caller may view cost — resolved through
+  /// `product_unit_costs()`, not selected from the product row.
   final num costPrice;
+
   final num sellingPrice;
   final String? categoryName;
   final String? unitLabel;
@@ -222,6 +226,20 @@ class SupplierProductLink extends Equatable {
       categoryName:
           category is Map ? _stringValue(category['name']) : null,
       unitLabel: _stringValue(json['unit_label']),
+    );
+  }
+
+  SupplierProductLink copyWith({num? costPrice}) {
+    return SupplierProductLink(
+      id: id,
+      name: name,
+      sku: sku,
+      isActive: isActive,
+      currentStockQuantity: currentStockQuantity,
+      costPrice: costPrice ?? this.costPrice,
+      sellingPrice: sellingPrice,
+      categoryName: categoryName,
+      unitLabel: unitLabel,
     );
   }
 

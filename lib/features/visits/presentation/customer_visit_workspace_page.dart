@@ -332,6 +332,7 @@ class _CustomerVisitWorkspacePageState
         for (final line in lines)
           VisitOrderDraftLine(
             productId: line.productId,
+            variantId: line.variantId,
             quantity: line.quantity,
           ),
       ],
@@ -360,7 +361,11 @@ class _CustomerVisitWorkspacePageState
     final restored = await _orderKey.currentState?.restoreFromProductLines(
       [
         for (final line in draft.lines)
-          (productId: line.productId, quantity: line.quantity),
+          (
+            productId: line.productId,
+            variantId: line.variantId,
+            quantity: line.quantity,
+          ),
       ],
     );
     if (draft.visitNotes != null && draft.visitNotes!.isNotEmpty) {

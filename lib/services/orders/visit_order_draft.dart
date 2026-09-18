@@ -102,19 +102,30 @@ class VisitOrderDraftLine {
   const VisitOrderDraftLine({
     required this.productId,
     required this.quantity,
+    this.variantId,
   });
 
   final String productId;
+
+  /// Sellable unit. Absent in drafts written before product variants shipped —
+  /// those restore through the product's default variant.
+  final String? variantId;
+
   final num quantity;
 
   Map<String, dynamic> toJson() => {
         'productId': productId,
+        if (variantId != null) 'variantId': variantId,
         'quantity': quantity,
       };
 
   factory VisitOrderDraftLine.fromJson(Map<String, dynamic> json) {
+    final variantId = json['variantId'];
     return VisitOrderDraftLine(
       productId: json['productId'] as String,
+      variantId: variantId is String && variantId.trim().isNotEmpty
+          ? variantId.trim()
+          : null,
       quantity: _parseNum(json['quantity']),
     );
   }

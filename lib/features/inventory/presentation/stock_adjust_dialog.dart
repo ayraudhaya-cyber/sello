@@ -53,6 +53,7 @@ class _StockAdjustDialogState extends ConsumerState<StockAdjustDialog> {
         input: StockAdjustInput(
           branchId: widget.item.branchId,
           productId: widget.item.productId,
+          variantId: widget.item.variantId,
           quantityDelta: delta,
           movementType: _reason,
           reason: _reason.label,

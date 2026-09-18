@@ -114,6 +114,10 @@ class OrderRepository {
     order_items (
       id,
       product_id,
+      variant_id,
+      product_name,
+      variant_label,
+      sku,
       quantity,
       delivered_quantity,
       cancelled_quantity,
@@ -347,19 +351,20 @@ class OrderRepository {
       final itemRows = await _client
           .from('order_items')
           .select(
-            'order_id, product_id, quantity, delivered_quantity, cancelled_quantity',
+            'order_id, variant_id, quantity, delivered_quantity, cancelled_quantity',
           )
           .inFilter('order_id', orderMeta.keys.toList());
 
-      final productIds = <String>{};
+      // Fulfillment deducts by variant, so availability is measured per variant.
+      final variantIds = <String>{};
       final remainingByOrder =
-          <String, List<({String productId, num remaining})>>{};
+          <String, List<({String variantId, num remaining})>>{};
 
       for (final raw in itemRows as List) {
         final map = Map<String, dynamic>.from(raw as Map);
         final orderId = map['order_id'] as String?;
-        final productId = map['product_id'] as String?;
-        if (orderId == null || productId == null) continue;
+        final variantId = map['variant_id'] as String?;
+        if (orderId == null || variantId == null) continue;
         if (!orderMeta.containsKey(orderId)) continue;
 
         final ordered = _asNum(map['quantity']);
@@ -368,13 +373,13 @@ class OrderRepository {
         final remaining = ordered - delivered - cancelled;
         if (remaining <= 0) continue;
 
-        productIds.add(productId);
+        variantIds.add(variantId);
         remainingByOrder
             .putIfAbsent(orderId, () => [])
-            .add((productId: productId, remaining: remaining));
+            .add((variantId: variantId, remaining: remaining));
       }
 
-      if (productIds.isEmpty) {
+      if (variantIds.isEmpty) {
         return FulfillmentAttentionCounts(
           placed: placed,
           partiallyDelivered: partiallyDelivered,
@@ -383,19 +388,19 @@ class OrderRepository {
 
       final invRows = await _client
           .from('inventory')
-          .select('branch_id, product_id, quantity, reserved_quantity')
-          .inFilter('product_id', productIds.toList());
+          .select('branch_id, variant_id, quantity, reserved_quantity')
+          .inFilter('variant_id', variantIds.toList());
 
       final available = <String, num>{};
       for (final raw in invRows as List) {
         final map = Map<String, dynamic>.from(raw as Map);
         final branchId = map['branch_id'] as String?;
-        final productId = map['product_id'] as String?;
-        if (branchId == null || productId == null) continue;
+        final variantId = map['variant_id'] as String?;
+        if (branchId == null || variantId == null) continue;
         final qty = _asNum(map['quantity']);
         final reserved = _asNum(map['reserved_quantity']);
         final avail = qty - reserved;
-        available['$branchId|$productId'] = avail < 0 ? 0 : avail;
+        available['$branchId|$variantId'] = avail < 0 ? 0 : avail;
       }
 
       var waitingPlaced = 0;
@@ -406,7 +411,7 @@ class OrderRepository {
         final branchId = entry.value.branchId;
         var blocked = false;
         for (final line in lines) {
-          final avail = available['$branchId|${line.productId}'] ?? 0;
+          final avail = available['$branchId|${line.variantId}'] ?? 0;
           if (line.remaining > avail) {
             blocked = true;
             break;
@@ -883,6 +888,10 @@ class OrderRepository {
             'company_id': companyId,
             'order_id': orderId,
             'product_id': line.productId,
+            // Null falls back to the product's default variant server-side.
+            // product_name / variant_label / sku snapshots are written by the
+            // database so history cannot drift from the catalog it sold.
+            if (line.variantId != null) 'variant_id': line.variantId,
             'quantity': line.quantity,
             'unit_price': line.unitPrice,
             'discount': line.discount,

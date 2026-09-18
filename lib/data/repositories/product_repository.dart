@@ -10,6 +10,41 @@ import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Product id -> unit cost through the `product_unit_costs` accessor.
+///
+/// `products.unit_cost` is not selectable by API clients; roles that may not
+/// view cost get no rows back. Shared by the product, inventory, and supplier
+/// reads so they all resolve cost the same way.
+Future<Map<String, num>> fetchProductUnitCosts(
+  SupabaseClient client,
+  List<String> productIds,
+) async {
+  final unique = <String>{
+    for (final id in productIds)
+      if (id.trim().isNotEmpty) id.trim(),
+  }.toList();
+  if (unique.isEmpty) return const {};
+
+  try {
+    final rows = await client.rpc(
+      'product_unit_costs',
+      params: {'p_product_ids': unique},
+    );
+    final costs = <String, num>{};
+    for (final raw in (rows as List? ?? const [])) {
+      if (raw is! Map) continue;
+      final id = raw['product_id'] as String?;
+      if (id == null) continue;
+      final value = raw['unit_cost'];
+      costs[id] = value is num ? value : num.tryParse('$value') ?? 0;
+    }
+    return costs;
+  } catch (_) {
+    // Cost is supplementary — never fail a catalog load over it.
+    return const {};
+  }
+}
+
 class ProductPageResult {
   const ProductPageResult({
     required this.items,
@@ -48,7 +83,6 @@ class ProductRepository {
     brand,
     description,
     unit_label,
-    cost_price,
     selling_price,
     preferred_supplier_id,
     is_active,
@@ -71,9 +105,23 @@ class ProductRepository {
     ),
     inventory (
       branch_id,
+      variant_id,
       quantity,
       reserved_quantity,
       reorder_level
+    ),
+    product_variants (
+      id,
+      company_id,
+      product_id,
+      label,
+      options,
+      sku,
+      barcode,
+      selling_price,
+      sort_order,
+      is_default,
+      is_active
     )
   ''';
 
@@ -148,7 +196,7 @@ class ProductRepository {
       }
 
       return ProductPageResult(
-        items: items,
+        items: await attachUnitCosts(items),
         hasMore: items.length == pageSize,
       );
     } on PostgrestException catch (error) {
@@ -163,6 +211,29 @@ class ProductRepository {
       );
     }
   }
+
+  /// Resolves cost for [items] through `product_unit_costs`.
+  ///
+  /// Cost is not selectable from `products`; roles that may not view it simply
+  /// get no rows back, which leaves [ProductSummary.costPrice] at zero — the
+  /// same value the masked `cost_price` field used to produce for them.
+  Future<List<ProductSummary>> attachUnitCosts(List<ProductSummary> items) async {
+    if (items.isEmpty) return items;
+
+    final costs = await fetchUnitCosts([for (final item in items) item.id]);
+    if (costs.isEmpty) return items;
+
+    return [
+      for (final item in items)
+        costs.containsKey(item.id)
+            ? item.copyWith(costPrice: costs[item.id])
+            : item,
+    ];
+  }
+
+  /// Product id -> unit cost for the caller, empty when cost is not visible.
+  Future<Map<String, num>> fetchUnitCosts(List<String> productIds) =>
+      fetchProductUnitCosts(_client, productIds);
 
   /// Loads specific products by id (visit draft restore, etc.).
   Future<List<ProductSummary>> fetchProductsByIds({
@@ -207,7 +278,7 @@ class ProductRepository {
           items.add(item);
         }
       }
-      return items;
+      return await attachUnitCosts(items);
     } on PostgrestException catch (error) {
       throw AuthFailure(
         error.message.trim().isEmpty
@@ -274,6 +345,13 @@ class ProductRepository {
         await _client.from('products').update(productPayload).eq('id', productId);
       }
 
+      // New products get their default variant from an AFTER INSERT trigger.
+      final variantId = await _syncDefaultVariant(
+        productId: productId,
+        input: input,
+        employeeId: employeeId,
+      );
+
       if (isNew) {
         // Seed inventory at zero; opening qty goes through the ledger.
         await _client.from('inventory').upsert(
@@ -281,12 +359,13 @@ class ProductRepository {
             'company_id': companyId,
             'branch_id': branchId,
             'product_id': productId,
+            'variant_id': variantId,
             'quantity': 0,
             'reorder_level': input.reorderLevel,
             'created_by': employeeId,
             'updated_by': employeeId,
           },
-          onConflict: 'company_id,branch_id,product_id',
+          onConflict: 'company_id,branch_id,variant_id',
         );
 
         if (input.currentStockQuantity > 0) {
@@ -301,6 +380,7 @@ class ProductRepository {
               'p_notes': null,
               'p_reference_type': 'product',
               'p_reference_id': productId,
+              'p_variant_id': variantId,
             },
           );
         }
@@ -311,7 +391,7 @@ class ProductRepository {
             .select('id')
             .eq('company_id', companyId)
             .eq('branch_id', branchId)
-            .eq('product_id', productId)
+            .eq('variant_id', variantId)
             .maybeSingle();
 
         if (existing == null) {
@@ -319,6 +399,7 @@ class ProductRepository {
             'company_id': companyId,
             'branch_id': branchId,
             'product_id': productId,
+            'variant_id': variantId,
             'quantity': 0,
             'reorder_level': input.reorderLevel,
             'created_by': employeeId,
@@ -528,6 +609,56 @@ class ProductRepository {
     } catch (error) {
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  /// Returns the product's live default variant id, mirroring the parent's
+  /// sellable fields onto it while the product still has a single variant.
+  ///
+  /// Products with more than one live variant are left alone — their sellable
+  /// values are managed per variant, not from the parent.
+  Future<String> _syncDefaultVariant({
+    required String productId,
+    required ProductUpsertInput input,
+    required String employeeId,
+  }) async {
+    final rows = await _client
+        .from('product_variants')
+        .select('id, is_default, is_active')
+        .eq('product_id', productId)
+        .isFilter('deleted_at', null);
+
+    final variants = [
+      for (final row in rows as List) Map<String, dynamic>.from(row as Map),
+    ];
+
+    Map<String, dynamic>? defaultVariant;
+    for (final variant in variants) {
+      if (variant['is_default'] == true) {
+        defaultVariant = variant;
+        break;
+      }
+    }
+
+    if (defaultVariant == null) {
+      throw const ProvisioningFailure(
+        'This product has no sellable variant yet. Please try again.',
+      );
+    }
+
+    final variantId = defaultVariant['id'] as String;
+
+    if (variants.length == 1) {
+      await _client.from('product_variants').update({
+        'sku': input.sku.trim(),
+        'barcode': _nullIfBlank(input.barcode),
+        'selling_price': input.sellingPrice,
+        'unit_cost': input.costPrice,
+        'is_active': input.isActive,
+        'updated_by': employeeId,
+      }).eq('id', variantId);
+    }
+
+    return variantId;
   }
 
   Future<String?> _ensureCategory({

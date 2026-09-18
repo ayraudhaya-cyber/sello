@@ -165,6 +165,8 @@ class OrderLineItem extends Equatable {
     required this.quantity,
     required this.unitPrice,
     required this.lineTotal,
+    this.variantId,
+    this.variantLabel,
     this.deliveredQuantity = 0,
     this.cancelledQuantity = 0,
     this.productName,
@@ -178,6 +180,14 @@ class OrderLineItem extends Equatable {
 
   final String id;
   final String productId;
+
+  /// Sellable unit that was ordered. Null only for rows read through a legacy
+  /// select that did not request `variant_id`.
+  final String? variantId;
+
+  /// Variant label snapshot — null when the line sold a simple product.
+  final String? variantLabel;
+
   /// Ordered / requested quantity (customer demand).
   final num quantity;
   /// Cumulative quantity actually fulfilled (inventory deducted).
@@ -223,13 +233,17 @@ class OrderLineItem extends Equatable {
     return OrderLineItem(
       id: json['id'] as String,
       productId: json['product_id'] as String,
+      variantId: json['variant_id'] as String?,
+      variantLabel: _stringValue(json['variant_label']),
       quantity: _numValue(json['quantity']),
       deliveredQuantity: _numValue(json['delivered_quantity']),
       cancelledQuantity: _numValue(json['cancelled_quantity']),
       unitPrice: _numValue(json['unit_price']),
       lineTotal: _numValue(json['line_total']),
-      productName: _embedName(json['products'], 'name'),
-      productSku: _embedName(json['products'], 'sku'),
+      // Snapshots win: a later rename/re-SKU must not rewrite order history.
+      productName:
+          _stringValue(json['product_name']) ?? _embedName(json['products'], 'name'),
+      productSku: _stringValue(json['sku']) ?? _embedName(json['products'], 'sku'),
       imageUrl: null,
       discount: json['discount'] == null ? null : _numValue(json['discount']),
       discountType: _stringValue(json['discount_type']),
@@ -242,6 +256,7 @@ class OrderLineItem extends Equatable {
   List<Object?> get props => [
         id,
         productId,
+        variantId,
         quantity,
         deliveredQuantity,
         cancelledQuantity,

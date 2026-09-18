@@ -1,4 +1,5 @@
 import 'package:sello/core/error/app_failure.dart';
+import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
@@ -36,17 +37,23 @@ class InventoryRepository {
     company_id,
     branch_id,
     product_id,
+    variant_id,
     quantity,
     reserved_quantity,
     reorder_level,
     last_movement_at,
     updated_at,
+    product_variants (
+      id,
+      label,
+      sku,
+      is_default
+    ),
     products!inner (
       id,
       name,
       sku,
       unit_label,
-      cost_price,
       is_active,
       category_id,
       preferred_supplier_id,
@@ -174,7 +181,7 @@ class InventoryRepository {
       final signed = await _signThumbs(pageItems);
 
       return InventoryPageResult(
-        items: signed,
+        items: await _attachCosts(signed),
         hasMore: items.length > (page + 1) * pageSize,
       );
     } on PostgrestException catch (error) {
@@ -209,7 +216,7 @@ class InventoryRepository {
       id, company_id, branch_id, product_id, quantity, reorder_level,
       last_movement_at, updated_at,
       products!inner (
-        id, name, sku, unit_label, cost_price, is_active, category_id, deleted_at,
+        id, name, sku, unit_label, is_active, category_id, deleted_at,
         categories (id, name),
         product_images (id, storage_path, sort_order, is_primary)
       )
@@ -250,9 +257,29 @@ class InventoryRepository {
 
     final pageItems = items.skip(page * pageSize).take(pageSize).toList();
     return InventoryPageResult(
-      items: await _signThumbs(pageItems),
+      items: await _attachCosts(await _signThumbs(pageItems)),
       hasMore: items.length > (page + 1) * pageSize,
     );
+  }
+
+  /// Resolves cost for [items] through the shared `product_unit_costs`
+  /// accessor. Roles that may not view cost keep a null [InventoryItem.costPrice],
+  /// so stock value renders as zero exactly as it did under the masked field.
+  Future<List<InventoryItem>> _attachCosts(List<InventoryItem> items) async {
+    if (items.isEmpty) return items;
+
+    final costs = await fetchProductUnitCosts(
+      _client,
+      [for (final item in items) item.productId],
+    );
+    if (costs.isEmpty) return items;
+
+    return [
+      for (final item in items)
+        costs.containsKey(item.productId)
+            ? item.copyWith(costPrice: costs[item.productId])
+            : item,
+    ];
   }
 
   Future<List<InventoryItem>> _signThumbs(List<InventoryItem> pageItems) async {
@@ -283,8 +310,7 @@ class InventoryRepository {
         updated_at,
         products!inner (
           is_active,
-          deleted_at,
-          cost_price
+          deleted_at
         )
       ''').isFilter('products.deleted_at', null);
 
@@ -301,7 +327,6 @@ class InventoryRepository {
       var out = 0;
       var negative = 0;
       var recent = 0;
-      num stockValue = 0;
 
       for (final row in rows as List) {
         final map = Map<String, dynamic>.from(row as Map);
@@ -313,8 +338,6 @@ class InventoryRepository {
 
         total++;
         final qty = _asNum(map['quantity']);
-        final cost = product is Map ? _asNum(product['cost_price']) : 0;
-        stockValue += qty * cost;
         final reorder = map['reorder_level'] == null
             ? null
             : _asNum(map['reorder_level']);
@@ -353,7 +376,7 @@ class InventoryRepository {
         outOfStock: out,
         negativeStock: negative,
         recentlyUpdated: recent,
-        stockValue: stockValue,
+        stockValue: await _fetchStockValue(branchId),
         recentMovements: recentMovements,
       );
     } on PostgrestException catch (error) {
@@ -372,7 +395,7 @@ class InventoryRepository {
   }) async {
     var query = _client.from('inventory').select('''
       quantity, reorder_level, updated_at,
-      products!inner (is_active, deleted_at, cost_price)
+      products!inner (is_active, deleted_at)
     ''').isFilter('products.deleted_at', null);
     if (branchId != null && branchId.isNotEmpty) {
       query = query.eq('branch_id', branchId);
@@ -385,15 +408,12 @@ class InventoryRepository {
     var out = 0;
     var negative = 0;
     var recent = 0;
-    num stockValue = 0;
     for (final row in rows as List) {
       final map = Map<String, dynamic>.from(row as Map);
       final product = map['products'];
       if (product is Map && product['is_active'] == false) continue;
       total++;
       final qty = _asNum(map['quantity']);
-      final cost = product is Map ? _asNum(product['cost_price']) : 0;
-      stockValue += qty * cost;
       final reorder =
           map['reorder_level'] == null ? null : _asNum(map['reorder_level']);
       if (qty < 0) {
@@ -413,12 +433,36 @@ class InventoryRepository {
       outOfStock: out,
       negativeStock: negative,
       recentlyUpdated: recent,
-      stockValue: stockValue,
+      stockValue: await _fetchStockValue(branchId),
     );
   }
 
+  /// Branch valuation from `inventory_stock_value`.
+  ///
+  /// Valuation moved server-side because product cost is no longer selectable;
+  /// the function returns 0 for roles that may not view cost, which is what the
+  /// client-side sum produced when the masked field came back null.
+  Future<num> _fetchStockValue(String? branchId) async {
+    try {
+      final value = await _client.rpc(
+        'inventory_stock_value',
+        params: {
+          'p_branch_id':
+              branchId != null && branchId.isNotEmpty ? branchId : null,
+        },
+      );
+      return _asNum(value);
+    } catch (_) {
+      // Valuation is supplementary — never fail the dashboard over it.
+      return 0;
+    }
+  }
+
+  /// History for one sellable unit. Pass [variantId] to scope to a single
+  /// variant; omit it to see every variant of the parent product.
   Future<List<StockMovement>> fetchMovements({
     required String productId,
+    String? variantId,
     String? branchId,
     int limit = 50,
   }) async {
@@ -428,6 +472,7 @@ class InventoryRepository {
           .select('''
             id,
             product_id,
+            variant_id,
             branch_id,
             movement_type,
             quantity_delta,
@@ -439,9 +484,18 @@ class InventoryRepository {
             created_at,
             employees!created_by (
               full_name
+            ),
+            product_variants (
+              id,
+              label,
+              sku
             )
           ''')
           .eq('product_id', productId);
+
+      if (variantId != null && variantId.isNotEmpty) {
+        query = query.eq('variant_id', variantId);
+      }
 
       if (branchId != null && branchId.isNotEmpty) {
         query = query.eq('branch_id', branchId);
@@ -472,6 +526,7 @@ class InventoryRepository {
       var query = _client.from('stock_movements').select('''
         id,
         product_id,
+        variant_id,
         branch_id,
         movement_type,
         quantity_delta,
@@ -482,7 +537,8 @@ class InventoryRepository {
         reference_id,
         created_at,
         employees!created_by (full_name),
-        products (name, sku)
+        products (name, sku),
+        product_variants (id, label, sku)
       ''');
 
       if (branchId != null && branchId.isNotEmpty) {
@@ -522,19 +578,24 @@ class InventoryRepository {
           'p_notes': input.notes,
           'p_reference_type': 'manual',
           'p_reference_id': null,
+          // Null lets the server resolve the product's default variant.
+          'p_variant_id': input.variantId,
         },
       );
 
       try {
-        final row = await _client
+        var lookup = _client
             .from('inventory')
             .select('''
               company_id,
               products!inner (id, name)
             ''')
-            .eq('product_id', input.productId)
-            .eq('branch_id', input.branchId)
-            .maybeSingle();
+            .eq('branch_id', input.branchId);
+        lookup = input.variantId != null
+            ? lookup.eq('variant_id', input.variantId!)
+            : lookup.eq('product_id', input.productId);
+
+        final row = await lookup.limit(1).maybeSingle();
         if (row == null) return;
 
         final companyId = row['company_id'] as String?;
@@ -564,31 +625,44 @@ class InventoryRepository {
   }
 
   /// Availability for Sales / Orders — on-hand minus reserved.
+  ///
+  /// Pass [variantId] for the sellable unit. Without it the product's variants
+  /// are summed, which only matches a single sellable unit while a product has
+  /// one variant.
   Future<num> fetchAvailableQuantity({
     required String productId,
+    String? variantId,
     required String branchId,
   }) async {
     try {
-      final row = await _client
+      var query = _client
           .from('inventory')
           .select('quantity, reserved_quantity')
-          .eq('product_id', productId)
-          .eq('branch_id', branchId)
-          .maybeSingle();
-      if (row == null) return 0;
-      final available =
-          _asNum(row['quantity']) - _asNum(row['reserved_quantity']);
-      return available < 0 ? 0 : available;
+          .eq('branch_id', branchId);
+      query = variantId != null && variantId.isNotEmpty
+          ? query.eq('variant_id', variantId)
+          : query.eq('product_id', productId);
+
+      final rows = await query;
+      num available = 0;
+      for (final raw in rows as List) {
+        final row = Map<String, dynamic>.from(raw as Map);
+        final value = _asNum(row['quantity']) - _asNum(row['reserved_quantity']);
+        available += value < 0 ? 0 : value;
+      }
+      return available;
     } on PostgrestException catch (error) {
       if (error.message.toLowerCase().contains('reserved_quantity')) {
-        final row = await _client
+        final rows = await _client
             .from('inventory')
             .select('quantity')
             .eq('product_id', productId)
-            .eq('branch_id', branchId)
-            .maybeSingle();
-        if (row == null) return 0;
-        return _asNum(row['quantity']);
+            .eq('branch_id', branchId);
+        num available = 0;
+        for (final raw in rows as List) {
+          available += _asNum(Map<String, dynamic>.from(raw as Map)['quantity']);
+        }
+        return available;
       }
       throw ProvisioningFailure(error.message);
     } catch (error) {

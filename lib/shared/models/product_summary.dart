@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:sello/shared/models/product_variant.dart';
 import 'package:sello/shared/utils/country_catalog.dart';
 
 num _numValue(dynamic value) {
@@ -47,6 +48,7 @@ class ProductSummary extends Equatable {
     this.attributes = const {},
     this.imageStoragePath,
     this.imageUrl,
+    this.variants = const [],
     this.createdAt,
     this.updatedAt,
   });
@@ -61,7 +63,10 @@ class ProductSummary extends Equatable {
   final String? brand;
   final String? unitLabel;
   final String? description;
+  /// Zero unless the caller may view cost — it is resolved through
+  /// `product_unit_costs()`, not selected from the catalog row.
   final num costPrice;
+
   final num sellingPrice;
   final num currentStockQuantity;
 
@@ -76,8 +81,28 @@ class ProductSummary extends Equatable {
   final Map<String, String> attributes;
   final String? imageStoragePath;
   final String? imageUrl;
+
+  /// Sellable units under this product, default first. Empty only when the
+  /// caller's select did not embed `product_variants`.
+  final List<ProductVariant> variants;
+
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Live default variant — the sellable identity for a simple product.
+  ProductVariant? get defaultVariant {
+    for (final variant in variants) {
+      if (variant.isDefault) return variant;
+    }
+    return variants.isEmpty ? null : variants.first;
+  }
+
+  String? get defaultVariantId => defaultVariant?.id;
+
+  List<ProductVariant> get activeVariants => [
+        for (final variant in variants)
+          if (variant.isActive) variant,
+      ];
 
   String? attribute(String key) {
     final value = attributes[key];
@@ -93,7 +118,7 @@ class ProductSummary extends Equatable {
     return value;
   }
 
-  ProductSummary copyWith({String? imageUrl}) {
+  ProductSummary copyWith({String? imageUrl, num? costPrice}) {
     return ProductSummary(
       id: id,
       companyId: companyId,
@@ -105,7 +130,7 @@ class ProductSummary extends Equatable {
       brand: brand,
       unitLabel: unitLabel,
       description: description,
-      costPrice: costPrice,
+      costPrice: costPrice ?? this.costPrice,
       sellingPrice: sellingPrice,
       currentStockQuantity: currentStockQuantity,
       availableStockQuantity: availableStockQuantity,
@@ -116,6 +141,7 @@ class ProductSummary extends Equatable {
       attributes: attributes,
       imageStoragePath: imageStoragePath,
       imageUrl: imageUrl ?? this.imageUrl,
+      variants: variants,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -151,6 +177,8 @@ class ProductSummary extends Equatable {
     num totalAvailable = 0;
     bool hasInventoryRow = false;
     num? reorderLevel;
+    final stockByVariant = <String, num>{};
+    final availableByVariant = <String, num>{};
     for (final item in inventory) {
       if (item is! Map) continue;
       final itemBranch = item['branch_id'] as String?;
@@ -165,11 +193,25 @@ class ProductSummary extends Equatable {
       totalStock += qty;
       final available = qty - reserved;
       totalAvailable += available < 0 ? 0 : available;
+      final variantId = item['variant_id'] as String?;
+      if (variantId != null) {
+        stockByVariant[variantId] = (stockByVariant[variantId] ?? 0) + qty;
+        availableByVariant[variantId] =
+            (availableByVariant[variantId] ?? 0) + (available < 0 ? 0 : available);
+      }
       final value = item['reorder_level'];
       if (value != null) {
         reorderLevel = (reorderLevel ?? 0) + _numValue(value);
       }
     }
+
+    final variants = [
+      for (final variant in ProductVariant.listFromEmbed(json['product_variants']))
+        variant.copyWith(
+          stockQuantity: stockByVariant[variant.id],
+          availableStockQuantity: availableByVariant[variant.id],
+        ),
+    ];
 
     final preferred = json['preferred_supplier'];
     String? preferredName;
@@ -199,6 +241,7 @@ class ProductSummary extends Equatable {
       isActive: json['is_active'] as bool? ?? true,
       attributes: _attributesMap(json['attributes']),
       imageStoragePath: primaryImage?['storage_path'] as String?,
+      variants: variants,
       createdAt: _dateValue(json['created_at']),
       updatedAt: _dateValue(json['updated_at']),
     );
@@ -227,6 +270,7 @@ class ProductSummary extends Equatable {
         attributes,
         imageStoragePath,
         imageUrl,
+        variants,
         createdAt,
         updatedAt,
       ];

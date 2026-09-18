@@ -230,6 +230,18 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
           const _ArchivedNotice(),
           const SizedBox(height: _sectionGap),
         ],
+        if (product.hasMultipleActiveVariants) ...[
+          Text(
+            '${product.activeVariants.length} options',
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _ProfileSection(
           label: 'Pricing',
           child: SelloFormRow(

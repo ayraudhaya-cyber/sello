@@ -9,6 +9,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/features/hub/products/application/hub_products_provider.dart';
 import 'package:sello/features/hub/products/presentation/product_details_dialog.dart';
+import 'package:sello/features/hub/products/presentation/product_options_section.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
@@ -17,6 +18,7 @@ import 'package:sello/shared/models/product_field.dart';
 import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
+import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/utils/product_detail_suggestions.dart';
 import 'package:sello/shared/utils/quick_new_query.dart';
@@ -1073,6 +1075,9 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
   String? _preferredSupplierId;
   List<({String id, String name})> _suppliers = const [];
   bool _suppliersLoading = false;
+  bool _showOptions = false;
+  String? _optionsError;
+  final List<ProductOptionEditorRow> _optionRows = [];
 
   static const _unitOptions = <String>[
     'piece',
@@ -1093,6 +1098,11 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
   ];
 
   bool get _isCreate => widget.product == null;
+
+  bool get _canViewCost {
+    final role = ref.read(currentSessionProvider)?.appRole;
+    return role?.canViewProductCost ?? true;
+  }
 
   @override
   void initState() {
@@ -1134,7 +1144,93 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     if (product != null) {
       _galleryLoading = true;
       _loadGallery(product.id);
+      if (product.variants.length > 1 || product.hasMultipleActiveVariants) {
+        _showOptions = true;
+        Future.microtask(_loadOptionRows);
+      }
     }
+  }
+
+  Future<void> _loadOptionRows() async {
+    final product = widget.product;
+    if (product == null) return;
+    try {
+      final variants =
+          await widget.repository.fetchVariantsForProduct(product.id);
+      if (!mounted) return;
+      for (final row in _optionRows) {
+        row.dispose();
+      }
+      _optionRows
+        ..clear()
+        ..addAll([
+          for (final variant in variants)
+            ProductOptionEditorRow.fromVariant(variant),
+        ]);
+      setState(() {});
+    } catch (_) {
+      if (!mounted) return;
+      for (final row in _optionRows) {
+        row.dispose();
+      }
+      _optionRows
+        ..clear()
+        ..addAll([
+          for (final variant in product.variants)
+            ProductOptionEditorRow.fromVariant(
+              variant,
+              unitCost: product.costPrice,
+            ),
+        ]);
+      setState(() {});
+    }
+  }
+
+  void _beginManagingOptions() {
+    setState(() {
+      _optionsError = null;
+      if (!_showOptions || _optionRows.isEmpty) {
+        for (final row in _optionRows) {
+          row.dispose();
+        }
+        _optionRows
+          ..clear()
+          ..addAll(
+            ProductOptionEditorRow.evolveFromSimple(
+              existingVariantId: widget.product?.defaultVariantId,
+              sku: _sku.text.trim(),
+              barcode: _barcode.text.trim(),
+              sellingPrice: _sellingPrice.text.trim(),
+              costPrice: _costPrice.text.trim(),
+              isActive: _isActive,
+            ),
+          );
+        _showOptions = true;
+      } else {
+        _optionRows.add(
+          ProductOptionEditorRow(
+            sellingPrice: _optionRows.first.sellingPrice.text,
+            costPrice: _optionRows.first.costPrice.text,
+          ),
+        );
+      }
+    });
+  }
+
+  void _toggleOptionActive(int index, bool active) {
+    final error = optionDeactivateError(
+      rows: _optionRows,
+      index: index,
+      nextActive: active,
+    );
+    if (error != null) {
+      setState(() => _optionsError = error);
+      return;
+    }
+    setState(() {
+      _optionsError = null;
+      _optionRows[index].isActive = active;
+    });
   }
 
   Future<void> _loadSuppliers() async {
@@ -1224,6 +1320,9 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     _reorderLevel.dispose();
     _description.dispose();
     _customCategory.dispose();
+    for (final row in _optionRows) {
+      row.dispose();
+    }
     super.dispose();
   }
 
@@ -1241,6 +1340,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       _submitted = true;
       _skuFieldError = null;
       _barcodeFieldError = null;
+      _optionsError = null;
     });
     if (!_formKey.currentState!.validate()) return;
 
@@ -1268,6 +1368,38 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       }
     }
 
+    List<ProductVariantDraft>? variantDrafts;
+    late final num sellingPrice;
+    late final num costPrice;
+    if (_showOptions && _optionRows.length > 1) {
+      final activeCount = _optionRows.where((row) => row.isActive).length;
+      final lastActiveError = validateLastActiveOption(
+        activeCountAfterChange: activeCount,
+      );
+      if (lastActiveError != null) {
+        setState(() => _optionsError = lastActiveError);
+        return;
+      }
+      variantDrafts = [
+        for (var i = 0; i < _optionRows.length; i++)
+          _optionRows[i].toDraft(
+            sortOrder: i,
+            includeCost: _canViewCost,
+          ),
+      ];
+      final primary = _optionRows.firstWhere(
+        (row) => row.isActive,
+        orElse: () => _optionRows.first,
+      );
+      sellingPrice = num.tryParse(primary.sellingPrice.text.trim()) ?? 0;
+      costPrice = num.tryParse(primary.costPrice.text.trim()) ?? 0;
+    } else {
+      sellingPrice = num.parse(_sellingPrice.text.trim());
+      costPrice = num.parse(
+        _costPrice.text.trim().isEmpty ? '0' : _costPrice.text.trim(),
+      );
+    }
+
     final input = ProductUpsertInput(
       productId: widget.product?.id,
       name: _name.text.trim(),
@@ -1282,9 +1414,11 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       unitLabel: fieldConfig.isEnabled('unit_label')
           ? (_selectedUnit ?? '').trim()
           : (widget.product?.unitLabel ?? 'piece'),
-      sellingPrice: num.parse(_sellingPrice.text.trim()),
-      costPrice: num.parse(_costPrice.text.trim()),
-      currentStockQuantity: num.parse(_stockQty.text.trim()),
+      sellingPrice: sellingPrice,
+      costPrice: costPrice,
+      currentStockQuantity: num.parse(
+        _stockQty.text.trim().isEmpty ? '0' : _stockQty.text.trim(),
+      ),
       reorderLevel: fieldConfig.isEnabled('reorder_level')
           ? (num.tryParse(_reorderLevel.text.trim()) ?? 0)
           : (widget.product?.reorderLevel ?? widget.defaultReorderLevel),
@@ -1292,6 +1426,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       isActive: _isActive,
       preferredSupplierId: _preferredSupplierId,
       attributes: Map<String, String>.from(_attributes),
+      variants: variantDrafts,
     );
 
     setState(() => _saving = true);
@@ -1307,11 +1442,17 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
         _saving = false;
         if (lower.contains('sku') ||
             lower.contains('item code') ||
-            lower.contains('unique code')) {
+            lower.contains('unique code') ||
+            lower.contains('sellable option')) {
           _skuFieldError = error;
+          if (_showOptions) _optionsError = error;
         }
         if (lower.contains('barcode')) {
           _barcodeFieldError = error;
+          if (_showOptions) _optionsError = error;
+        }
+        if (lower.contains('active sellable option')) {
+          _optionsError = error;
         }
       });
       _formKey.currentState?.validate();
@@ -1662,24 +1803,63 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
         SelloDialogSection(
           title: 'Pricing',
           children: [
-            SelloFormRow(
-              left: SelloTextField(
-                controller: _sellingPrice,
-                label: 'Selling price',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: _validateNumber,
+            if (!_showOptions) ...[
+              if (_canViewCost)
+                SelloFormRow(
+                  left: SelloTextField(
+                    controller: _sellingPrice,
+                    label: 'Selling price',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: _validateNumber,
+                  ),
+                  right: SelloTextField(
+                    controller: _costPrice,
+                    label: 'Cost price',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    validator: _validateNumber,
+                  ),
+                )
+              else
+                SelloTextField(
+                  controller: _sellingPrice,
+                  label: 'Selling price',
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: _validateNumber,
+                ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SelloButton(
+                  label: 'Add another option',
+                  icon: Icons.add_rounded,
+                  variant: SelloButtonVariant.ghost,
+                  size: SelloButtonSize.small,
+                  onPressed: _beginManagingOptions,
+                ),
               ),
-              right: SelloTextField(
-                controller: _costPrice,
-                label: 'Cost price',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: _validateNumber,
+            ] else
+              const Text(
+                'Prices are managed per sellable option below.',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ),
           ],
         ),
+        if (_showOptions)
+          ProductOptionsEditorSection(
+            rows: _optionRows,
+            showCost: _canViewCost,
+            errorText: _optionsError,
+            onChanged: () => setState(() {}),
+            onAddOption: _beginManagingOptions,
+            onToggleActive: _toggleOptionActive,
+          ),
         SelloDialogSection(
           title: 'Inventory',
           children: [

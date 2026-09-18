@@ -8,6 +8,7 @@ import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
+import 'package:sello/shared/models/product_variant.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Product id -> unit cost through the `product_unit_costs` accessor.
@@ -41,6 +42,36 @@ Future<Map<String, num>> fetchProductUnitCosts(
     return costs;
   } catch (_) {
     // Cost is supplementary — never fail a catalog load over it.
+    return const {};
+  }
+}
+
+/// Variant id -> unit cost through `variant_unit_costs`.
+Future<Map<String, num>> fetchVariantUnitCosts(
+  SupabaseClient client,
+  List<String> variantIds,
+) async {
+  final unique = <String>{
+    for (final id in variantIds)
+      if (id.trim().isNotEmpty) id.trim(),
+  }.toList();
+  if (unique.isEmpty) return const {};
+
+  try {
+    final rows = await client.rpc(
+      'variant_unit_costs',
+      params: {'p_variant_ids': unique},
+    );
+    final costs = <String, num>{};
+    for (final raw in (rows as List? ?? const [])) {
+      if (raw is! Map) continue;
+      final id = raw['variant_id'] as String?;
+      if (id == null) continue;
+      final value = raw['unit_cost'];
+      costs[id] = value is num ? value : num.tryParse('$value') ?? 0;
+    }
+    return costs;
+  } catch (_) {
     return const {};
   }
 }
@@ -346,11 +377,23 @@ class ProductRepository {
       }
 
       // New products get their default variant from an AFTER INSERT trigger.
-      final variantId = await _syncDefaultVariant(
-        productId: productId,
-        input: input,
-        employeeId: employeeId,
-      );
+      final String variantId;
+      if (input.managesMultipleVariants) {
+        variantId = await _syncProductVariants(
+          productId: productId,
+          companyId: companyId,
+          branchId: branchId,
+          employeeId: employeeId,
+          drafts: input.variants!,
+          reorderLevel: input.reorderLevel,
+        );
+      } else {
+        variantId = await _syncDefaultVariant(
+          productId: productId,
+          input: input,
+          employeeId: employeeId,
+        );
+      }
 
       if (isNew) {
         // Seed inventory at zero; opening qty goes through the ledger.
@@ -384,7 +427,10 @@ class ProductRepository {
             },
           );
         }
-      } else {
+
+        // Extra options created in the same save already seeded at zero in
+        // _syncProductVariants; opening stock only applies to the default.
+      } else if (!input.managesMultipleVariants) {
         // Quantity changes belong in Inventory adjustments — only sync reorder.
         final existing = await _client
             .from('inventory')
@@ -611,6 +657,48 @@ class ProductRepository {
     }
   }
 
+  /// Live (non-deleted) sellable options for a product, default first.
+  Future<List<ProductVariant>> fetchVariantsForProduct(String productId) async {
+    try {
+      final rows = await _client
+          .from('product_variants')
+          .select(
+            'id, company_id, product_id, label, options, sku, barcode, '
+            'selling_price, sort_order, is_default, is_active',
+          )
+          .eq('product_id', productId)
+          .isFilter('deleted_at', null);
+      final variants = ProductVariant.listFromEmbed(rows);
+      final costs = await fetchVariantUnitCosts(
+        _client,
+        [for (final v in variants) v.id],
+      );
+      return [
+        for (final variant in variants)
+          ProductVariant(
+            id: variant.id,
+            companyId: variant.companyId,
+            productId: variant.productId,
+            label: variant.label,
+            sku: variant.sku,
+            barcode: variant.barcode,
+            sellingPrice: variant.sellingPrice,
+            unitCost: costs[variant.id] ?? variant.unitCost,
+            options: variant.options,
+            sortOrder: variant.sortOrder,
+            isDefault: variant.isDefault,
+            isActive: variant.isActive,
+            stockQuantity: variant.stockQuantity,
+            availableStockQuantity: variant.availableStockQuantity,
+          ),
+      ];
+    } on PostgrestException catch (error) {
+      throw ProvisioningFailure(error.message);
+    } catch (error) {
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
   /// Returns the product's live default variant id, mirroring the parent's
   /// sellable fields onto it while the product still has a single variant.
   ///
@@ -659,6 +747,155 @@ class ProductRepository {
     }
 
     return variantId;
+  }
+
+  /// Creates/updates sellable options. Existing [ProductVariantDraft.id] values
+  /// are preserved. New options get a current-branch inventory row at qty 0.
+  Future<String> _syncProductVariants({
+    required String productId,
+    required String companyId,
+    required String branchId,
+    required String employeeId,
+    required List<ProductVariantDraft> drafts,
+    required num reorderLevel,
+  }) async {
+    final activeCount = drafts.where((d) => d.isActive).length;
+    if (activeCount < 1) {
+      throw const ValidationFailure(
+        'Keep at least one active sellable option.',
+      );
+    }
+
+    for (final draft in drafts) {
+      if (draft.label.trim().isEmpty) {
+        throw const ValidationFailure('Enter a label for each sellable option.');
+      }
+      if (draft.sku.trim().isEmpty) {
+        throw const ValidationFailure(
+          'Enter an item code (SKU) for each sellable option.',
+        );
+      }
+    }
+
+    final liveDefault = await _client
+        .from('product_variants')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('is_default', true)
+        .isFilter('deleted_at', null)
+        .maybeSingle();
+    final liveDefaultId = liveDefault?['id'] as String?;
+
+    var defaultBound = false;
+    final normalized = <ProductVariantDraft>[];
+    for (var i = 0; i < drafts.length; i++) {
+      final draft = drafts[i];
+      final shouldBindDefault = !defaultBound &&
+          liveDefaultId != null &&
+          draft.id == null &&
+          (draft.isDefault || i == 0);
+      if (shouldBindDefault) {
+        defaultBound = true;
+        normalized.add(
+          ProductVariantDraft(
+            id: liveDefaultId,
+            label: draft.label,
+            sku: draft.sku,
+            barcode: draft.barcode,
+            sellingPrice: draft.sellingPrice,
+            unitCost: draft.unitCost,
+            isActive: draft.isActive,
+            isDefault: true,
+            sortOrder: draft.sortOrder,
+          ),
+        );
+      } else {
+        normalized.add(draft);
+      }
+    }
+
+    String? defaultVariantId;
+    for (var i = 0; i < normalized.length; i++) {
+      final draft = normalized[i];
+      final payload = <String, dynamic>{
+        'label': draft.label.trim(),
+        'sku': draft.sku.trim(),
+        'barcode': _nullIfBlank(draft.barcode),
+        'selling_price': draft.sellingPrice,
+        'sort_order': draft.sortOrder,
+        'is_active': draft.isActive,
+        'updated_by': employeeId,
+      };
+      if (draft.unitCost != null) {
+        payload['unit_cost'] = draft.unitCost;
+      }
+
+      if (draft.id != null && draft.id!.trim().isNotEmpty) {
+        await _client
+            .from('product_variants')
+            .update(payload)
+            .eq('id', draft.id!)
+            .eq('product_id', productId);
+        if (draft.isDefault || defaultVariantId == null) {
+          defaultVariantId = draft.id;
+        }
+      } else {
+        final inserted = await _client
+            .from('product_variants')
+            .insert({
+              ...payload,
+              'unit_cost': draft.unitCost ?? 0,
+              'company_id': companyId,
+              'product_id': productId,
+              'options': <String, dynamic>{},
+              'is_default': false,
+              'created_by': employeeId,
+            })
+            .select('id')
+            .single();
+        final newId = inserted['id'] as String;
+        await _ensureVariantInventory(
+          companyId: companyId,
+          branchId: branchId,
+          productId: productId,
+          variantId: newId,
+          employeeId: employeeId,
+          reorderLevel: reorderLevel,
+        );
+      }
+    }
+
+    defaultVariantId ??= liveDefaultId;
+
+    if (defaultVariantId == null) {
+      throw const ProvisioningFailure(
+        'This product has no sellable variant yet. Please try again.',
+      );
+    }
+    return defaultVariantId;
+  }
+
+  Future<void> _ensureVariantInventory({
+    required String companyId,
+    required String branchId,
+    required String productId,
+    required String variantId,
+    required String employeeId,
+    required num reorderLevel,
+  }) async {
+    await _client.from('inventory').upsert(
+      {
+        'company_id': companyId,
+        'branch_id': branchId,
+        'product_id': productId,
+        'variant_id': variantId,
+        'quantity': 0,
+        'reorder_level': reorderLevel,
+        'created_by': employeeId,
+        'updated_by': employeeId,
+      },
+      onConflict: 'company_id,branch_id,variant_id',
+    );
   }
 
   Future<String?> _ensureCategory({
@@ -718,13 +955,19 @@ class ProductRepository {
         upper.contains('UNIQUE CONSTRAINT');
 
     if (upper.contains('PRODUCTS_COMPANY_SKU_ACTIVE_KEY') ||
+        upper.contains('PRODUCT_VARIANTS_COMPANY_SKU_ACTIVE_KEY') ||
         (isDuplicate && upper.contains('SKU'))) {
       return 'That item code (SKU) already exists in your catalog. '
-          'Use a unique code for each product.';
+          'Use a unique code for each product or sellable option.';
     }
     if (upper.contains('PRODUCTS_COMPANY_BARCODE_ACTIVE_KEY') ||
+        upper.contains('PRODUCT_VARIANTS_COMPANY_BARCODE_ACTIVE_KEY') ||
         (isDuplicate && upper.contains('BARCODE'))) {
       return 'That barcode already exists in your catalog.';
+    }
+    if (upper.contains('KEEP AT LEAST ONE ACTIVE') ||
+        upper.contains('LAST ACTIVE')) {
+      return 'Keep at least one active sellable option.';
     }
     if (isDuplicate) {
       return 'A product with the same item code or barcode already exists.';

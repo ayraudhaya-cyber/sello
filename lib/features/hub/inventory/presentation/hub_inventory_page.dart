@@ -9,6 +9,7 @@ import 'package:sello/features/hub/settings/application/hub_settings_provider.da
 import 'package:sello/features/inventory/presentation/inventory_details_dialog.dart';
 import 'package:sello/features/inventory/presentation/stock_adjust_dialog.dart';
 import 'package:sello/shared/models/inventory_item.dart';
+import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -23,6 +24,7 @@ class HubInventoryPage extends ConsumerStatefulWidget {
 class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   final _searchController = TextEditingController();
   Timer? _debounce;
+  final Set<String> _expandedProductIds = {};
 
   @override
   void dispose() {
@@ -34,6 +36,16 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   String _currencySymbol() {
     final currency = ref.read(companySettingsProvider).currency;
     return SelloFormatters.currencySymbol(currency);
+  }
+
+  void _toggleExpanded(String productId) {
+    setState(() {
+      if (_expandedProductIds.contains(productId)) {
+        _expandedProductIds.remove(productId);
+      } else {
+        _expandedProductIds.add(productId);
+      }
+    });
   }
 
   Future<void> _openDetails(InventoryItem item) async {
@@ -73,10 +85,303 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
     }
   }
 
+  List<DataRow> _buildGroupedRows(List<InventoryProductGroup> groups) {
+    final rows = <DataRow>[];
+    for (final group in groups) {
+      if (!group.isMultiOption) {
+        final item = group.primary;
+        rows.add(_flatRow(item));
+        continue;
+      }
+
+      final expanded = _expandedProductIds.contains(group.productId);
+      rows.add(_parentRow(group, expanded: expanded));
+      if (expanded) {
+        for (final item in group.items) {
+          rows.add(_childRow(item));
+        }
+      }
+    }
+    return rows;
+  }
+
+  DataRow _flatRow(InventoryItem item) {
+    return DataRow(
+      onSelectChanged: (_) => _openDetails(item),
+      cells: [
+        DataCell(
+          Row(
+            children: [
+              SelloEntityThumb(
+                name: item.name,
+                imageUrl: item.imageUrl,
+                width: 44,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SelloTableText(
+                      item.name,
+                      tone: SelloTableTone.strong,
+                    ),
+                    if (item.categoryName != null) ...[
+                      const SizedBox(height: 2),
+                      SelloTableText(
+                        item.categoryName!,
+                        tone: SelloTableTone.muted,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        DataCell(SelloTableText(item.sku)),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(item.quantity),
+            tone: SelloTableTone.strong,
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(item.availableQuantity),
+            tone: SelloTableTone.normal,
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          SelloTableText(
+            item.reorderLevel == null
+                ? '—'
+                : SelloFormatters.quantity(item.reorderLevel!),
+            tone: item.reorderLevel == null
+                ? SelloTableTone.muted
+                : SelloTableTone.normal,
+            numeric: true,
+          ),
+        ),
+        DataCell(_statusBadge(item)),
+        DataCell(
+          SelloTableText(
+            item.lastMovementAt != null
+                ? SelloFormatters.date(item.lastMovementAt)
+                : '—',
+            tone: SelloTableTone.muted,
+          ),
+        ),
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelloButton(
+                label: 'View',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.ghost,
+                onPressed: () => _openDetails(item),
+              ),
+              const SizedBox(width: 4),
+              SelloButton(
+                label: 'Adjust',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.outline,
+                onPressed: () => _openAdjust(item),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  DataRow _parentRow(InventoryProductGroup group, {required bool expanded}) {
+    final item = group.primary;
+    return DataRow(
+      cells: [
+        DataCell(
+          Row(
+            children: [
+              IconButton(
+                tooltip: expanded ? 'Hide options' : 'Show options',
+                onPressed: () => _toggleExpanded(group.productId),
+                icon: Icon(
+                  expanded
+                      ? Icons.expand_more_rounded
+                      : Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              SelloEntityThumb(
+                name: item.name,
+                imageUrl: item.imageUrl,
+                width: 44,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SelloTableText(
+                      item.name,
+                      tone: SelloTableTone.strong,
+                    ),
+                    const SizedBox(height: 2),
+                    SelloTableText(
+                      '${group.items.length} options'
+                      '${item.categoryName != null ? ' · ${item.categoryName}' : ''}',
+                      tone: SelloTableTone.muted,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        DataCell(SelloTableText(item.sku)),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(group.totalQuantity),
+            tone: SelloTableTone.strong,
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(group.totalAvailableQuantity),
+            tone: SelloTableTone.normal,
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          SelloTableText(
+            group.reorderLevel == null
+                ? '—'
+                : SelloFormatters.quantity(group.reorderLevel!),
+            tone: group.reorderLevel == null
+                ? SelloTableTone.muted
+                : SelloTableTone.normal,
+            numeric: true,
+          ),
+        ),
+        DataCell(_statusBadgeForStatus(group.stockStatus)),
+        DataCell(
+          SelloTableText(
+            group.lastMovementAt != null
+                ? SelloFormatters.date(group.lastMovementAt)
+                : '—',
+            tone: SelloTableTone.muted,
+          ),
+        ),
+        DataCell(
+          SelloButton(
+            label: expanded ? 'Hide' : 'Options',
+            size: SelloButtonSize.small,
+            variant: SelloButtonVariant.ghost,
+            onPressed: () => _toggleExpanded(group.productId),
+          ),
+        ),
+      ],
+    );
+  }
+
+  DataRow _childRow(InventoryItem item) {
+    final label = item.variantLabel?.trim();
+    final sku = item.variantSku?.trim().isNotEmpty == true
+        ? item.variantSku!.trim()
+        : item.sku;
+    return DataRow(
+      onSelectChanged: (_) => _openDetails(item),
+      cells: [
+        DataCell(
+          Padding(
+            padding: const EdgeInsets.only(left: 56),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SelloTableText(
+                  label != null && label.isNotEmpty ? label : sku,
+                  tone: SelloTableTone.strong,
+                ),
+                const SizedBox(height: 2),
+                SelloTableText(
+                  'Option',
+                  tone: SelloTableTone.muted,
+                ),
+              ],
+            ),
+          ),
+        ),
+        DataCell(SelloTableText(sku)),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(item.quantity),
+            tone: SelloTableTone.strong,
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(item.availableQuantity),
+            tone: SelloTableTone.normal,
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          SelloTableText(
+            item.reorderLevel == null
+                ? '—'
+                : SelloFormatters.quantity(item.reorderLevel!),
+            tone: item.reorderLevel == null
+                ? SelloTableTone.muted
+                : SelloTableTone.normal,
+            numeric: true,
+          ),
+        ),
+        DataCell(_statusBadge(item)),
+        DataCell(
+          SelloTableText(
+            item.lastMovementAt != null
+                ? SelloFormatters.date(item.lastMovementAt)
+                : '—',
+            tone: SelloTableTone.muted,
+          ),
+        ),
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelloButton(
+                label: 'View',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.ghost,
+                onPressed: () => _openDetails(item),
+              ),
+              const SizedBox(width: 4),
+              SelloButton(
+                label: 'Adjust',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.outline,
+                onPressed: () => _openAdjust(item),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(hubInventoryProvider);
     ref.watch(hubSettingsProvider);
+    final groups = groupInventoryItems(state.items);
 
     if (_searchController.text != state.search) {
       _searchController.value = TextEditingValue(
@@ -163,44 +468,140 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
               SelloFadeIn(
                 child: Column(
                   children: [
-                    for (final item in state.items) ...[
-                      SelloCard(
-                        onTap: () => _openDetails(item),
-                        child: Row(
-                          children: [
-                            SelloEntityThumb(
-                              name: item.name,
-                              imageUrl: item.imageUrl,
-                              width: 48,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.name,
-                                    style: const TextStyle(
-                                      fontFamily: AppTypography.fontFamily,
-                                      fontWeight: FontWeight.w700,
+                    for (final group in groups) ...[
+                      if (!group.isMultiOption)
+                        SelloCard(
+                          onTap: () => _openDetails(group.primary),
+                          child: Row(
+                            children: [
+                              SelloEntityThumb(
+                                name: group.primary.name,
+                                imageUrl: group.primary.imageUrl,
+                                width: 48,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      group.primary.name,
+                                      style: const TextStyle(
+                                        fontFamily: AppTypography.fontFamily,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Stock ${SelloFormatters.quantity(item.quantity)}',
-                                    style: const TextStyle(
-                                      fontFamily: AppTypography.fontFamily,
-                                      color: AppColors.textSecondary,
-                                      fontSize: 13,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Stock ${SelloFormatters.quantity(group.primary.quantity)}',
+                                      style: const TextStyle(
+                                        fontFamily: AppTypography.fontFamily,
+                                        color: AppColors.textSecondary,
+                                        fontSize: 13,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
+                              ),
+                              _statusBadge(group.primary),
+                            ],
+                          ),
+                        )
+                      else ...[
+                        SelloCard(
+                          onTap: () => _toggleExpanded(group.productId),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _expandedProductIds.contains(group.productId)
+                                    ? Icons.expand_more_rounded
+                                    : Icons.chevron_right_rounded,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              SelloEntityThumb(
+                                name: group.primary.name,
+                                imageUrl: group.primary.imageUrl,
+                                width: 48,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      group.primary.name,
+                                      style: const TextStyle(
+                                        fontFamily: AppTypography.fontFamily,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${group.items.length} options · Stock ${SelloFormatters.quantity(group.totalQuantity)}',
+                                      style: const TextStyle(
+                                        fontFamily: AppTypography.fontFamily,
+                                        color: AppColors.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _statusBadgeForStatus(group.stockStatus),
+                            ],
+                          ),
+                        ),
+                        if (_expandedProductIds.contains(group.productId))
+                          for (final item in group.items) ...[
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16),
+                              child: SelloCard(
+                                onTap: () => _openDetails(item),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.variantLabel?.trim().isNotEmpty ==
+                                                    true
+                                                ? item.variantLabel!.trim()
+                                                : (item.variantSku ?? item.sku),
+                                            style: const TextStyle(
+                                              fontFamily:
+                                                  AppTypography.fontFamily,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'SKU ${item.variantSku ?? item.sku} · Stock ${SelloFormatters.quantity(item.quantity)}',
+                                            style: const TextStyle(
+                                              fontFamily:
+                                                  AppTypography.fontFamily,
+                                              color: AppColors.textSecondary,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    SelloButton(
+                                      label: 'Adjust',
+                                      size: SelloButtonSize.small,
+                                      variant: SelloButtonVariant.outline,
+                                      onPressed: () => _openAdjust(item),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            _statusBadge(item),
                           ],
-                        ),
-                      ),
+                      ],
                       const SizedBox(height: 10),
                     ],
                     _Pager(
@@ -233,103 +634,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                     selloDataColumn('Last movement'),
                     selloDataColumn('Actions'),
                   ],
-                  rows: [
-                    for (final item in state.items)
-                      DataRow(
-                        onSelectChanged: (_) => _openDetails(item),
-                        cells: [
-                          DataCell(
-                            Row(
-                              children: [
-                                SelloEntityThumb(
-                                  name: item.name,
-                                  imageUrl: item.imageUrl,
-                                  width: 44,
-                                ),
-                                const SizedBox(width: AppSpacing.md),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SelloTableText(
-                                        item.name,
-                                        tone: SelloTableTone.strong,
-                                      ),
-                                      if (item.categoryName != null) ...[
-                                        const SizedBox(height: 2),
-                                        SelloTableText(
-                                          item.categoryName!,
-                                          tone: SelloTableTone.muted,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          DataCell(SelloTableText(item.sku)),
-                          DataCell(
-                            SelloTableText(
-                              SelloFormatters.quantity(item.quantity),
-                              tone: SelloTableTone.strong,
-                              numeric: true,
-                            ),
-                          ),
-                          DataCell(
-                            SelloTableText(
-                              SelloFormatters.quantity(item.availableQuantity),
-                              tone: SelloTableTone.normal,
-                              numeric: true,
-                            ),
-                          ),
-                          DataCell(
-                            SelloTableText(
-                              item.reorderLevel == null
-                                  ? '—'
-                                  : SelloFormatters.quantity(
-                                      item.reorderLevel!,
-                                    ),
-                              tone: item.reorderLevel == null
-                                  ? SelloTableTone.muted
-                                  : SelloTableTone.normal,
-                              numeric: true,
-                            ),
-                          ),
-                          DataCell(_statusBadge(item)),
-                          DataCell(
-                            SelloTableText(
-                              item.lastMovementAt != null
-                                  ? SelloFormatters.date(item.lastMovementAt)
-                                  : '—',
-                              tone: SelloTableTone.muted,
-                            ),
-                          ),
-                          DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SelloButton(
-                                  label: 'View',
-                                  size: SelloButtonSize.small,
-                                  variant: SelloButtonVariant.ghost,
-                                  onPressed: () => _openDetails(item),
-                                ),
-                                const SizedBox(width: 4),
-                                SelloButton(
-                                  label: 'Adjust',
-                                  size: SelloButtonSize.small,
-                                  variant: SelloButtonVariant.outline,
-                                  onPressed: () => _openAdjust(item),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
+                  rows: _buildGroupedRows(groups),
                   footer: _Pager(
                     page: state.page,
                     hasMore: state.hasMore,
@@ -356,9 +661,13 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
 const _allCategories = '__all__';
 
 Widget _statusBadge(InventoryItem item) {
+  return _statusBadgeForStatus(item.stockStatus);
+}
+
+Widget _statusBadgeForStatus(StockStatus status) {
   return SelloStatusBadge(
-    label: item.stockStatus.label,
-    tone: switch (item.stockStatus) {
+    label: status.label,
+    tone: switch (status) {
       StockStatus.healthy => SelloStatusTone.success,
       StockStatus.low => SelloStatusTone.warning,
       StockStatus.out => SelloStatusTone.danger,

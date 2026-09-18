@@ -104,6 +104,9 @@ class ProductSummary extends Equatable {
           if (variant.isActive) variant,
       ];
 
+  /// More than one active sellable option — Hub editor / inventory expand.
+  bool get hasMultipleActiveVariants => activeVariants.length > 1;
+
   String? attribute(String key) {
     final value = attributes[key];
     if (value == null || value.trim().isEmpty) return null;

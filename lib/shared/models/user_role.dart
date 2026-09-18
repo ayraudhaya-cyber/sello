@@ -14,6 +14,10 @@ enum UserRole {
   /// Field sales experience (Sello Go).
   bool get usesSello => this == salesRepresentative;
 
+  /// Matches `can_view_product_cost()` — Owner, Manager, Store In-charge.
+  bool get canViewProductCost =>
+      this == owner || this == manager || this == storeInCharge;
+
   String get label => switch (this) {
         UserRole.owner => 'Owner',
         UserRole.manager => 'Manager',

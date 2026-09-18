@@ -63,6 +63,19 @@ class _StockAdjustDialogState extends ConsumerState<StockAdjustDialog> {
     );
   }
 
+  String _adjustSubtitle(InventoryItem item) {
+    final parts = <String>[item.name];
+    final label = item.variantLabel?.trim();
+    if (label != null && label.isNotEmpty) parts.add(label);
+    final variantSku = item.variantSku?.trim();
+    if (variantSku != null && variantSku.isNotEmpty) {
+      parts.add(variantSku);
+    } else if (item.sku.trim().isNotEmpty) {
+      parts.add(item.sku.trim());
+    }
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -70,7 +83,7 @@ class _StockAdjustDialogState extends ConsumerState<StockAdjustDialog> {
 
     return SelloFormDialog(
       title: 'Adjust stock',
-      subtitle: '${item.name} · SKU ${item.sku}',
+      subtitle: _adjustSubtitle(item),
       maxWidth: 640,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(

@@ -157,12 +157,52 @@ class InventoryRepository {
           .order('updated_at', ascending: false)
           .range(0, (page + 1) * fetchSize - 1);
 
-      var items = <InventoryItem>[];
+      final byId = <String, InventoryItem>{};
       for (final row in response as List) {
-        items.add(
-          InventoryItem.fromQueryRow(Map<String, dynamic>.from(row as Map)),
+        final item = InventoryItem.fromQueryRow(
+          Map<String, dynamic>.from(row as Map),
         );
+        byId[item.inventoryId] = item;
       }
+
+      // Also match sellable option SKU / barcode without a new RPC.
+      if (needle.isNotEmpty) {
+        try {
+          var variantQuery = _client
+              .from('inventory')
+              .select(_listSelect)
+              .isFilter('products.deleted_at', null)
+              .or(
+                'sku.ilike.%$needle%,barcode.ilike.%$needle%',
+                referencedTable: 'product_variants',
+              );
+          if (branchId != null && branchId.isNotEmpty) {
+            variantQuery = variantQuery.eq('branch_id', branchId);
+          }
+          if (categoryId != null && categoryId.isNotEmpty) {
+            variantQuery =
+                variantQuery.eq('products.category_id', categoryId);
+          }
+          final variantRows = await variantQuery
+              .order('updated_at', ascending: false)
+              .range(0, (page + 1) * fetchSize - 1);
+          for (final row in variantRows as List) {
+            final item = InventoryItem.fromQueryRow(
+              Map<String, dynamic>.from(row as Map),
+            );
+            byId.putIfAbsent(item.inventoryId, () => item);
+          }
+        } catch (_) {
+          // Variant search is additive — product search still works.
+        }
+      }
+
+      var items = byId.values.toList()
+        ..sort((a, b) {
+          final aAt = a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bAt = b.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bAt.compareTo(aAt);
+        });
 
       items = items.where((item) {
         return switch (status) {

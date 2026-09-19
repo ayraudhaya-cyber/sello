@@ -386,6 +386,7 @@ class ProductRepository {
           employeeId: employeeId,
           drafts: input.variants!,
           reorderLevel: input.reorderLevel,
+          applyOpeningStock: isNew,
         );
       } else {
         variantId = await _syncDefaultVariant(
@@ -411,7 +412,10 @@ class ProductRepository {
           onConflict: 'company_id,branch_id,variant_id',
         );
 
-        if (input.currentStockQuantity > 0) {
+        // Simple create: parent opening stock lands on the default variant.
+        // Multi-option create: per-option opening stock is applied in
+        // _syncProductVariants (never a summed parent inventory row).
+        if (!input.managesMultipleVariants && input.currentStockQuantity > 0) {
           await _client.rpc(
             'adjust_inventory',
             params: {
@@ -427,9 +431,6 @@ class ProductRepository {
             },
           );
         }
-
-        // Extra options created in the same save already seeded at zero in
-        // _syncProductVariants; opening stock only applies to the default.
       } else if (!input.managesMultipleVariants) {
         // Quantity changes belong in Inventory adjustments — only sync reorder.
         final existing = await _client
@@ -751,6 +752,9 @@ class ProductRepository {
 
   /// Creates/updates sellable options. Existing [ProductVariantDraft.id] values
   /// are preserved. New options get a current-branch inventory row at qty 0.
+  ///
+  /// [applyOpeningStock] seeds ledger qty for newly created options (and the
+  /// bound default on a brand-new product) without rewriting existing stock.
   Future<String> _syncProductVariants({
     required String productId,
     required String companyId,
@@ -758,6 +762,7 @@ class ProductRepository {
     required String employeeId,
     required List<ProductVariantDraft> drafts,
     required num reorderLevel,
+    bool applyOpeningStock = false,
   }) async {
     final activeCount = drafts.where((d) => d.isActive).length;
     if (activeCount < 1) {
@@ -768,7 +773,9 @@ class ProductRepository {
 
     for (final draft in drafts) {
       if (draft.label.trim().isEmpty) {
-        throw const ValidationFailure('Enter a label for each sellable option.');
+        throw const ValidationFailure(
+          'Enter an option name for each sellable option.',
+        );
       }
       if (draft.sku.trim().isEmpty) {
         throw const ValidationFailure(
@@ -788,6 +795,7 @@ class ProductRepository {
 
     var defaultBound = false;
     final normalized = <ProductVariantDraft>[];
+    final openingForBoundDefault = <String, num>{};
     for (var i = 0; i < drafts.length; i++) {
       final draft = drafts[i];
       final shouldBindDefault = !defaultBound &&
@@ -807,8 +815,12 @@ class ProductRepository {
             isActive: draft.isActive,
             isDefault: true,
             sortOrder: draft.sortOrder,
+            openingStock: draft.openingStock,
           ),
         );
+        if (applyOpeningStock && (draft.openingStock ?? 0) > 0) {
+          openingForBoundDefault[liveDefaultId] = draft.openingStock!;
+        }
       } else {
         normalized.add(draft);
       }
@@ -839,6 +851,15 @@ class ProductRepository {
         if (draft.isDefault || defaultVariantId == null) {
           defaultVariantId = draft.id;
         }
+        final boundOpening = openingForBoundDefault[draft.id!];
+        if (boundOpening != null) {
+          await _applyOpeningStockIfNeeded(
+            branchId: branchId,
+            productId: productId,
+            variantId: draft.id!,
+            openingStock: boundOpening,
+          );
+        }
       } else {
         final inserted = await _client
             .from('product_variants')
@@ -862,6 +883,15 @@ class ProductRepository {
           employeeId: employeeId,
           reorderLevel: reorderLevel,
         );
+        await _applyOpeningStockIfNeeded(
+          branchId: branchId,
+          productId: productId,
+          variantId: newId,
+          openingStock: draft.openingStock,
+        );
+        if (draft.isDefault || defaultVariantId == null) {
+          defaultVariantId = newId;
+        }
       }
     }
 
@@ -873,6 +903,30 @@ class ProductRepository {
       );
     }
     return defaultVariantId;
+  }
+
+  Future<void> _applyOpeningStockIfNeeded({
+    required String branchId,
+    required String productId,
+    required String variantId,
+    required num? openingStock,
+  }) async {
+    final qty = openingStock ?? 0;
+    if (qty <= 0) return;
+    await _client.rpc(
+      'adjust_inventory',
+      params: {
+        'p_branch_id': branchId,
+        'p_product_id': productId,
+        'p_quantity_delta': qty,
+        'p_movement_type': 'purchase',
+        'p_reason': 'Opening stock',
+        'p_notes': null,
+        'p_reference_type': 'product',
+        'p_reference_id': productId,
+        'p_variant_id': variantId,
+      },
+    );
   }
 
   Future<void> _ensureVariantInventory({

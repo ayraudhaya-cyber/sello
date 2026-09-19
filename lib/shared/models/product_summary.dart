@@ -119,6 +119,14 @@ class ProductSummary extends Equatable {
   /// More than one active sellable option — Hub editor / inventory expand.
   bool get hasMultipleActiveVariants => activeVariants.length > 1;
 
+  /// Parent has multiple sellable options (active or inactive). Used for list
+  /// price/cost empty state and option-count subtitles — not a DB flag.
+  bool get isMultiOptionProduct =>
+      variants.length > 1 || hasMultipleActiveVariants;
+
+  /// Active option count for subtle list hints (`2 options`).
+  int get activeOptionCount => activeVariants.length;
+
   String? attribute(String key) {
     final value = attributes[key];
     if (value == null || value.trim().isEmpty) return null;
@@ -235,6 +243,28 @@ class ProductSummary extends Equatable {
         ),
     ];
 
+    // Parent list/KPI stock = active options only. Inactive stock stays on the
+    // variant inventory row but is excluded from the parent aggregate.
+    num displayStock = totalStock;
+    num? displayAvailable = hasInventoryRow ? totalAvailable : null;
+    if (variants.isNotEmpty) {
+      displayStock = 0;
+      var availableSum = 0.0;
+      var hasActiveInventory = false;
+      for (final variant in variants) {
+        if (!variant.isActive) continue;
+        final qty = stockByVariant[variant.id];
+        if (qty == null) continue;
+        hasActiveInventory = true;
+        displayStock += qty;
+        availableSum += availableByVariant[variant.id] ?? 0;
+      }
+      displayAvailable = hasActiveInventory ? availableSum : null;
+      if (!hasActiveInventory && !hasInventoryRow) {
+        displayAvailable = null;
+      }
+    }
+
     final preferred = json['preferred_supplier'];
     String? preferredName;
     if (preferred is Map) {
@@ -255,8 +285,8 @@ class ProductSummary extends Equatable {
       description: json['description'] as String?,
       costPrice: _numValue(json['cost_price']),
       sellingPrice: _numValue(json['selling_price']),
-      currentStockQuantity: totalStock,
-      availableStockQuantity: hasInventoryRow ? totalAvailable : null,
+      currentStockQuantity: displayStock,
+      availableStockQuantity: displayAvailable,
       reorderLevel: reorderLevel,
       preferredSupplierId: json['preferred_supplier_id'] as String?,
       preferredSupplierName: preferredName,

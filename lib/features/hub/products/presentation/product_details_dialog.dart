@@ -244,22 +244,31 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
         ],
         _ProfileSection(
           label: 'Pricing',
-          child: SelloFormRow(
-            left: _ProfileField(
-              label: 'Selling price',
-              value: SelloFormatters.currency(
-                product.sellingPrice,
-                symbol: widget.currencySymbol,
-              ),
-            ),
-            right: _ProfileField(
-              label: 'Cost price',
-              value: SelloFormatters.currency(
-                product.costPrice,
-                symbol: widget.currencySymbol,
-              ),
-            ),
-          ),
+          child: product.isMultiOptionProduct
+              ? const Text(
+                  'Prices are set on each sellable option.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              : SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Selling price',
+                    value: SelloFormatters.currency(
+                      product.sellingPrice,
+                      symbol: widget.currencySymbol,
+                    ),
+                  ),
+                  right: _ProfileField(
+                    label: 'Cost price',
+                    value: SelloFormatters.currency(
+                      product.costPrice,
+                      symbol: widget.currencySymbol,
+                    ),
+                  ),
+                ),
         ),
         const SizedBox(height: _sectionGap),
         _ProfileSection(

@@ -13,6 +13,7 @@ class ProductVariantDraft {
     this.isActive = true,
     this.isDefault = false,
     this.sortOrder = 0,
+    this.openingStock,
   });
 
   final String? id;
@@ -26,6 +27,10 @@ class ProductVariantDraft {
   final bool isActive;
   final bool isDefault;
   final int sortOrder;
+
+  /// Initial inventory qty for a newly created option (create / add-option).
+  /// Never used to overwrite stock on an existing variant id.
+  final num? openingStock;
 }
 
 class ProductUpsertInput {

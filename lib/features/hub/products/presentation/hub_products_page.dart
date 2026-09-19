@@ -378,11 +378,15 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
                         Align(
                           alignment: Alignment.centerRight,
                           child: SelloTableText(
-                            SelloFormatters.currency(
-                              product.sellingPrice,
-                              symbol: currencySymbol,
-                            ),
-                            tone: SelloTableTone.strong,
+                            product.isMultiOptionProduct
+                                ? '—'
+                                : SelloFormatters.currency(
+                                    product.sellingPrice,
+                                    symbol: currencySymbol,
+                                  ),
+                            tone: product.isMultiOptionProduct
+                                ? SelloTableTone.muted
+                                : SelloTableTone.strong,
                             numeric: true,
                           ),
                         ),
@@ -391,10 +395,15 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
                         Align(
                           alignment: Alignment.centerRight,
                           child: SelloTableText(
-                            SelloFormatters.currency(
-                              product.costPrice,
-                              symbol: currencySymbol,
-                            ),
+                            product.isMultiOptionProduct
+                                ? '—'
+                                : SelloFormatters.currency(
+                                    product.costPrice,
+                                    symbol: currencySymbol,
+                                  ),
+                            tone: product.isMultiOptionProduct
+                                ? SelloTableTone.muted
+                                : SelloTableTone.normal,
                             numeric: true,
                           ),
                         ),
@@ -470,8 +479,12 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
       readValue: (key) => productFieldRawValue(product, key),
       maxParts: 2,
     );
-    if (specs.isEmpty) return product.sku;
-    return '${product.sku} · $specs';
+    final parts = <String>[product.sku];
+    if (specs.isNotEmpty) parts.add(specs);
+    if (product.isMultiOptionProduct && product.activeOptionCount > 1) {
+      parts.add('${product.activeOptionCount} options');
+    }
+    return parts.join(' · ');
   }
 }
 
@@ -943,7 +956,7 @@ class _ProductListCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${product.sku} · ${product.categoryName ?? 'Uncategorized'}',
+                      _productCardSubtitle(product),
                       style: context.texts.bodySmall?.copyWith(
                         color: context.selloColors.textSecondary,
                       ),
@@ -961,10 +974,12 @@ class _ProductListCard extends StatelessWidget {
             children: [
               SelloMetaPill(
                 label: 'Sell',
-                value: SelloFormatters.currency(
-                  product.sellingPrice,
-                  symbol: currencySymbol,
-                ),
+                value: product.isMultiOptionProduct
+                    ? '—'
+                    : SelloFormatters.currency(
+                        product.sellingPrice,
+                        symbol: currencySymbol,
+                      ),
               ),
               SelloMetaPill(
                 label: 'Stock',
@@ -1005,6 +1020,17 @@ class _ProductListCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _productCardSubtitle(ProductSummary product) {
+    final parts = <String>[
+      product.sku,
+      product.categoryName ?? 'Uncategorized',
+    ];
+    if (product.isMultiOptionProduct && product.activeOptionCount > 1) {
+      parts.add('${product.activeOptionCount} options');
+    }
+    return parts.join(' · ');
   }
 }
 
@@ -1203,6 +1229,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
               sellingPrice: _sellingPrice.text.trim(),
               costPrice: _costPrice.text.trim(),
               isActive: _isActive,
+              openingStock: _isCreate ? _stockQty.text.trim() : '',
             ),
           );
         _showOptions = true;
@@ -1214,6 +1241,62 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
           ),
         );
       }
+    });
+  }
+
+  bool get _hasSavedMultiOptions {
+    final product = widget.product;
+    if (product == null) return false;
+    return product.variants.length > 1 || product.hasMultipleActiveVariants;
+  }
+
+  Future<void> _switchToSingleProduct() async {
+    if (_hasSavedMultiOptions) {
+      setState(() {
+        _optionsError =
+            'This product already has saved options. Deactivate unused '
+            'options instead of converting back to a single product.';
+      });
+      return;
+    }
+
+    final hasDetails = optionDraftsHaveDetails(_optionRows);
+    if (hasDetails) {
+      final confirmed = await showSelloDialog(
+        context: context,
+        title: 'Switch to single product?',
+        message:
+            'Your option details will be removed and the product will return '
+            'to a single-product setup.',
+        confirmLabel: 'Switch to single product',
+        cancelLabel: 'Cancel',
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    setState(() {
+      _optionsError = null;
+      if (_optionRows.isNotEmpty) {
+        final first = _optionRows.first;
+        if (_sku.text.trim().isEmpty) _sku.text = first.sku.text;
+        if (_barcode.text.trim().isEmpty) _barcode.text = first.barcode.text;
+        if (_sellingPrice.text.trim().isEmpty) {
+          _sellingPrice.text = first.sellingPrice.text;
+        }
+        if (_costPrice.text.trim().isEmpty) {
+          _costPrice.text = first.costPrice.text;
+        }
+        if (_isCreate &&
+            _stockQty.text.trim().isEmpty &&
+            first.openingStock.text.trim().isNotEmpty) {
+          _stockQty.text = first.openingStock.text;
+        }
+      }
+      for (final row in _optionRows) {
+        row.dispose();
+      }
+      _optionRows.clear();
+      _showOptions = false;
     });
   }
 
@@ -1416,9 +1499,11 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
           : (widget.product?.unitLabel ?? 'piece'),
       sellingPrice: sellingPrice,
       costPrice: costPrice,
-      currentStockQuantity: num.parse(
-        _stockQty.text.trim().isEmpty ? '0' : _stockQty.text.trim(),
-      ),
+      currentStockQuantity: (_showOptions && _optionRows.length > 1)
+          ? 0
+          : num.parse(
+              _stockQty.text.trim().isEmpty ? '0' : _stockQty.text.trim(),
+            ),
       reorderLevel: fieldConfig.isEnabled('reorder_level')
           ? (num.tryParse(_reorderLevel.text.trim()) ?? 0)
           : (widget.product?.reorderLevel ?? widget.defaultReorderLevel),
@@ -1611,6 +1696,9 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
         ProductFieldConfig(fields: []);
     final attributeFields = fieldConfig.enabled
         .where((f) => f.definition.storage == ProductFieldStorage.attribute)
+        // Sellable size belongs on the option name in multi-option mode —
+        // hide the competing Product Details Size attribute.
+        .where((f) => !_showOptions || f.fieldKey != 'size')
         .toList(growable: false);
 
     return Column(
@@ -1842,16 +1930,19 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
               ),
             ] else
               const Text(
-                'Prices are managed per sellable option below.',
+                'Multi-option product — selling price, cost and opening stock '
+                'are set on each option below.',
                 style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 12.5,
+                  height: 1.35,
                   color: AppColors.textSecondary,
                 ),
               ),
           ],
         ),
-        if (_showOptions)
+        if (_showOptions) ...[
+          const SizedBox(height: 4),
           ProductOptionsEditorSection(
             rows: _optionRows,
             showCost: _canViewCost,
@@ -1859,15 +1950,50 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             onChanged: () => setState(() {}),
             onAddOption: _beginManagingOptions,
             onToggleActive: _toggleOptionActive,
+            onSwitchToSingle: _switchToSingleProduct,
+            allowSwitchToSingle: !_hasSavedMultiOptions,
           ),
+        ],
         SelloDialogSection(
           title: 'Inventory',
           children: [
-            if (showReorder)
+            if (_showOptions) ...[
+              Text(
+                showReorder
+                    ? 'Opening stock is set per option above. Reorder level still applies across options.'
+                    : 'Opening stock is set per option above.',
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12.5,
+                  height: 1.35,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              if (showReorder) ...[
+                const SizedBox(height: 12),
+                SelloTextField(
+                  controller: _reorderLevel,
+                  label: 'Reorder level',
+                  required:
+                      fieldConfig.byKey('reorder_level')?.required == true,
+                  tooltip: 'Alert when stock falls to this amount.',
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  validator: (value) {
+                    final required = _requiredMessage(
+                      fieldConfig.byKey('reorder_level'),
+                      value,
+                    );
+                    if (required != null) return required;
+                    return _validateOptionalNumber(value);
+                  },
+                ),
+              ],
+            ] else if (showReorder)
               SelloFormRow(
                 left: SelloTextField(
                   controller: _stockQty,
-                  label: 'Current stock',
+                  label: 'Opening stock',
                   enabled: _isCreate,
                   helperText: _isCreate
                       ? null
@@ -1897,7 +2023,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             else
               SelloTextField(
                 controller: _stockQty,
-                label: 'Current stock',
+                label: 'Opening stock',
                 enabled: _isCreate,
                 helperText: _isCreate
                     ? null

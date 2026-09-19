@@ -64,5 +64,33 @@ void main() {
       );
       expect(shown, isFalse);
     });
+
+    test('dismissal sticks before the session resolves the app key', () async {
+      const installed = AppVersion(major: 1, minor: 0, patch: 7, build: 8);
+      SharedPreferences.setMockInitialValues({
+        'sello.release_highlights.seen_version': '1.0.6+7',
+        'sello.release_highlights.seen_version.owner_manager': '1.0.6+7',
+      });
+
+      // Card shown pre-login, dismissed once the session is known.
+      expect(
+        await ReleaseHighlightsStore().shouldShowHighlights(installed),
+        isTrue,
+      );
+      await ReleaseHighlightsStore(appKey: 'owner_manager').markSeen(
+        installed: installed,
+      );
+
+      // Next launch checks again before the session restores.
+      expect(
+        await ReleaseHighlightsStore().shouldShowHighlights(installed),
+        isFalse,
+      );
+      expect(
+        await ReleaseHighlightsStore(appKey: 'owner_manager')
+            .shouldShowHighlights(installed),
+        isFalse,
+      );
+    });
   });
 }

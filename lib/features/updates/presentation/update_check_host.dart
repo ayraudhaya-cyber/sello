@@ -7,6 +7,7 @@ import 'package:sello/features/updates/presentation/update_prompt.dart';
 import 'package:sello/features/updates/presentation/whats_new_banner.dart';
 import 'package:sello/services/updates/release_highlights_store.dart';
 import 'package:sello/services/updates/release_manifest_config.dart';
+import 'package:sello/services/updates/sello_build_meta.dart';
 import 'package:sello/services/updates/update_presentation_policy.dart';
 import 'package:sello/services/updates/update_providers.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
@@ -34,6 +35,7 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   var _highlightsVisible = false;
   String? _promptedIdentity;
   String? _highlightsIdentity;
+  String? _dismissedHighlightsIdentity;
 
   UpdatePresentationStyle get _optionalStyle =>
       UpdatePresentationPolicy.forPlatform(
@@ -64,8 +66,7 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
         showOptional && _optionalStyle == UpdatePresentationStyle.updateModal;
     final showHighlights = _highlightsVisible &&
         snapshot != null &&
-        snapshot.status != UpdateCheckStatus.updateRequired &&
-        snapshot.status != UpdateCheckStatus.updateAvailable &&
+        snapshot.status == UpdateCheckStatus.upToDate &&
         !showOptional;
 
     return Stack(
@@ -172,25 +173,30 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   Future<void> _maybeShowHighlights(UpdateCheckSnapshot snapshot) async {
     if (snapshot.status == UpdateCheckStatus.updateRequired) return;
     if (snapshot.status == UpdateCheckStatus.updateAvailable) return;
-    if (_highlightsIdentity == snapshot.installed.identity &&
-        _highlightsVisible) {
-      return;
-    }
-
+    // Wait until the release app is known and the check succeeded — otherwise
+    // the card can flash soft fallback notes, then swap to stale manifest text.
+    if (snapshot.status == UpdateCheckStatus.checkFailed) return;
     final app = ref.read(releaseAppKindProvider);
-    final store = ReleaseHighlightsStore(appKey: app?.jsonKey);
+    if (app == null) return;
+
+    final highlightsKey = _highlightsKey(snapshot.installed);
+    if (_dismissedHighlightsIdentity == highlightsKey) return;
+    if (_highlightsIdentity == highlightsKey && _highlightsVisible) return;
+
+    final store = ReleaseHighlightsStore(appKey: app.jsonKey);
     final shouldShow = await store.shouldShowHighlights(snapshot.installed);
     if (!mounted || !shouldShow) return;
 
     setState(() {
       _highlightsVisible = true;
-      _highlightsIdentity = snapshot.installed.identity;
+      _highlightsIdentity = highlightsKey;
     });
   }
 
   Future<void> _dismissHighlights() async {
     final snapshot = ref.read(updateCheckControllerProvider).valueOrNull;
     if (snapshot != null) {
+      _dismissedHighlightsIdentity = _highlightsKey(snapshot.installed);
       final app = ref.read(releaseAppKindProvider);
       await ReleaseHighlightsStore(appKey: app?.jsonKey).markSeen(
         installed: snapshot.installed,
@@ -198,6 +204,12 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
     }
     if (!mounted) return;
     setState(() => _highlightsVisible = false);
+  }
+
+  String _highlightsKey(AppVersion installed) {
+    final rev = SelloBuildMeta.shortRevision?.trim();
+    if (rev == null || rev.isEmpty) return installed.identity;
+    return '${installed.identity}@$rev';
   }
 
   Future<void> _postpone() async {

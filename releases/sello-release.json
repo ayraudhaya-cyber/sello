@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.6",
-        "build": 7,
-        "released_at": "2026-09-14",
-        "notes": "Panels keep their content inside on smaller screens\nFilter and action bars wrap instead of spilling outside the card"
+        "version": "1.0.7",
+        "build": 8,
+        "released_at": "2026-09-19",
+        "notes": "Product Options: name each option, set opening stock per option, and switch back to a single product safely\nProduct list stock is the sum of active options - tap the hint for a per-option breakdown\nView Product shows Options and Total stock clearly"
       },
       "minimum": {
         "version": "1.0.0",
@@ -31,10 +31,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.6",
-        "build": 7,
-        "released_at": "2026-09-14",
-        "notes": "Dashboard cards grow with their content instead of spilling onto the next section\nFilter bars on Orders and other lists wrap on smaller laptop screens\nWhite panels keep search, filters, and actions intact at lower resolutions"
+        "version": "1.0.7",
+        "build": 8,
+        "released_at": "2026-09-19",
+        "notes": "Product Options: name each option, set opening stock per option, and switch back to a single product safely\nProduct list stock is the sum of active options - tap the hint for a per-option breakdown\nView Product shows Options and Total stock clearly"
       },
       "minimum": {
         "version": "1.0.0",

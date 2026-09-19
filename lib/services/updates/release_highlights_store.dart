@@ -3,6 +3,10 @@ import 'package:sello/services/updates/sello_build_meta.dart';
 import 'package:sello/shared/models/app_version.dart';
 
 /// Remembers which installed build the user already saw “Updated” highlights for.
+///
+/// The seen state is written to the shared key *and* the app-scoped key.
+/// [appKey] comes from the signed-in role on web, so it is null before the
+/// session restores; writing both keeps a dismissal sticky across that change.
 class ReleaseHighlightsStore {
   ReleaseHighlightsStore({this.appKey});
 
@@ -11,22 +15,24 @@ class ReleaseHighlightsStore {
   static const _versionKey = 'sello.release_highlights.seen_version';
   static const _revisionKey = 'sello.release_highlights.seen_revision';
 
-  String get _scopedVersionKey =>
-      appKey == null ? _versionKey : '$_versionKey.$appKey';
+  List<String> get _versionKeys => [
+        _versionKey,
+        if (appKey != null) '$_versionKey.$appKey',
+      ];
 
-  String get _scopedRevisionKey =>
-      appKey == null ? _revisionKey : '$_revisionKey.$appKey';
+  List<String> get _revisionKeys => [
+        _revisionKey,
+        if (appKey != null) '$_revisionKey.$appKey',
+      ];
 
   Future<String?> seenVersionIdentity() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_scopedVersionKey)?.trim();
-    return (value == null || value.isEmpty) ? null : value;
+    return _readAny(prefs, _versionKeys);
   }
 
   Future<String?> seenRevision() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_scopedRevisionKey)?.trim();
-    return (value == null || value.isEmpty) ? null : value;
+    return _readAny(prefs, _revisionKeys);
   }
 
   Future<void> markSeen({
@@ -34,38 +40,57 @@ class ReleaseHighlightsStore {
     String? revision,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_scopedVersionKey, installed.identity);
+    for (final key in _versionKeys) {
+      await prefs.setString(key, installed.identity);
+    }
+
     final rev = (revision ?? SelloBuildMeta.shortRevision)?.trim();
-    if (rev == null || rev.isEmpty) {
-      await prefs.remove(_scopedRevisionKey);
-    } else {
-      await prefs.setString(_scopedRevisionKey, rev);
+    for (final key in _revisionKeys) {
+      if (rev == null || rev.isEmpty) {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, rev);
+      }
     }
   }
 
   /// First launch: remember quietly. Later launches: show when the build changed.
   Future<bool> shouldShowHighlights(AppVersion installed) async {
-    final seen = await seenVersionIdentity();
+    final prefs = await SharedPreferences.getInstance();
     final current = installed.identity;
     final revision = SelloBuildMeta.shortRevision;
 
-    if (seen == null) {
+    final seenVersions = _readAll(prefs, _versionKeys);
+    if (seenVersions.isEmpty) {
       await markSeen(installed: installed, revision: revision);
       return false;
     }
 
-    if (seen != current) return true;
+    if (!seenVersions.contains(current)) return true;
 
     // Same version label, but a new web/CI build landed (revision baked in).
-    if (revision != null && revision.isNotEmpty) {
-      final seenRev = await seenRevision();
-      if (seenRev == null) {
-        await markSeen(installed: installed, revision: revision);
-        return false;
-      }
-      if (seenRev != revision) return true;
+    if (revision == null || revision.isEmpty) return false;
+
+    final seenRevisions = _readAll(prefs, _revisionKeys);
+    if (seenRevisions.isEmpty) {
+      await markSeen(installed: installed, revision: revision);
+      return false;
     }
 
-    return false;
+    return !seenRevisions.contains(revision);
+  }
+
+  String? _readAny(SharedPreferences prefs, List<String> keys) {
+    final values = _readAll(prefs, keys);
+    return values.isEmpty ? null : values.last;
+  }
+
+  List<String> _readAll(SharedPreferences prefs, List<String> keys) {
+    final values = <String>[];
+    for (final key in keys) {
+      final value = prefs.getString(key)?.trim();
+      if (value != null && value.isNotEmpty) values.add(value);
+    }
+    return values;
   }
 }

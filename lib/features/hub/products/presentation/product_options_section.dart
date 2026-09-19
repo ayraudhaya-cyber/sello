@@ -143,6 +143,7 @@ class ProductOptionsEditorSection extends StatelessWidget {
     required this.onChanged,
     required this.onAddOption,
     required this.onToggleActive,
+    this.onRemoveOption,
     this.onSwitchToSingle,
     this.allowSwitchToSingle = true,
   });
@@ -153,6 +154,7 @@ class ProductOptionsEditorSection extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onAddOption;
   final void Function(int index, bool active) onToggleActive;
+  final void Function(int index)? onRemoveOption;
   final VoidCallback? onSwitchToSingle;
   final bool allowSwitchToSingle;
 
@@ -198,13 +200,27 @@ class ProductOptionsEditorSection extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onSwitchToSingle != null) ...[
+              if (onSwitchToSingle != null && allowSwitchToSingle) ...[
                 const SizedBox(width: 8),
-                SelloButton(
-                  label: 'Switch to single product',
-                  variant: SelloButtonVariant.ghost,
-                  size: SelloButtonSize.small,
+                TextButton(
                   onPressed: onSwitchToSingle,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text(
+                    'Switch to single product',
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.primary,
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -241,8 +257,10 @@ class ProductOptionsEditorSection extends StatelessWidget {
               index: i,
               row: rows[i],
               showCost: showCost,
+              canRemove: canRemoveDraftOption(rows: rows, index: i),
               onChanged: onChanged,
               onToggleActive: (active) => onToggleActive(i, active),
+              onRemove: onRemoveOption == null ? null : () => onRemoveOption!(i),
             ),
           ],
           const SizedBox(height: 12),
@@ -267,15 +285,19 @@ class _OptionCard extends StatelessWidget {
     required this.index,
     required this.row,
     required this.showCost,
+    required this.canRemove,
     required this.onChanged,
     required this.onToggleActive,
+    this.onRemove,
   });
 
   final int index;
   final ProductOptionEditorRow row;
   final bool showCost;
+  final bool canRemove;
   final VoidCallback onChanged;
   final ValueChanged<bool> onToggleActive;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -306,6 +328,24 @@ class _OptionCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (canRemove && onRemove != null) ...[
+                  IconButton(
+                    onPressed: onRemove,
+                    tooltip: 'Remove option',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      size: 20,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 SelloStatusToggle(
                   value: row.isActive,
                   onChanged: onToggleActive,
@@ -472,6 +512,31 @@ List<ProductVariantDraft> buildEvolvedOptionDrafts({
 /// True when local option drafts contain user-entered details worth confirming.
 bool optionDraftsHaveDetails(List<ProductOptionEditorRow> rows) {
   return rows.any((row) => row.hasEnteredDetails);
+}
+
+/// Draft-only remove: never for saved variants; never when only one option remains.
+bool canRemoveDraftOption({
+  required List<ProductOptionEditorRow> rows,
+  required int index,
+}) {
+  if (index < 0 || index >= rows.length) return false;
+  if (!rows[index].isNew) return false;
+  return rows.length > 1;
+}
+
+/// Whether removing this draft option should ask for confirmation first.
+bool draftOptionRemoveNeedsConfirmation(ProductOptionEditorRow row) {
+  return row.isNew && row.hasEnteredDetails;
+}
+
+/// Removes a draft option in place. Returns false when the remove is blocked.
+/// Caller must dispose the returned row when non-null.
+ProductOptionEditorRow? removeDraftOptionAt({
+  required List<ProductOptionEditorRow> rows,
+  required int index,
+}) {
+  if (!canRemoveDraftOption(rows: rows, index: index)) return null;
+  return rows.removeAt(index);
 }
 
 /// Re-export last-active validation for editor callers.

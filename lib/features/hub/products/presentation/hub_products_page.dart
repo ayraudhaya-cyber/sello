@@ -411,12 +411,14 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
                       DataCell(
                         Align(
                           alignment: Alignment.centerRight,
-                          child: SelloTableText(
-                            SelloFormatters.quantity(
-                              product.currentStockQuantity,
-                            ),
-                            numeric: true,
-                          ),
+                          child: product.isMultiOptionProduct
+                              ? _MultiOptionStockCell(product: product)
+                              : SelloTableText(
+                                  SelloFormatters.quantity(
+                                    product.currentStockQuantity,
+                                  ),
+                                  numeric: true,
+                                ),
                         ),
                       ),
                       DataCell(_ProductStatusBadge(active: product.isActive)),
@@ -983,7 +985,11 @@ class _ProductListCard extends StatelessWidget {
               ),
               SelloMetaPill(
                 label: 'Stock',
-                value: SelloFormatters.quantity(product.currentStockQuantity),
+                value: product.isMultiOptionProduct
+                    ? '${SelloFormatters.quantity(product.currentStockQuantity)}'
+                        '${product.unitLabel?.trim().isNotEmpty == true ? ' ${product.unitLabel!.trim()}' : ''}'
+                        ' · ${product.activeOptionCount} options'
+                    : SelloFormatters.quantity(product.currentStockQuantity),
               ),
               SelloMetaPill(
                 label: 'Reorder',
@@ -1031,6 +1037,165 @@ class _ProductListCard extends StatelessWidget {
       parts.add('${product.activeOptionCount} options');
     }
     return parts.join(' · ');
+  }
+}
+
+/// Compact stock cell with a business-data popover (active options only).
+class _MultiOptionStockCell extends StatelessWidget {
+  const _MultiOptionStockCell({required this.product});
+
+  final ProductSummary product;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = product.unitLabel?.trim().isNotEmpty == true
+        ? product.unitLabel!.trim()
+        : 'units';
+    final total = SelloFormatters.quantity(product.currentStockQuantity);
+    final options = product.activeVariants;
+
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 4),
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(AppColors.surface),
+        elevation: const WidgetStatePropertyAll(6),
+        shadowColor: WidgetStatePropertyAll(
+          AppColors.textPrimary.withValues(alpha: 0.12),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            side: const BorderSide(color: AppColors.outlinePanel),
+          ),
+        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      builder: (context, controller, child) {
+        return InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$total $unit',
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${product.activeOptionCount} options',
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 11.5,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 200, maxWidth: 280),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Stock by option',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (final option in options) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            option.optionDisplayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '${SelloFormatters.quantity(option.stockQuantity ?? 0)} $unit',
+                          style: const TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 13,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Divider(height: 1, color: AppColors.outlinePanel),
+                ),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Total',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '$total $unit',
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1300,7 +1465,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     });
   }
 
-  void _toggleOptionActive(int index, bool active) {
+  Future<void> _toggleOptionActive(int index, bool active) async {
     final error = optionDeactivateError(
       rows: _optionRows,
       index: index,
@@ -1310,9 +1475,53 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       setState(() => _optionsError = error);
       return;
     }
+
+    // Saved options deactivate with confirmation; reactivation is immediate.
+    if (!active && !_optionRows[index].isNew) {
+      final confirmed = await showSelloDialog(
+        context: context,
+        title: 'Deactivate this option?',
+        message:
+            'This option will no longer be available for new sales. Existing '
+            'orders and inventory history will be preserved.',
+        confirmLabel: 'Deactivate',
+        cancelLabel: 'Cancel',
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
     setState(() {
       _optionsError = null;
       _optionRows[index].isActive = active;
+    });
+  }
+
+  Future<void> _removeOption(int index) async {
+    if (!canRemoveDraftOption(rows: _optionRows, index: index)) {
+      setState(() {
+        _optionsError = 'Keep at least one option while managing options.';
+      });
+      return;
+    }
+
+    final row = _optionRows[index];
+    if (draftOptionRemoveNeedsConfirmation(row)) {
+      final confirmed = await showSelloDialog(
+        context: context,
+        title: 'Remove this option?',
+        message:
+            'The information entered for this option will be discarded.',
+        confirmLabel: 'Remove option',
+        cancelLabel: 'Cancel',
+        destructive: true,
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    setState(() {
+      _optionsError = null;
+      final removed = removeDraftOptionAt(rows: _optionRows, index: index);
+      removed?.dispose();
     });
   }
 
@@ -1950,6 +2159,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             onChanged: () => setState(() {}),
             onAddOption: _beginManagingOptions,
             onToggleActive: _toggleOptionActive,
+            onRemoveOption: _removeOption,
             onSwitchToSingle: _switchToSingleProduct,
             allowSwitchToSingle: !_hasSavedMultiOptions,
           ),

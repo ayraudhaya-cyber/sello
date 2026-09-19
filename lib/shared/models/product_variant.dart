@@ -73,9 +73,21 @@ class ProductVariant extends Equatable {
 
   bool get hasLabel => label != null && label!.trim().isNotEmpty;
 
+  /// Option name for Hub/Sales UI — never exposes the internal "Default" label.
+  String get optionDisplayName {
+    if (hasLabel) {
+      final text = label!.trim();
+      if (text.toLowerCase() != 'default') return text;
+    }
+    final code = sku.trim();
+    return code.isNotEmpty ? code : 'Option';
+  }
+
   /// Label for UI that still shows a single sellable unit per product.
   String displayLabel(String productName) =>
-      hasLabel ? '$productName · ${label!.trim()}' : productName;
+      hasLabel && label!.trim().toLowerCase() != 'default'
+          ? '$productName · ${label!.trim()}'
+          : productName;
 
   ProductVariant copyWith({
     num? stockQuantity,

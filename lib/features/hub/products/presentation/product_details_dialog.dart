@@ -7,6 +7,7 @@ import 'package:sello/features/products/application/product_fields_provider.dart
 import 'package:sello/shared/models/product_field.dart';
 import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
+import 'package:sello/shared/models/product_variant.dart';
 import 'package:sello/shared/utils/country_catalog.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/badges/sello_badge.dart';
@@ -232,7 +233,9 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
         ],
         if (product.hasMultipleActiveVariants) ...[
           Text(
-            '${product.activeVariants.length} options',
+            '${product.activeOptionCount} active options · '
+            '${SelloFormatters.quantity(product.currentStockQuantity)} '
+            '$_unitLabel total',
             style: const TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 13,
@@ -240,7 +243,16 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
               color: AppColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          _ProfileSection(
+            label: 'Options',
+            child: _ActiveOptionsReadonlyList(
+              options: product.activeVariants,
+              currencySymbol: widget.currencySymbol,
+              unitLabel: _unitLabel,
+            ),
+          ),
+          const SizedBox(height: _sectionGap),
         ],
         _ProfileSection(
           label: 'Pricing',
@@ -285,7 +297,9 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
           child: showReorder
               ? SelloFormRow(
                   left: _ProfileField(
-                    label: 'Current stock',
+                    label: product.isMultiOptionProduct
+                        ? 'Total stock'
+                        : 'Current stock',
                     value:
                         '${SelloFormatters.quantity(product.currentStockQuantity)} $_unitLabel',
                   ),
@@ -296,7 +310,9 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
                   ),
                 )
               : _ProfileField(
-                  label: 'Current stock',
+                  label: product.isMultiOptionProduct
+                      ? 'Total stock'
+                      : 'Current stock',
                   value:
                       '${SelloFormatters.quantity(product.currentStockQuantity)} $_unitLabel',
                 ),
@@ -517,6 +533,107 @@ class _ArchivedNotice extends StatelessWidget {
               'Archived products are hidden from sales but remain available '
               'for reports and history.',
               style: _ProductDetailType.label.copyWith(height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveOptionsReadonlyList extends StatelessWidget {
+  const _ActiveOptionsReadonlyList({
+    required this.options,
+    required this.currencySymbol,
+    required this.unitLabel,
+  });
+
+  final List<ProductVariant> options;
+  final String currencySymbol;
+  final String unitLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < options.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          _ActiveOptionReadonlyRow(
+            option: options[i],
+            currencySymbol: currencySymbol,
+            unitLabel: unitLabel,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ActiveOptionReadonlyRow extends StatelessWidget {
+  const _ActiveOptionReadonlyRow({
+    required this.option,
+    required this.currencySymbol,
+    required this.unitLabel,
+  });
+
+  final ProductVariant option;
+  final String currencySymbol;
+  final String unitLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final stock = SelloFormatters.quantity(option.stockQuantity ?? 0);
+    final price = SelloFormatters.currency(
+      option.sellingPrice,
+      symbol: currencySymbol,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  option.optionDisplayName,
+                  style: _ProductDetailType.value.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  option.sku,
+                  style: _ProductDetailType.label.copyWith(fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              price,
+              textAlign: TextAlign.right,
+              style: _ProductDetailType.value.copyWith(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              '$stock $unitLabel',
+              textAlign: TextAlign.right,
+              style: _ProductDetailType.label.copyWith(
+                fontSize: 13,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

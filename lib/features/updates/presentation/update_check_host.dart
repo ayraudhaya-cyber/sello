@@ -10,6 +10,7 @@ import 'package:sello/services/updates/release_manifest_config.dart';
 import 'package:sello/services/updates/sello_build_meta.dart';
 import 'package:sello/services/updates/update_presentation_policy.dart';
 import 'package:sello/services/updates/update_providers.dart';
+import 'package:sello/shared/models/app_version.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';

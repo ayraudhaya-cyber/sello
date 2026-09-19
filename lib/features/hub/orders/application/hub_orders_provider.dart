@@ -5,6 +5,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/order_repository.dart';
 import 'package:sello/features/hub/inventory/application/inventory_cross_refresh.dart';
+import 'package:sello/features/hub/products/application/products_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
@@ -285,6 +286,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       await loadOrders(showLoading: false);
       if (complete || place) {
         unawaited(refreshHubInventoryQuietly(ref));
+        unawaited(refreshHubProductsQuietly(ref));
       }
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: saved.confirmation);
@@ -324,6 +326,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       );
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
+      unawaited(refreshHubProductsQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {
@@ -341,6 +344,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       await _repo.fulfillOrderItems(orderId: orderId, lines: lines);
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
+      unawaited(refreshHubProductsQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -356,6 +360,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       final confirmation = await _repo.completeOrder(order.id);
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
+      unawaited(refreshHubProductsQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {

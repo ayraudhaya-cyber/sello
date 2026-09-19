@@ -44,6 +44,7 @@ class OrderDetailsDialog extends ConsumerWidget {
     this.onCancelOrder,
     this.onArchive,
     this.onViewInvoice,
+    this.onPrintInvoice,
     this.onWhatsAppInvoice,
     this.onSmsInvoice,
     this.readOnly = false,
@@ -60,6 +61,7 @@ class OrderDetailsDialog extends ConsumerWidget {
   final VoidCallback? onCancelOrder;
   final VoidCallback? onArchive;
   final VoidCallback? onViewInvoice;
+  final VoidCallback? onPrintInvoice;
   final VoidCallback? onWhatsAppInvoice;
   final VoidCallback? onSmsInvoice;
   final bool readOnly;
@@ -277,6 +279,7 @@ class OrderDetailsDialog extends ConsumerWidget {
                   onDestructive: canArchive ? onArchive : null,
                   leading: _InvoiceFooterLinks(
                     onViewInvoice: onViewInvoice,
+                    onPrintInvoice: onPrintInvoice,
                     onWhatsAppInvoice: onWhatsAppInvoice,
                     onSmsInvoice: onSmsInvoice,
                   ),
@@ -293,16 +296,19 @@ class OrderDetailsDialog extends ConsumerWidget {
 class _InvoiceFooterLinks extends StatelessWidget {
   const _InvoiceFooterLinks({
     this.onViewInvoice,
+    this.onPrintInvoice,
     this.onWhatsAppInvoice,
     this.onSmsInvoice,
   });
 
   final VoidCallback? onViewInvoice;
+  final VoidCallback? onPrintInvoice;
   final VoidCallback? onWhatsAppInvoice;
   final VoidCallback? onSmsInvoice;
 
   bool get _hasAny =>
       onViewInvoice != null ||
+      onPrintInvoice != null ||
       onWhatsAppInvoice != null ||
       onSmsInvoice != null;
 
@@ -320,6 +326,12 @@ class _InvoiceFooterLinks extends StatelessWidget {
             label: 'View invoice',
             icon: Icons.open_in_new_rounded,
             onPressed: onViewInvoice!,
+          ),
+        if (onPrintInvoice != null)
+          _InvoiceLink(
+            label: 'Print invoice',
+            icon: Icons.print_outlined,
+            onPressed: onPrintInvoice!,
           ),
         if (onWhatsAppInvoice != null)
           _InvoiceLink(

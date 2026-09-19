@@ -47,7 +47,8 @@ class InventoryRepository {
       id,
       label,
       sku,
-      is_default
+      is_default,
+      selling_price
     ),
     products!inner (
       id,
@@ -102,6 +103,8 @@ class InventoryRepository {
     StockStatusFilter status = StockStatusFilter.all,
     int page = 0,
     int pageSize = 20,
+    bool signImages = true,
+    bool attachCosts = true,
   }) async {
     try {
       var query = _client
@@ -218,10 +221,11 @@ class InventoryRepository {
       }).toList();
 
       final pageItems = items.skip(page * pageSize).take(pageSize).toList();
-      final signed = await _signThumbs(pageItems);
+      final withThumbs =
+          signImages ? await _signThumbs(pageItems) : pageItems;
 
       return InventoryPageResult(
-        items: await _attachCosts(signed),
+        items: attachCosts ? await _attachCosts(withThumbs) : withThumbs,
         hasMore: items.length > (page + 1) * pageSize,
       );
     } on PostgrestException catch (error) {
@@ -241,6 +245,31 @@ class InventoryRepository {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  /// All branch stock rows for spreadsheet export (no image signing).
+  Future<List<InventoryItem>> fetchAllStockForExport({
+    String? branchId,
+    StockStatusFilter status = StockStatusFilter.all,
+  }) async {
+    const pageSize = 200;
+    final all = <InventoryItem>[];
+    var page = 0;
+    while (true) {
+      final result = await fetchStock(
+        branchId: branchId,
+        status: status,
+        page: page,
+        pageSize: pageSize,
+        signImages: false,
+        attachCosts: false,
+      );
+      all.addAll(result.items);
+      if (!result.hasMore || result.items.isEmpty) break;
+      page += 1;
+      if (page > 200) break; // hard safety cap (~40k rows)
+    }
+    return all;
   }
 
   /// Fallback select without reserved_quantity until migration 020 lands.
@@ -323,20 +352,21 @@ class InventoryRepository {
   }
 
   Future<List<InventoryItem>> _signThumbs(List<InventoryItem> pageItems) async {
-    final signed = <InventoryItem>[];
-    for (final item in pageItems) {
-      if (item.imageStoragePath == null || item.imageStoragePath!.isEmpty) {
-        signed.add(item);
-        continue;
-      }
-      try {
-        final url = await _imageStorage.signProductImage(item.imageStoragePath!);
-        signed.add(item.copyWith(imageUrl: url));
-      } catch (_) {
-        signed.add(item);
-      }
+    return Future.wait([
+      for (final item in pageItems) _signThumb(item),
+    ]);
+  }
+
+  Future<InventoryItem> _signThumb(InventoryItem item) async {
+    if (item.imageStoragePath == null || item.imageStoragePath!.isEmpty) {
+      return item;
     }
-    return signed;
+    try {
+      final url = await _imageStorage.signProductImage(item.imageStoragePath!);
+      return item.copyWith(imageUrl: url);
+    } catch (_) {
+      return item;
+    }
   }
 
   Future<InventoryDashboardStats> fetchDashboardStats({

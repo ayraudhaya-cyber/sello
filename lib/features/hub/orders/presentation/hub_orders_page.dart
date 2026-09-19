@@ -7,6 +7,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/documents/presentation/order_document_print.dart';
 import 'package:sello/features/hub/orders/application/hub_orders_provider.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
@@ -159,6 +160,9 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         onViewInvoice: detail.summary.status == OrderStatus.completed
             ? () => _viewInvoice(detail.summary)
             : null,
+        onPrintInvoice: detail.summary.status == OrderStatus.completed
+            ? () => _printInvoice(detail.summary)
+            : null,
         onWhatsAppInvoice: detail.summary.status == OrderStatus.completed
             ? () => _whatsAppInvoice(detail.summary)
             : null,
@@ -206,6 +210,22 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     } catch (_) {
       if (!mounted) return;
       SelloSnackbars.error(context, 'Unable to open the invoice.');
+    }
+  }
+
+  Future<void> _printInvoice(OrderSummary order) async {
+    try {
+      final doc = await ref
+          .read(orderDocumentRepositoryProvider)
+          .documentForOrder(order.id);
+      if (!mounted) return;
+      printOrderDocument(doc);
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.warning(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to print the invoice.');
     }
   }
 
@@ -543,12 +563,14 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                     value == _allReps ? null : value,
                   );
             },
-            onRefresh: state.isLoading
-                ? null
-                : () => ref.read(hubOrdersProvider.notifier).refresh(),
+            onRefresh: () => ref.read(hubOrdersProvider.notifier).refresh(),
+            isRefreshing: state.isLoading,
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloInlineRefreshBar(
+            active: state.isLoading && state.items.isNotEmpty,
+          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -775,6 +797,7 @@ class _OrdersToolbar extends StatelessWidget {
     required this.onDateChanged,
     required this.onRepChanged,
     required this.onRefresh,
+    required this.isRefreshing,
     required this.onAdd,
   });
 
@@ -785,17 +808,21 @@ class _OrdersToolbar extends StatelessWidget {
   final ValueChanged<OrderPaymentFilter?> onPaymentChanged;
   final ValueChanged<OrderDateFilter?> onDateChanged;
   final ValueChanged<String?> onRepChanged;
-  final VoidCallback? onRefresh;
+  final VoidCallback onRefresh;
+  final bool isRefreshing;
   final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) {
+    final filterWidth = context.isMobile ? double.infinity : 152.0;
+
     final status = SizedBox(
-      width: context.isMobile ? double.infinity : 140,
+      width: filterWidth,
       child: SelloDropdown<OrderStatusFilter>(
         value: state.statusFilter,
         compact: true,
-        hint: 'Status',
+        label: 'Status',
+        hint: 'All',
         onChanged: onStatusChanged,
         items: const [
           DropdownMenuItem(value: OrderStatusFilter.all, child: Text('All')),
@@ -828,11 +855,12 @@ class _OrdersToolbar extends StatelessWidget {
     );
 
     final payment = SizedBox(
-      width: context.isMobile ? double.infinity : 140,
+      width: filterWidth,
       child: SelloDropdown<OrderPaymentFilter>(
         value: state.paymentFilter,
         compact: true,
-        hint: 'Payment',
+        label: 'Payment',
+        hint: 'All',
         onChanged: onPaymentChanged,
         items: const [
           DropdownMenuItem(
@@ -856,11 +884,12 @@ class _OrdersToolbar extends StatelessWidget {
     );
 
     final date = SizedBox(
-      width: context.isMobile ? double.infinity : 148,
+      width: filterWidth,
       child: SelloDropdown<OrderDateFilter>(
         value: state.dateFilter,
         compact: true,
-        hint: 'Date',
+        label: 'Date',
+        hint: 'All time',
         onChanged: onDateChanged,
         items: const [
           DropdownMenuItem(
@@ -884,11 +913,12 @@ class _OrdersToolbar extends StatelessWidget {
     );
 
     final rep = SizedBox(
-      width: context.isMobile ? double.infinity : 168,
+      width: context.isMobile ? double.infinity : 180,
       child: SelloDropdown<String>(
         value: state.employeeId ?? _allReps,
         compact: true,
-        hint: 'Representative',
+        label: 'Representative',
+        hint: 'All reps',
         onChanged: onRepChanged,
         items: [
           const DropdownMenuItem(value: _allReps, child: Text('All reps')),
@@ -902,7 +932,8 @@ class _OrdersToolbar extends StatelessWidget {
       label: 'Refresh',
       icon: Icons.refresh_rounded,
       variant: SelloButtonVariant.outline,
-      onPressed: onRefresh,
+      loading: isRefreshing,
+      onPressed: isRefreshing ? null : onRefresh,
     );
 
     final add = SelloButton(
@@ -930,6 +961,7 @@ class _OrdersToolbar extends StatelessWidget {
         search: search,
         filters: [status, payment, date, rep],
         actions: [refresh, add],
+        filtersOnOwnRow: true,
       ),
     );
   }

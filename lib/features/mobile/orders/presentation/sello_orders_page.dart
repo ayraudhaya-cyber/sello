@@ -7,6 +7,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/documents/presentation/order_document_print.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/mobile/orders/application/sello_orders_provider.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
@@ -147,6 +148,9 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
         onViewInvoice: detail.summary.status == OrderStatus.completed
             ? () => _viewInvoice(detail.summary)
             : null,
+        onPrintInvoice: detail.summary.status == OrderStatus.completed
+            ? () => _printInvoice(detail.summary)
+            : null,
         onWhatsAppInvoice: detail.summary.status == OrderStatus.completed
             ? () => _whatsAppInvoice(detail.summary)
             : null,
@@ -194,6 +198,22 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     } catch (_) {
       if (!mounted) return;
       SelloSnackbars.error(context, 'Unable to open the invoice.');
+    }
+  }
+
+  Future<void> _printInvoice(OrderSummary order) async {
+    try {
+      final doc = await ref
+          .read(orderDocumentRepositoryProvider)
+          .documentForOrder(order.id);
+      if (!mounted) return;
+      printOrderDocument(doc);
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.warning(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to print the invoice.');
     }
   }
 

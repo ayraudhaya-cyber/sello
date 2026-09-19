@@ -207,24 +207,13 @@ class ProductRepository {
           .range(page * pageSize, (page * pageSize) + pageSize - 1);
 
       final list = response as List;
-      final items = <ProductSummary>[];
-      for (final row in list) {
-        final item = ProductSummary.fromQueryRow(
-          Map<String, dynamic>.from(row),
-          branchId: branchId,
-        );
-        if (item.imageStoragePath != null && item.imageStoragePath!.isNotEmpty) {
-          try {
-            final imageUrl =
-                await _imageStorage.signProductImage(item.imageStoragePath!);
-            items.add(item.copyWith(imageUrl: imageUrl));
-          } catch (_) {
-            items.add(item);
-          }
-        } else {
-          items.add(item);
-        }
-      }
+      final items = await Future.wait([
+        for (final row in list)
+          _mapProductRow(
+            Map<String, dynamic>.from(row as Map),
+            branchId: branchId,
+          ),
+      ]);
 
       return ProductPageResult(
         items: await attachUnitCosts(items),
@@ -240,6 +229,21 @@ class ProductRepository {
       throw const UnexpectedFailure(
         'Unable to load products. Please try again.',
       );
+    }
+  }
+
+  Future<ProductSummary> _mapProductRow(
+    Map<String, dynamic> row, {
+    String? branchId,
+  }) async {
+    final item = ProductSummary.fromQueryRow(row, branchId: branchId);
+    final path = item.imageStoragePath;
+    if (path == null || path.isEmpty) return item;
+    try {
+      final imageUrl = await _imageStorage.signProductImage(path);
+      return item.copyWith(imageUrl: imageUrl);
+    } catch (_) {
+      return item;
     }
   }
 

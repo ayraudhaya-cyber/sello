@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.7",
-        "build": 8,
-        "released_at": "2026-09-19",
-        "notes": "Product Options: name each option, set opening stock per option, and switch back to a single product safely\nProduct list stock is the sum of active options - tap the hint for a per-option breakdown\nView Product shows Options and Total stock clearly"
+        "version": "1.0.8",
+        "build": 9,
+        "released_at": "2026-09-20",
+        "notes": "Print invoice on completed orders uses the same A4 template as the customer link\nInventory Export data downloads an Excel file with options, stock, status, and selling price\nProducts stock stays in sync after Inventory adjusts, and Refresh shows clear progress on Hub lists"
       },
       "minimum": {
         "version": "1.0.0",
@@ -31,10 +31,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.7",
-        "build": 8,
-        "released_at": "2026-09-19",
-        "notes": "Product Options: name each option, set opening stock per option, and switch back to a single product safely\nProduct list stock is the sum of active options - tap the hint for a per-option breakdown\nView Product shows Options and Total stock clearly"
+        "version": "1.0.8",
+        "build": 9,
+        "released_at": "2026-09-20",
+        "notes": "Print invoice on completed orders uses the same A4 template as the customer link\nInventory Export data downloads an Excel file with options, stock, status, and selling price\nProducts stock stays in sync after Inventory adjusts, and Refresh shows clear progress on Hub lists\nOrders filters sit on their own labeled row so Status, Payment, Date, and Rep stay clear"
       },
       "minimum": {
         "version": "1.0.0",

@@ -281,7 +281,7 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
 
   Widget _buildCompactField() {
     final open = !context.isMobile && _portalController.isShowing;
-    return SizedBox(
+    final field = SizedBox(
       height: AppSpacing.controlHeight,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
@@ -318,6 +318,28 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
           ],
         ),
       ),
+    );
+
+    final labelText = widget.label?.trim();
+    if (labelText == null || labelText.isEmpty) return field;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          labelText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: context.texts.labelSmall?.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 4),
+        field,
+      ],
     );
   }
 

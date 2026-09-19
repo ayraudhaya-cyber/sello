@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/inventory_repository.dart';
+import 'package:sello/features/hub/inventory/application/inventory_excel_exporter.dart';
+import 'package:sello/features/hub/products/application/products_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/product_category.dart';
@@ -141,7 +145,7 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
     );
 
     try {
-      final result = await _repo.fetchStock(
+      final stockFuture = _repo.fetchStock(
         search: state.search,
         categoryId: state.categoryId,
         branchId: _branchId,
@@ -149,10 +153,14 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
         page: page,
         pageSize: state.pageSize,
       );
-      final stats = await _repo.fetchDashboardStats(branchId: _branchId);
+      final statsFuture = _repo.fetchDashboardStats(branchId: _branchId);
+      final recentFuture = _repo.fetchRecentMovements(branchId: _branchId);
+
+      final result = await stockFuture;
+      final stats = await statsFuture;
       List<StockMovement> recent = state.recentMovements;
       try {
-        recent = await _repo.fetchRecentMovements(branchId: _branchId);
+        recent = await recentFuture;
       } catch (_) {
         // Non-fatal.
       }
@@ -206,12 +214,26 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
     try {
       await _repo.adjustStock(input);
       await loadStock(showLoading: false);
+      // Products keeps a shell-session snapshot — keep list/details stock aligned.
+      unawaited(refreshHubProductsQuietly(ref));
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
+  }
+
+  /// Full catalog export for the session branch (Excel-compatible .xls).
+  Future<({List<int> bytes, String filename})> exportStockWorkbook() async {
+    final items = await _repo.fetchAllStockForExport(
+      branchId: _branchId,
+      status: StockStatusFilter.all,
+    );
+    return (
+      bytes: InventoryExcelExporter.buildBytes(items),
+      filename: InventoryExcelExporter.filename(),
+    );
   }
 
   Future<List<StockMovement>> loadMovements(InventoryItem item) {

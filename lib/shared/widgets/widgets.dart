@@ -14,6 +14,7 @@ export 'package:sello/shared/widgets/feedback/sello_activity_timeline.dart';
 export 'package:sello/shared/widgets/feedback/entity_activity_panel.dart';
 export 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 export 'package:sello/shared/widgets/feedback/sello_info_hint.dart';
+export 'package:sello/shared/widgets/feedback/sello_inline_refresh_bar.dart';
 export 'package:sello/shared/widgets/feedback/sello_intelligence_banner.dart';
 export 'package:sello/shared/widgets/filters/sello_list_toolbar.dart';
 export 'package:sello/shared/widgets/filters/sello_toolbar_body.dart';

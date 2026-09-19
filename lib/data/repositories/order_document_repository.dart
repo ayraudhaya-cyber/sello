@@ -17,6 +17,19 @@ class OrderDocumentRepository {
   final SupabaseClient _client;
   final DocumentLinkFactory links;
 
+  /// Ensures a document token exists, loads the public document payload, and
+  /// returns it for print / preview using the same template as `/d/<token>`.
+  Future<OrderDocument> documentForOrder(String orderId) async {
+    final prepared = await prepareConfirmation(orderId);
+    final doc = await fetchByToken(prepared.token);
+    if (doc == null) {
+      throw const ValidationFailure(
+        'Invoice document is not available for this order yet.',
+      );
+    }
+    return doc;
+  }
+
   Future<OutboundNotificationPolicies> fetchOutboundPolicies() async {
     try {
       final row = await _client

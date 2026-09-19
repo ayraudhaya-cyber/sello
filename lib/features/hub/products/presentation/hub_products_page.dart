@@ -216,9 +216,8 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
             onCategoryChanged: (value) {
               ref.read(hubProductsProvider.notifier).setCategoryFilter(value);
             },
-            onRefresh: state.isLoading
-                ? null
-                : () => ref.read(hubProductsProvider.notifier).refresh(),
+            onRefresh: () => ref.read(hubProductsProvider.notifier).refresh(),
+            isRefreshing: state.isLoading,
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
@@ -226,6 +225,9 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
             const _ArchivedProductsBanner(),
             const SizedBox(height: AppSpacing.md),
           ],
+          SelloInlineRefreshBar(
+            active: state.isLoading && state.items.isNotEmpty,
+          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -498,6 +500,7 @@ class _ProductsToolbar extends StatelessWidget {
     required this.onStatusChanged,
     required this.onCategoryChanged,
     required this.onRefresh,
+    required this.isRefreshing,
     required this.onAdd,
   });
 
@@ -506,7 +509,8 @@ class _ProductsToolbar extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<ProductStatusFilter?> onStatusChanged;
   final ValueChanged<String?> onCategoryChanged;
-  final VoidCallback? onRefresh;
+  final VoidCallback onRefresh;
+  final bool isRefreshing;
   final VoidCallback? onAdd;
 
   @override
@@ -560,7 +564,8 @@ class _ProductsToolbar extends StatelessWidget {
       label: 'Refresh',
       icon: Icons.refresh_rounded,
       variant: SelloButtonVariant.outline,
-      onPressed: onRefresh,
+      loading: isRefreshing,
+      onPressed: isRefreshing ? null : onRefresh,
     );
 
     final add = SelloButton(

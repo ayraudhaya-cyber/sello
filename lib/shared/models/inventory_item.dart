@@ -38,6 +38,7 @@ class InventoryItem extends Equatable {
     this.reorderLevel,
     this.unitLabel,
     this.costPrice,
+    this.sellingPrice,
     this.preferredSupplierId,
     this.preferredSupplierName,
     this.imageUrl,
@@ -75,6 +76,9 @@ class InventoryItem extends Equatable {
   /// Null unless the caller may view cost — resolved through
   /// `product_unit_costs()`, not selected from the product row.
   final num? costPrice;
+
+  /// Sellable unit price from `product_variants.selling_price`.
+  final num? sellingPrice;
   final String? preferredSupplierId;
   final String? preferredSupplierName;
   final String? imageUrl;
@@ -101,7 +105,7 @@ class InventoryItem extends Equatable {
   bool get isLowStock => stockStatus == StockStatus.low;
   bool get isOutOfStock => stockStatus == StockStatus.out;
 
-  InventoryItem copyWith({String? imageUrl, num? costPrice}) {
+  InventoryItem copyWith({String? imageUrl, num? costPrice, num? sellingPrice}) {
     return InventoryItem(
       inventoryId: inventoryId,
       productId: productId,
@@ -120,6 +124,7 @@ class InventoryItem extends Equatable {
       categoryName: categoryName,
       unitLabel: unitLabel,
       costPrice: costPrice ?? this.costPrice,
+      sellingPrice: sellingPrice ?? this.sellingPrice,
       preferredSupplierId: preferredSupplierId,
       preferredSupplierName: preferredSupplierName,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -190,6 +195,9 @@ class InventoryItem extends Equatable {
       categoryId: categoryId ?? productMap?['category_id'] as String?,
       categoryName: categoryName,
       unitLabel: _stringValue(productMap?['unit_label']),
+      sellingPrice: variantMap == null
+          ? null
+          : _numValue(variantMap['selling_price']),
       preferredSupplierId: productMap?['preferred_supplier_id'] as String?,
       preferredSupplierName: preferredSupplierName,
       imageStoragePath: imagePath,

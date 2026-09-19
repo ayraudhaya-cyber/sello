@@ -6,6 +6,10 @@ import 'package:sello/core/theme/theme.dart';
 ///
 /// Uses available width (not only breakpoints) so laptop content columns with
 /// a sidebar wrap instead of overflowing the card.
+///
+/// When there are three or more filters (or [filtersOnOwnRow] is true), search
+/// and actions stay on the first row and filters sit on a full-width row below
+/// — avoids a lone wrapped dropdown hanging under the search field.
 class SelloToolbarBody extends StatelessWidget {
   const SelloToolbarBody({
     super.key,
@@ -13,6 +17,7 @@ class SelloToolbarBody extends StatelessWidget {
     this.filters = const [],
     this.actions = const [],
     this.stackBelow = 1200,
+    this.filtersOnOwnRow,
   });
 
   final Widget search;
@@ -21,6 +26,11 @@ class SelloToolbarBody extends StatelessWidget {
 
   /// Prefer stacked / wrapping rows when the panel is narrower than this.
   final double stackBelow;
+
+  /// Force filters onto a second row. Defaults to true when [filters].length ≥ 3.
+  final bool? filtersOnOwnRow;
+
+  bool get _filtersOnOwnRow => filtersOnOwnRow ?? filters.length >= 3;
 
   @override
   Widget build(BuildContext context) {
@@ -62,24 +72,30 @@ class SelloToolbarBody extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stack =
+        final narrow =
             context.isTablet || constraints.maxWidth < stackBelow;
-        if (stack) {
+
+        if (narrow || _filtersOnOwnRow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              search,
-              if (filters.isNotEmpty || actions.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: search),
+                  if (actions.isNotEmpty) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    ..._spaced(actions, AppSpacing.xs),
+                  ],
+                ],
+              ),
+              if (filters.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
                 Wrap(
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.spaceBetween,
-                  children: [
-                    ...filters,
-                    ...actions,
-                  ],
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  children: filters,
                 ),
               ],
             ],
@@ -87,7 +103,7 @@ class SelloToolbarBody extends StatelessWidget {
         }
 
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(child: search),
             if (filters.isNotEmpty) ...[
@@ -96,23 +112,28 @@ class SelloToolbarBody extends StatelessWidget {
                 child: Wrap(
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.end,
                   children: filters,
                 ),
               ),
             ],
             if (actions.isNotEmpty) ...[
               const SizedBox(width: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.sm,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: actions,
-              ),
+              ..._spaced(actions, AppSpacing.xs),
             ],
           ],
         );
       },
     );
+  }
+
+  List<Widget> _spaced(List<Widget> children, double gap) {
+    if (children.isEmpty) return const [];
+    return [
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) SizedBox(width: gap),
+        children[i],
+      ],
+    ];
   }
 }

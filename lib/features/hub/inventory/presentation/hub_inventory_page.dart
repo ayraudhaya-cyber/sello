@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/hub/inventory/application/hub_inventory_provider.dart';
@@ -11,6 +12,7 @@ import 'package:sello/features/inventory/presentation/stock_adjust_dialog.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
+import 'package:sello/shared/utils/browser_file_download.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -25,6 +27,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   final _searchController = TextEditingController();
   Timer? _debounce;
   final Set<String> _expandedProductIds = {};
+  var _exporting = false;
 
   @override
   void dispose() {
@@ -36,6 +39,36 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   String _currencySymbol() {
     final currency = ref.read(companySettingsProvider).currency;
     return SelloFormatters.currencySymbol(currency);
+  }
+
+  Future<void> _exportData() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final file =
+          await ref.read(hubInventoryProvider.notifier).exportStockWorkbook();
+      if (!mounted) return;
+      downloadBrowserFile(
+        bytes: file.bytes,
+        filename: file.filename,
+        mimeType: 'application/vnd.ms-excel',
+      );
+      SelloSnackbars.success(context, 'Inventory export downloaded.');
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, failure.message);
+    } on UnsupportedError {
+      if (!mounted) return;
+      SelloSnackbars.warning(
+        context,
+        'Export download is available in the web app.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to export inventory right now.');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   void _toggleExpanded(String productId) {
@@ -420,11 +453,15 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                     value == _allCategories ? null : value,
                   );
             },
-            onRefresh: state.isLoading
-                ? null
-                : () => ref.read(hubInventoryProvider.notifier).refresh(),
+            onRefresh: () => ref.read(hubInventoryProvider.notifier).refresh(),
+            isRefreshing: state.isLoading,
+            onExport: _exportData,
+            isExporting: _exporting,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloInlineRefreshBar(
+            active: state.isLoading && state.items.isNotEmpty,
+          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -684,6 +721,9 @@ class _Toolbar extends StatelessWidget {
     required this.onStatusChanged,
     required this.onCategoryChanged,
     required this.onRefresh,
+    required this.isRefreshing,
+    required this.onExport,
+    required this.isExporting,
   });
 
   final TextEditingController searchController;
@@ -691,7 +731,10 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<StockStatusFilter?> onStatusChanged;
   final ValueChanged<String?> onCategoryChanged;
-  final VoidCallback? onRefresh;
+  final VoidCallback onRefresh;
+  final bool isRefreshing;
+  final VoidCallback onExport;
+  final bool isExporting;
 
   @override
   Widget build(BuildContext context) {
@@ -757,7 +800,16 @@ class _Toolbar extends StatelessWidget {
       label: 'Refresh',
       icon: Icons.refresh_rounded,
       variant: SelloButtonVariant.outline,
-      onPressed: onRefresh,
+      loading: isRefreshing,
+      onPressed: isRefreshing || isExporting ? null : onRefresh,
+    );
+
+    final export = SelloButton(
+      label: 'Export data',
+      icon: Icons.download_rounded,
+      variant: SelloButtonVariant.outline,
+      loading: isExporting,
+      onPressed: isRefreshing || isExporting ? null : onExport,
     );
 
     final search = SelloSearchBar(
@@ -777,7 +829,7 @@ class _Toolbar extends StatelessWidget {
       child: SelloToolbarBody(
         search: search,
         filters: [status, category],
-        actions: [refresh],
+        actions: [export, refresh],
       ),
     );
   }

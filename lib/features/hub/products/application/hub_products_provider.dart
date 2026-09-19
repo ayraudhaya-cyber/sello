@@ -121,8 +121,10 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
   }
 
   Future<void> refresh() async {
-    await _loadCategories();
-    await loadProducts();
+    await Future.wait([
+      _loadCategories(),
+      loadProducts(resetPage: true),
+    ]);
   }
 
   Future<void> loadProducts({
@@ -141,6 +143,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
       final result = await _repo.fetchProducts(
         search: state.search,
         categoryId: state.categoryId,
+        branchId: ref.read(currentSessionProvider)?.branch?.id,
         isActive: switch (state.statusFilter) {
           ProductStatusFilter.all => null,
           ProductStatusFilter.active => true,

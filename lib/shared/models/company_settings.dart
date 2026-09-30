@@ -96,6 +96,7 @@ class CompanySettings extends Equatable {
     required this.salesRepsCanViewOutstandingBalances,
     required this.financialVisibility,
     this.collectionApprovalRequired = false,
+    this.salesRepsCanRecordDelivery = true,
     this.outboundNotificationPolicies = OutboundNotificationPolicies.defaults,
     this.smsSenderId,
     this.smsSenderIdEditable = false,
@@ -107,6 +108,7 @@ class CompanySettings extends Equatable {
     this.documentPhone,
     this.documentEmail,
     this.documentTerms,
+    this.documentTagline,
     this.primaryColor,
     this.navBackgroundColor,
     this.customBrandingEnabled = false,
@@ -136,6 +138,9 @@ class CompanySettings extends Equatable {
 
   /// When true, Sales Rep collections stay Pending Review until Owner/Manager approve.
   final bool collectionApprovalRequired;
+
+  /// When false, only Owner/Manager can record delivery and complete orders.
+  final bool salesRepsCanRecordDelivery;
 
   /// Tenant outbound messaging (SMS / WhatsApp + document links).
   final OutboundNotificationPolicies outboundNotificationPolicies;
@@ -171,6 +176,9 @@ class CompanySettings extends Equatable {
   /// Optional terms / footer text on invoices / receipts.
   final String? documentTerms;
 
+  /// Optional tagline at the bottom of invoices / receipts.
+  final String? documentTagline;
+
   /// Optional tenant accent as `#RRGGBB`. Null uses Sello purple.
   final String? primaryColor;
 
@@ -204,6 +212,7 @@ class CompanySettings extends Equatable {
     salesRepsCanViewOutstandingBalances: true,
     financialVisibility: FinancialVisibilityPolicies.defaults,
     collectionApprovalRequired: false,
+    salesRepsCanRecordDelivery: true,
     outboundNotificationPolicies: OutboundNotificationPolicies.defaults,
     smsSenderId: null,
     smsSenderIdEditable: false,
@@ -215,6 +224,7 @@ class CompanySettings extends Equatable {
     documentPhone: null,
     documentEmail: null,
     documentTerms: null,
+    documentTagline: null,
     primaryColor: null,
     navBackgroundColor: null,
     customBrandingEnabled: false,
@@ -250,6 +260,7 @@ class CompanySettings extends Equatable {
     bool? salesRepsCanViewOutstandingBalances,
     FinancialVisibilityPolicies? financialVisibility,
     bool? collectionApprovalRequired,
+    bool? salesRepsCanRecordDelivery,
     OutboundNotificationPolicies? outboundNotificationPolicies,
     String? smsSenderId,
     bool clearSmsSenderId = false,
@@ -261,6 +272,7 @@ class CompanySettings extends Equatable {
     String? documentPhone,
     String? documentEmail,
     String? documentTerms,
+    String? documentTagline,
     String? primaryColor,
     String? navBackgroundColor,
     bool clearLogoUrl = false,
@@ -270,6 +282,7 @@ class CompanySettings extends Equatable {
     bool clearDocumentPhone = false,
     bool clearDocumentEmail = false,
     bool clearDocumentTerms = false,
+    bool clearDocumentTagline = false,
     bool clearPrimaryColor = false,
     bool clearNavBackgroundColor = false,
     bool? documentShowBusinessNameWithLogo,
@@ -296,6 +309,8 @@ class CompanySettings extends Equatable {
       financialVisibility: financialVisibility ?? this.financialVisibility,
       collectionApprovalRequired:
           collectionApprovalRequired ?? this.collectionApprovalRequired,
+      salesRepsCanRecordDelivery:
+          salesRepsCanRecordDelivery ?? this.salesRepsCanRecordDelivery,
       outboundNotificationPolicies: outboundNotificationPolicies ??
           this.outboundNotificationPolicies,
       smsSenderId: smsSenderIdEditable
@@ -323,6 +338,9 @@ class CompanySettings extends Equatable {
       documentTerms: clearDocumentTerms
           ? null
           : (documentTerms ?? this.documentTerms),
+      documentTagline: clearDocumentTagline
+          ? null
+          : (documentTagline ?? this.documentTagline),
       primaryColor: clearPrimaryColor
           ? null
           : (primaryColor ?? this.primaryColor),
@@ -371,6 +389,8 @@ class CompanySettings extends Equatable {
       financialVisibility: FinancialVisibilityPolicies.fromJson(policyMap),
       collectionApprovalRequired:
           json['collection_approval_required'] as bool? ?? false,
+      salesRepsCanRecordDelivery:
+          json['sales_reps_can_record_delivery'] as bool? ?? true,
       outboundNotificationPolicies: OutboundNotificationPolicies.fromJson(
         json['outbound_notification_policies'],
       ),
@@ -386,6 +406,7 @@ class CompanySettings extends Equatable {
       documentPhone: _optionalText(json['document_phone']),
       documentEmail: _optionalText(json['document_email']),
       documentTerms: _optionalText(json['document_terms']),
+      documentTagline: _optionalText(json['document_tagline']),
       primaryColor: _optionalText(json['primary_color']),
       navBackgroundColor: _optionalText(json['nav_background_color']),
       customBrandingEnabled: json['custom_branding_enabled'] as bool? ?? false,
@@ -415,6 +436,7 @@ class CompanySettings extends Equatable {
           salesRepsCanViewOutstandingBalances,
       'financial_visibility_policies': financialVisibility.toJson(),
       'collection_approval_required': collectionApprovalRequired,
+      'sales_reps_can_record_delivery': salesRepsCanRecordDelivery,
       'outbound_notification_policies': outboundNotificationPolicies.toJson(),
       if (smsSenderIdEditable) 'sms_sender_id': smsSenderId,
       'updated_by': employeeId,
@@ -437,6 +459,7 @@ class CompanySettings extends Equatable {
     salesRepsCanViewOutstandingBalances,
     financialVisibility,
         collectionApprovalRequired,
+        salesRepsCanRecordDelivery,
         outboundNotificationPolicies,
         smsSenderId,
         smsSenderIdEditable,
@@ -448,6 +471,7 @@ class CompanySettings extends Equatable {
     documentPhone,
     documentEmail,
     documentTerms,
+    documentTagline,
     primaryColor,
     navBackgroundColor,
     customBrandingEnabled,

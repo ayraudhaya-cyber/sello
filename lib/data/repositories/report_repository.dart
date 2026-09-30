@@ -5,6 +5,7 @@ import 'package:sello/data/repositories/payment_repository.dart';
 import 'package:sello/data/repositories/supplier_repository.dart';
 import 'package:sello/data/repositories/visit_repository.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
+import 'package:sello/shared/models/collections_report.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
@@ -70,56 +71,98 @@ class ReportRepository {
     final effectiveBranch = resolved.branchId ?? branchId;
 
     try {
-      final inventory =
-          await _inventory.fetchDashboardStats(branchId: effectiveBranch);
-      final payments = await _payments.fetchDashboardStats();
-      final orderCounts = await _orders.fetchCounts();
-      final suppliers =
-          await _suppliers.fetchDashboardStats(companyId: companyId);
+      final reuseToday = resolved.preset == ReportDatePreset.today &&
+          resolved.employeeId == null &&
+          resolved.customerId == null;
 
-      final periodOrders = await _fetchCompletedOrders(
+      final inventoryFuture =
+          _inventory.fetchDashboardStats(branchId: effectiveBranch);
+      final paymentsFuture = _payments.fetchDashboardStats();
+      final orderCountsFuture = _orders.fetchCounts();
+      final suppliersFuture =
+          _suppliers.fetchDashboardStats(companyId: companyId);
+      final periodOrdersFuture = _fetchCompletedOrders(
         from: bounds.from,
         to: bounds.to,
         branchId: effectiveBranch,
         employeeId: resolved.employeeId,
         customerId: resolved.customerId,
       );
-      final todayOrders = resolved.preset == ReportDatePreset.today &&
-              resolved.employeeId == null &&
-              resolved.customerId == null
-          ? periodOrders
-          : await _fetchCompletedOrders(
+      final todayOrdersFuture = reuseToday
+          ? null
+          : _fetchCompletedOrders(
               from: todayBounds.from,
               to: todayBounds.to,
               branchId: effectiveBranch,
               employeeId: resolved.employeeId,
               customerId: resolved.customerId,
             );
+      final collectionsFuture = _fetchCollectionsTotal(
+        from: bounds.from,
+        to: bounds.to,
+      );
+      final openingFuture = _fetchOpeningBalanceSum().then<num>(
+        (value) => value,
+        onError: (_) => 0,
+      );
+      final chequeFuture = _fetchChequePeriodTotals(
+        from: bounds.from,
+        to: bounds.to,
+      ).then<({num collected, num bounced})>(
+        (value) => value,
+        onError: (_) => (collected: 0, bounced: 0),
+      );
+      final topProductsFuture = _fetchTopProducts(
+        from: bounds.from,
+        to: bounds.to,
+        branchId: effectiveBranch,
+      );
+      final topCategoriesFuture = _fetchTopCategories(
+        from: bounds.from,
+        to: bounds.to,
+        branchId: effectiveBranch,
+      );
+      final outstandingFuture = _fetchOutstandingCustomers();
+      final recentCustomersFuture = _fetchRecentCustomers();
+      final inactiveFuture = _fetchInactiveCustomers();
+      final paymentMethodsFuture = _fetchPaymentMethodBreakdown(
+        from: bounds.from,
+        to: bounds.to,
+      );
+      final productsBySupplierFuture =
+          _fetchProductsBySupplier(companyId: companyId);
+      final visitMetricsFuture = _safeVisitMetrics(
+        companyId: companyId,
+        from: bounds.from,
+        to: bounds.to,
+      );
+
+      final inventory = await inventoryFuture;
+      final payments = await paymentsFuture;
+      final orderCounts = await orderCountsFuture;
+      final suppliers = await suppliersFuture;
+      final periodOrders = await periodOrdersFuture;
+      final todayOrders = todayOrdersFuture == null
+          ? periodOrders
+          : await todayOrdersFuture;
+      final collectionsInPeriod = await collectionsFuture;
+      final topProducts = await topProductsFuture;
+      final topCategories = await topCategoriesFuture;
+      final outstandingCustomers = await outstandingFuture;
+      final recentCustomers = await recentCustomersFuture;
+      final inactiveCustomers = await inactiveFuture;
+      final paymentMethods = await paymentMethodsFuture;
+      final productsBySupplier = await productsBySupplierFuture;
 
       final salesInPeriod = periodOrders.fold<num>(0, (sum, o) => sum + o.total);
       final salesToday = todayOrders.fold<num>(0, (sum, o) => sum + o.total);
       final orderCount = periodOrders.length;
       final aov = orderCount == 0 ? 0 : salesInPeriod / orderCount;
 
-      final collectionsInPeriod = await _fetchCollectionsTotal(
-        from: bounds.from,
-        to: bounds.to,
-      );
-
-      num openingBalanceBroughtForward = 0;
-      num chequesCollectedInPeriod = 0;
-      num chequesBouncedInPeriod = 0;
-      try {
-        openingBalanceBroughtForward = await _fetchOpeningBalanceSum();
-        final chequeTotals = await _fetchChequePeriodTotals(
-          from: bounds.from,
-          to: bounds.to,
-        );
-        chequesCollectedInPeriod = chequeTotals.collected;
-        chequesBouncedInPeriod = chequeTotals.bounced;
-      } catch (_) {
-        // Additive — reports still load if cheque migration pending.
-      }
+      final openingBalanceBroughtForward = await openingFuture;
+      final chequeTotals = await chequeFuture;
+      final chequesCollectedInPeriod = chequeTotals.collected;
+      final chequesBouncedInPeriod = chequeTotals.bounced;
 
       var visitsCompleted = 0;
       var visitsMissed = 0;
@@ -129,12 +172,8 @@ class ReportRepository {
       var visitOrdersLinked = 0;
       num visitCollectionsAmount = 0;
       var visitRepPerformance = <ReportNamedValue>[];
-      try {
-        final visitMetrics = await _visits.fetchVisitReportMetrics(
-          companyId: companyId,
-          from: bounds.from,
-          to: bounds.to,
-        );
+      final visitMetrics = await visitMetricsFuture;
+      if (visitMetrics != null) {
         visitsCompleted = visitMetrics.completed;
         visitsMissed = visitMetrics.missed;
         visitsScheduled = visitMetrics.scheduled;
@@ -155,20 +194,7 @@ class ReportRepository {
               referenceType: 'employee',
             ),
         ];
-      } catch (_) {
-        // Visit metrics are additive — reports still load if migration pending.
       }
-
-      final topProducts = await _fetchTopProducts(
-        from: bounds.from,
-        to: bounds.to,
-        branchId: effectiveBranch,
-      );
-      final topCategories = await _fetchTopCategories(
-        from: bounds.from,
-        to: bounds.to,
-        branchId: effectiveBranch,
-      );
 
       // Comparison snapshot reserved — previous period / YoY later.
       ReportsOverview? comparison;
@@ -206,15 +232,12 @@ class ReportRepository {
           byCustomer: false,
           referenceType: 'employee',
         ),
-        outstandingCustomers: await _fetchOutstandingCustomers(),
-        recentCustomers: await _fetchRecentCustomers(),
-        inactiveCustomers: await _fetchInactiveCustomers(),
-        paymentMethods: await _fetchPaymentMethodBreakdown(
-          from: bounds.from,
-          to: bounds.to,
-        ),
+        outstandingCustomers: outstandingCustomers,
+        recentCustomers: recentCustomers,
+        inactiveCustomers: inactiveCustomers,
+        paymentMethods: paymentMethods,
         paymentStatusCounts: _paymentStatusCounts(periodOrders),
-        productsBySupplier: await _fetchProductsBySupplier(companyId: companyId),
+        productsBySupplier: productsBySupplier,
         recentSuppliers: suppliers.recentlyAdded,
         visitsCompleted: visitsCompleted,
         visitsMissed: visitsMissed,
@@ -255,6 +278,93 @@ class ReportRepository {
       ReportExportFormat.print =>
         'Print layout for ${request.reportId} ($label) is coming soon.',
     };
+  }
+
+  /// As-of open invoices grouped for the Collections Report.
+  Future<CollectionsReportSnapshot> fetchCollectionsReport({
+    required DateTime asOfDate,
+    List<String> employeeIds = const [],
+    required String salesRepsLabel,
+    required String currencySymbol,
+  }) async {
+    final cutoff = CollectionsReportMath.asOfEndUtc(asOfDate);
+    try {
+      final rows = await _client.rpc(
+        'fetch_collections_report',
+        params: {
+          'p_as_of': cutoff.toIso8601String(),
+          'p_employee_ids': employeeIds.isEmpty ? null : employeeIds,
+        },
+      );
+
+      final invoices = <CollectionsReportInvoice>[];
+      for (final row in rows as List) {
+        final map = Map<String, dynamic>.from(row as Map);
+        final orderedAt = _asDate(map['ordered_at']) ?? cutoff;
+        invoices.add(
+          CollectionsReportInvoice(
+            orderId: map['order_id'] as String? ?? '',
+            orderNumber: _asString(map['order_number']) ?? '',
+            orderedAt: orderedAt,
+            customerId: map['customer_id'] as String? ?? '',
+            customerName: _asString(map['customer_name']) ?? 'Customer',
+            customerPhone: _asString(map['customer_phone']),
+            salesRepId: map['employee_id'] as String? ?? '',
+            salesRepName: _asString(map['employee_name']) ?? '—',
+            openBalance: _asNum(map['open_balance']),
+            agingDays: CollectionsReportMath.agingDays(
+              orderedAt: orderedAt,
+              asOfDate: asOfDate,
+            ),
+          ),
+        );
+      }
+
+      return CollectionsReportMath.assemble(
+        asOfDate: asOfDate,
+        salesRepsLabel: salesRepsLabel,
+        currencySymbol: currencySymbol,
+        invoices: invoices,
+      );
+    } on AppFailure {
+      rethrow;
+    } on PostgrestException catch (error) {
+      throw UnexpectedFailure(
+        error.message.trim().isEmpty
+            ? 'Unable to load the collections report.'
+            : error.message,
+      );
+    } catch (_) {
+      throw const UnexpectedFailure('Unable to load the collections report.');
+    }
+  }
+
+  Future<
+      ({
+        int completed,
+        int missed,
+        int scheduled,
+        int withOrders,
+        int withPayments,
+        int ordersLinked,
+        num collectionsAmount,
+        List<({String employeeId, String name, int completed, int withOrders})>
+            byRepresentative,
+      })?> _safeVisitMetrics({
+    required String companyId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      return await _visits.fetchVisitReportMetrics(
+        companyId: companyId,
+        from: from,
+        to: to,
+      );
+    } catch (_) {
+      // Visit metrics are additive — reports still load if migration pending.
+      return null;
+    }
   }
 
   Future<List<_OrderAgg>> _fetchCompletedOrders({
@@ -317,13 +427,29 @@ class ReportRepository {
     required DateTime from,
     required DateTime to,
   }) async {
+    final fromIso = from.toIso8601String();
+    final toIso = to.toIso8601String();
+    try {
+      final rows = await _client
+          .from('payments')
+          .select('total:amount.sum()')
+          .isFilter('deleted_at', null)
+          .eq('status', 'completed')
+          .gte('received_at', fromIso)
+          .lte('received_at', toIso);
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } on PostgrestException {
+      // Aggregates unavailable — fall through to a row scan.
+    }
+
     final rows = await _client
         .from('payments')
         .select('amount')
         .isFilter('deleted_at', null)
         .eq('status', 'completed')
-        .gte('received_at', from.toIso8601String())
-        .lte('received_at', to.toIso8601String());
+        .gte('received_at', fromIso)
+        .lte('received_at', toIso);
 
     num total = 0;
     for (final row in rows as List) {
@@ -333,6 +459,17 @@ class ReportRepository {
   }
 
   Future<num> _fetchOpeningBalanceSum() async {
+    try {
+      final rows = await _client
+          .from('customers')
+          .select('total:opening_balance.sum()')
+          .isFilter('deleted_at', null);
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } on PostgrestException {
+      // Aggregates unavailable — fall through to a row scan.
+    }
+
     final rows = await _client
         .from('customers')
         .select('opening_balance')
@@ -345,6 +482,13 @@ class ReportRepository {
     return total;
   }
 
+  num? _readAggregate(dynamic response, String alias) {
+    if (response is! List || response.isEmpty) return 0;
+    final row = response.first;
+    if (row is! Map || !row.containsKey(alias)) return null;
+    return _asNum(row[alias]);
+  }
+
   Future<({num collected, num bounced})> _fetchChequePeriodTotals({
     required DateTime from,
     required DateTime to,
@@ -352,31 +496,52 @@ class ReportRepository {
     final fromIso = from.toIso8601String();
     final toIso = to.toIso8601String();
 
-    final collectedRows = await _client
+    final totals = await Future.wait([
+      _sumChequeColumn(
+        timestamp: 'balance_applied_at',
+        fromIso: fromIso,
+        toIso: toIso,
+      ),
+      _sumChequeColumn(
+        timestamp: 'balance_reversed_at',
+        fromIso: fromIso,
+        toIso: toIso,
+      ),
+    ]);
+    return (collected: totals[0], bounced: totals[1]);
+  }
+
+  Future<num> _sumChequeColumn({
+    required String timestamp,
+    required String fromIso,
+    required String toIso,
+  }) async {
+    try {
+      final rows = await _client
+          .from('cheques')
+          .select('total:amount.sum()')
+          .isFilter('deleted_at', null)
+          .not(timestamp, 'is', null)
+          .gte(timestamp, fromIso)
+          .lte(timestamp, toIso);
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } on PostgrestException {
+      // Aggregates unavailable — fall through to a row scan.
+    }
+
+    final rows = await _client
         .from('cheques')
         .select('amount')
         .isFilter('deleted_at', null)
-        .not('balance_applied_at', 'is', null)
-        .gte('balance_applied_at', fromIso)
-        .lte('balance_applied_at', toIso);
-
-    final bouncedRows = await _client
-        .from('cheques')
-        .select('amount')
-        .isFilter('deleted_at', null)
-        .not('balance_reversed_at', 'is', null)
-        .gte('balance_reversed_at', fromIso)
-        .lte('balance_reversed_at', toIso);
-
-    num collected = 0;
-    for (final row in collectedRows as List) {
-      collected += _asNum((row as Map)['amount']);
+        .not(timestamp, 'is', null)
+        .gte(timestamp, fromIso)
+        .lte(timestamp, toIso);
+    num total = 0;
+    for (final row in rows as List) {
+      total += _asNum((row as Map)['amount']);
     }
-    num bounced = 0;
-    for (final row in bouncedRows as List) {
-      bounced += _asNum((row as Map)['amount']);
-    }
-    return (collected: collected, bounced: bounced);
+    return total;
   }
 
   Future<List<ReportNamedValue>> _fetchTopProducts({

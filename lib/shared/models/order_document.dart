@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:sello/shared/models/client_branding.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/document_issuer_identity.dart';
+import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/utils/formatters.dart';
 
 num _numValue(dynamic value) {
@@ -11,8 +12,10 @@ num _numValue(dynamic value) {
 }
 
 DateTime? _dateValue(dynamic value) {
-  if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
-  return null;
+  if (value is DateTime) return value;
+  if (value is! String || value.isEmpty) return null;
+  return DateTime.tryParse(value) ??
+      DateTime.tryParse(value.replaceFirst(' ', 'T'));
 }
 
 String? _stringValue(dynamic value) {
@@ -46,6 +49,30 @@ enum PublicDocumentPurpose {
       this == PublicDocumentPurpose.collectionAcknowledgement;
 }
 
+/// Customer invoice status when a Sales collection waits for Hub approval.
+enum InvoiceCollectionReview {
+  none,
+  processing,
+  approved;
+
+  static InvoiceCollectionReview fromDb(String? value) {
+    return switch (value) {
+      'processing' => InvoiceCollectionReview.processing,
+      'approved' => InvoiceCollectionReview.approved,
+      _ => InvoiceCollectionReview.none,
+    };
+  }
+
+  /// External invoice tag. Empty when there is no approval-workflow collection.
+  String? get statusTag => switch (this) {
+        InvoiceCollectionReview.processing => 'Processing payment',
+        InvoiceCollectionReview.approved => 'Payment approved',
+        InvoiceCollectionReview.none => null,
+      };
+
+  bool get showsPaymentDetails => this == InvoiceCollectionReview.approved;
+}
+
 /// Customer-facing order/invoice/payment snapshot. No internal UUIDs.
 class OrderDocument extends Equatable {
   const OrderDocument({
@@ -73,6 +100,7 @@ class OrderDocument extends Equatable {
     this.documentPhone,
     this.documentEmail,
     this.documentTerms,
+    this.documentTagline,
     this.primaryColor,
     this.customBrandingEnabled = false,
     this.showBusinessNameWithLogo = false,
@@ -83,6 +111,11 @@ class OrderDocument extends Equatable {
     this.paymentNumber,
     this.pendingReview = false,
     this.reference,
+    this.collectionReview = InvoiceCollectionReview.none,
+    this.collectionPaymentNumber,
+    this.collectionPaymentMethod,
+    this.collectionPaymentAmount,
+    this.collectionReceivedAt,
   });
 
   final PublicDocumentPurpose purpose;
@@ -109,6 +142,7 @@ class OrderDocument extends Equatable {
   final String? documentPhone;
   final String? documentEmail;
   final String? documentTerms;
+  final String? documentTagline;
   final String? primaryColor;
   final bool customBrandingEnabled;
 
@@ -122,7 +156,24 @@ class OrderDocument extends Equatable {
   final String? paymentNumber;
   final bool pendingReview;
   final String? reference;
+
+  /// Live collection-approval state on the same invoice token.
+  final InvoiceCollectionReview collectionReview;
+  final String? collectionPaymentNumber;
+  final String? collectionPaymentMethod;
+  final num? collectionPaymentAmount;
+  final DateTime? collectionReceivedAt;
   final List<OrderDocumentLine> lines;
+
+  String? get collectionStatusTag => collectionReview.statusTag;
+
+  String? get collectionMethodLabel {
+    final method = PaymentMethod.fromDb(collectionPaymentMethod);
+    if (method != null) return method.label;
+    final raw = collectionPaymentMethod?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    return raw.replaceAll('_', ' ');
+  }
 
   bool get isCollectionAcknowledgement =>
       purpose == PublicDocumentPurpose.collectionAcknowledgement;
@@ -161,6 +212,7 @@ class OrderDocument extends Equatable {
         phone: documentPhone,
         email: documentEmail,
         terms: documentTerms,
+        tagline: documentTagline,
       );
 
   String get currencySymbol => SelloFormatters.currencySymbol(currencyCode);
@@ -217,6 +269,7 @@ class OrderDocument extends Equatable {
       documentPhone: _stringValue(json['document_phone']),
       documentEmail: _stringValue(json['document_email']),
       documentTerms: _stringValue(json['document_terms']),
+      documentTagline: _stringValue(json['document_tagline']),
       primaryColor: _stringValue(json['primary_color']),
       customBrandingEnabled: json['custom_branding_enabled'] == true,
       showBusinessNameWithLogo:
@@ -231,6 +284,15 @@ class OrderDocument extends Equatable {
       paymentNumber: paymentNumber,
       pendingReview: pendingReview,
       reference: _stringValue(json['reference']),
+      collectionReview: InvoiceCollectionReview.fromDb(
+        _stringValue(json['collection_review']),
+      ),
+      collectionPaymentNumber: _stringValue(json['collection_payment_number']),
+      collectionPaymentMethod: _stringValue(json['collection_payment_method']),
+      collectionPaymentAmount: json['collection_payment_amount'] == null
+          ? null
+          : _numValue(json['collection_payment_amount']),
+      collectionReceivedAt: _dateValue(json['collection_received_at']),
       lines: lines,
     );
   }
@@ -243,6 +305,8 @@ class OrderDocument extends Equatable {
         total,
         customerName,
         pendingReview,
+        collectionReview,
+        collectionPaymentNumber,
         lines,
       ];
 }

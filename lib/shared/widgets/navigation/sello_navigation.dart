@@ -47,6 +47,7 @@ class SelloBrandMark extends ConsumerWidget {
     this.hub = false,
     this.size,
     this.light = false,
+    this.onLightSurface = false,
   });
 
   final bool compact;
@@ -54,12 +55,17 @@ class SelloBrandMark extends ConsumerWidget {
   final double? size;
   final bool light;
 
+  /// Light canvases (sign-in, sign-up) prefer the light-surface wordmark.
+  /// Dark chrome keeps the reverse wordmark.
+  final bool onLightSurface;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final logoSize = size ?? (compact ? 32.0 : 36.0);
     final branding = ref.watch(brandingProvider);
+    final useLightLogo = onLightSurface && branding.hasCustomLightLogo;
 
-    if (branding.hasCustomLogo) {
+    if (useLightLogo || branding.hasCustomLogo) {
       final sidebar = hub && !compact && size == null;
       return Align(
         alignment: Alignment.centerLeft,
@@ -67,6 +73,7 @@ class SelloBrandMark extends ConsumerWidget {
           size: compact ? 26 : (sidebar ? 36 : (size ?? 36)),
           maxWidth: compact ? 88 : (sidebar ? 208 : 180),
           branding: branding,
+          onLightSurface: useLightLogo,
         ),
       );
     }

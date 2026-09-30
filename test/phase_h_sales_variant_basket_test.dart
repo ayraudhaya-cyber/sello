@@ -215,7 +215,12 @@ void main() {
       final product = _multiLock();
       await tester.pumpWidget(
         _wrap(
-          _MultiOptionHarness(product: product),
+          SingleChildScrollView(
+            child: SizedBox(
+              width: 320,
+              child: _MultiOptionHarness(product: product),
+            ),
+          ),
         ),
       );
 
@@ -225,11 +230,13 @@ void main() {
       expect(find.textContaining('1,500'), findsOneWidget);
       expect(find.textContaining('1,800'), findsOneWidget);
 
-      await tester.tap(find.text('Add').at(0));
+      await tester.ensureVisible(find.byTooltip('Add to order').at(0));
+      await tester.tap(find.byTooltip('Add to order').at(0));
       await tester.pump();
       expect(find.byIcon(Icons.add_rounded), findsOneWidget);
 
-      await tester.tap(find.text('Add'));
+      await tester.ensureVisible(find.byTooltip('Add to order'));
+      await tester.tap(find.byTooltip('Add to order'));
       await tester.pump();
       expect(find.byIcon(Icons.add_rounded), findsNWidgets(2));
     });

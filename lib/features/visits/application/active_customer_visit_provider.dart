@@ -217,6 +217,8 @@ class ActiveCustomerVisitNotifier extends AsyncNotifier<CustomerVisit?> {
           );
       state = const AsyncData(null);
       return visit;
+    } on AppFailure {
+      rethrow;
     } catch (_) {
       final clientId = OfflineClientIds.create();
       await ref.read(syncEngineProvider).enqueue(

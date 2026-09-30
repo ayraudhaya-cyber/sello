@@ -91,7 +91,13 @@ class SelloTextField extends StatelessWidget {
         floatingLabelBehavior: FloatingLabelBehavior.auto,
         prefixIcon: prefixIcon == null
             ? null
-            : Icon(prefixIcon, size: 19, color: AppColors.textTertiary),
+            : Icon(
+                prefixIcon,
+                size: 19,
+                color: enabled
+                    ? AppColors.textTertiary
+                    : AppColors.textDisabled,
+              ),
         prefixIconConstraints: const BoxConstraints(minWidth: 44),
         // Suffix actions (e.g. show/hide password) must not steal Tab focus.
         suffixIcon: suffixIcon == null

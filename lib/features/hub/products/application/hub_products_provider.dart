@@ -12,7 +12,7 @@ import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
 
-enum ProductStatusFilter { all, active, archived }
+enum ProductStatusFilter { all, active, inactive }
 
 class HubProductsState {
   const HubProductsState({
@@ -87,8 +87,9 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -98,10 +99,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
   }
 
   Future<void> _initialize() async {
-    await Future.wait([
-      _loadCategories(),
-      loadProducts(resetPage: true),
-    ]);
+    await Future.wait([_loadCategories(), loadProducts(resetPage: true)]);
   }
 
   Future<void> _loadCategories() async {
@@ -113,18 +111,12 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        errorMessage: failure.message,
-        initialized: true,
-      );
+      state = state.copyWith(errorMessage: failure.message, initialized: true);
     }
   }
 
   Future<void> refresh() async {
-    await Future.wait([
-      _loadCategories(),
-      loadProducts(resetPage: true),
-    ]);
+    await Future.wait([_loadCategories(), loadProducts(resetPage: true)]);
   }
 
   Future<void> loadProducts({
@@ -147,7 +139,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         isActive: switch (state.statusFilter) {
           ProductStatusFilter.all => null,
           ProductStatusFilter.active => true,
-          ProductStatusFilter.archived => false,
+          ProductStatusFilter.inactive => false,
         },
         page: page,
         pageSize: state.pageSize,
@@ -182,7 +174,11 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
   }
 
   Future<void> setCategoryFilter(String? value) async {
-    state = state.copyWith(categoryId: value, page: 0, clearCategory: value == null);
+    state = state.copyWith(
+      categoryId: value,
+      page: 0,
+      clearCategory: value == null,
+    );
     await loadProducts(resetPage: true);
   }
 
@@ -237,10 +233,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
       }
       return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isSaving: false,
-        errorMessage: failure.message,
-      );
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
   }
@@ -269,7 +262,10 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
     }
   }
 
-  Future<String?> setArchived(ProductSummary product, {required bool archived}) async {
+  Future<String?> setArchived(
+    ProductSummary product, {
+    required bool archived,
+  }) async {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'No active session found.';
 
@@ -280,14 +276,11 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         employeeId: session.employee.id,
         archived: archived,
       );
-      await loadProducts();
+      await loadProducts(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isSaving: false,
-        errorMessage: failure.message,
-      );
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
   }
@@ -297,7 +290,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'No active session found.';
     if (product.isActive) {
-      return 'Archive the product before permanently deleting it.';
+      return 'Deactivate the product before permanently deleting it.';
     }
 
     state = state.copyWith(isSaving: true, clearError: true);
@@ -310,10 +303,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isSaving: false,
-        errorMessage: failure.message,
-      );
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
   }
@@ -321,5 +311,5 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
 
 final hubProductsProvider =
     NotifierProvider<HubProductsNotifier, HubProductsState>(
-  HubProductsNotifier.new,
-);
+      HubProductsNotifier.new,
+    );

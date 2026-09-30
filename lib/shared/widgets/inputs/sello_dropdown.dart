@@ -1,7 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/widgets/feedback/sello_info_hint.dart';
+
+/// Next enabled row for keyboard navigation in a Hub dropdown list.
+int selloCycleEnabledIndex({
+  required int current,
+  required int count,
+  required int delta,
+  required bool Function(int index) isEnabled,
+}) {
+  if (count <= 0) return 0;
+  var index = current;
+  for (var i = 0; i < count; i++) {
+    index = (index + delta) % count;
+    if (index < 0) index += count;
+    if (isEnabled(index)) return index;
+  }
+  return current.clamp(0, count - 1);
+}
 
 /// Platform-aware Sello dropdown — the default for every select control.
 ///
@@ -39,6 +57,7 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
   final _layerLink = LayerLink();
   final _fieldKey = GlobalKey();
   final _portalController = OverlayPortalController();
+  late final FocusNode _focusNode;
 
   bool _openBelow = true;
   double _menuWidth = 200;
@@ -47,6 +66,12 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
   static const double _gap = 6;
   static const double _menuRadius = 14;
   static const double _sheetRowHeight = 52;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(debugLabel: 'SelloDropdown');
+  }
 
   DropdownMenuItem<T>? get _selectedItem {
     for (final item in widget.items) {
@@ -114,7 +139,10 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
       _portalController.hide();
     }
     widget.onChanged(value);
-    if (mounted) setState(() {});
+    if (mounted) {
+      _focusNode.requestFocus();
+      setState(() {});
+    }
   }
 
   Future<void> _openMobileSheet() async {
@@ -230,7 +258,34 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
     if (_portalController.isShowing) {
       _portalController.hide();
     }
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _onFieldKey(FocusNode node, KeyEvent event) {
+    if (!widget.enabled || context.isMobile) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final open = _portalController.isShowing;
+    if (key == LogicalKeyboardKey.escape) {
+      if (!open) return KeyEventResult.ignored;
+      _portalController.hide();
+      setState(() {});
+      return KeyEventResult.handled;
+    }
+    final opensMenu = key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.space;
+    if (opensMenu && !open) {
+      _prepareDesktopMenuGeometry();
+      _portalController.show();
+      setState(() {});
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -264,15 +319,23 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
           onDismiss: () {
             _portalController.hide();
             setState(() {});
+            _focusNode.requestFocus();
           },
           onSelected: _select,
         ),
         child: KeyedSubtree(
           key: _fieldKey,
-          child: GestureDetector(
-            onTap: _handleTap,
-            behavior: HitTestBehavior.opaque,
-            child: field,
+          child: Focus(
+            focusNode: _focusNode,
+            onKeyEvent: _onFieldKey,
+            child: GestureDetector(
+              onTap: () {
+                _focusNode.requestFocus();
+                _handleTap();
+              },
+              behavior: HitTestBehavior.opaque,
+              child: field,
+            ),
           ),
         ),
       ),
@@ -281,6 +344,7 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
 
   Widget _buildCompactField() {
     final open = !context.isMobile && _portalController.isShowing;
+    final focused = _focusNode.hasFocus || open;
     final field = SizedBox(
       height: AppSpacing.controlHeight,
       child: AnimatedContainer(
@@ -289,8 +353,8 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
           color: AppColors.surface,
           borderRadius: AppRadius.inputAll,
           border: Border.all(
-            color: open ? context.brandAccent : AppColors.outline,
-            width: open ? 1.5 : 1,
+            color: focused ? context.brandAccent : AppColors.outline,
+            width: focused ? 1.5 : 1,
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -345,8 +409,9 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
 
   Widget _buildFormField() {
     final open = !context.isMobile && _portalController.isShowing;
+    final focused = _focusNode.hasFocus || open;
     return InputDecorator(
-      isFocused: open,
+      isFocused: focused,
       isEmpty: _showingHint,
       decoration: InputDecoration(
         label: SelloFieldLabel.decorationLabel(
@@ -410,12 +475,85 @@ class _DesktopMenuOverlay<T> extends StatefulWidget {
 }
 
 class _DesktopMenuOverlayState<T> extends State<_DesktopMenuOverlay<T>> {
-  /// Only one row may be hovered — avoids stale MouseRegion exit glitches on web.
-  int? _hoveredIndex;
+  /// Keyboard / hover highlight — only one row at a time.
+  late int _activeIndex;
+  final _scroll = ScrollController();
+  final _menuFocus = FocusNode();
+  static const _rowHeight = 44.0;
 
-  void _setHovered(int? index) {
-    if (_hoveredIndex == index) return;
-    setState(() => _hoveredIndex = index);
+  @override
+  void initState() {
+    super.initState();
+    final selected = widget.items.indexWhere((item) => item.value == widget.value);
+    _activeIndex = selected >= 0 ? selected : 0;
+    _activeIndex = selloCycleEnabledIndex(
+      current: _activeIndex - 1,
+      count: widget.items.length,
+      delta: 1,
+      isEnabled: (index) => widget.items[index].enabled,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _menuFocus.dispose();
+    super.dispose();
+  }
+
+  void _setActive(int index) {
+    if (_activeIndex == index) return;
+    setState(() => _activeIndex = index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final target = (index * _rowHeight).clamp(
+        0.0,
+        _scroll.position.maxScrollExtent,
+      );
+      _scroll.jumpTo(target);
+    });
+  }
+
+  void _move(int delta) {
+    _setActive(
+      selloCycleEnabledIndex(
+        current: _activeIndex,
+        count: widget.items.length,
+        delta: delta,
+        isEnabled: (index) => widget.items[index].enabled,
+      ),
+    );
+  }
+
+  void _selectActive() {
+    if (_activeIndex < 0 || _activeIndex >= widget.items.length) return;
+    final item = widget.items[_activeIndex];
+    if (!item.enabled) return;
+    widget.onSelected(item.value);
+  }
+
+  KeyEventResult _onMenuKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _move(1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _move(-1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.space) {
+      _selectActive();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      widget.onDismiss();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -443,35 +581,41 @@ class _DesktopMenuOverlayState<T> extends State<_DesktopMenuOverlay<T>> {
             shadowColor: Colors.transparent,
             borderRadius: BorderRadius.circular(widget.menuRadius),
             clipBehavior: Clip.antiAlias,
-            child: MouseRegion(
-              onExit: (_) => _setHovered(null),
-              child: Container(
-                width: widget.menuWidth,
-                constraints: BoxConstraints(maxHeight: widget.maxMenuHeight),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(widget.menuRadius),
-                  border: Border.all(color: AppColors.outlinePanel),
-                  boxShadow: AppShadows.level2,
-                ),
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  shrinkWrap: true,
-                  itemCount: widget.items.length,
-                  itemBuilder: (context, index) {
-                    final item = widget.items[index];
-                    final isSelected = item.value == widget.value;
-                    final isHovered = _hoveredIndex == index;
-                    return _DesktopMenuRow<T>(
-                      item: item,
-                      isSelected: isSelected,
-                      isHovered: isHovered,
-                      onHover: item.enabled
-                          ? () => _setHovered(index)
-                          : null,
-                      onSelected: widget.onSelected,
-                    );
-                  },
+            child: Focus(
+              focusNode: _menuFocus,
+              autofocus: true,
+              onKeyEvent: _onMenuKey,
+              child: MouseRegion(
+                onExit: (_) {},
+                child: Container(
+                  width: widget.menuWidth,
+                  constraints: BoxConstraints(maxHeight: widget.maxMenuHeight),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(widget.menuRadius),
+                    border: Border.all(color: AppColors.outlinePanel),
+                    boxShadow: AppShadows.level2,
+                  ),
+                  child: ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    shrinkWrap: true,
+                    itemCount: widget.items.length,
+                    itemBuilder: (context, index) {
+                      final item = widget.items[index];
+                      final isSelected = item.value == widget.value;
+                      final isHovered = _activeIndex == index;
+                      return _DesktopMenuRow<T>(
+                        item: item,
+                        isSelected: isSelected,
+                        isHovered: isHovered,
+                        onHover: item.enabled
+                            ? () => _setActive(index)
+                            : null,
+                        onSelected: widget.onSelected,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

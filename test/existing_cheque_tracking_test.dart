@@ -41,7 +41,7 @@ void main() {
       expect(c.isPendingApproval, isFalse);
       expect(c.canApproveCollection, isFalse);
       expect(c.reducesOutstanding, isFalse);
-      expect(c.displayLabel, 'Awaiting collection');
+      expect(c.displayLabel, 'Waiting to receive · old record');
       expect(c.canCollect, isTrue);
     });
 
@@ -55,7 +55,7 @@ void main() {
       expect(c.canApproveCollection, isFalse);
       expect(c.canDeposit, isFalse);
       expect(c.reducesOutstanding, isFalse);
-      expect(c.displayLabel, 'Collected · Historical');
+      expect(c.displayLabel, 'In hand · old record');
       expect(c.canBounce, isTrue);
     });
 
@@ -68,8 +68,8 @@ void main() {
         status: ChequeStatus.cleared,
         source: ChequeSource.existing,
       );
-      expect(deposited.displayLabel, 'Deposited · Historical');
-      expect(cleared.displayLabel, 'Cleared · Historical');
+      expect(deposited.displayLabel, 'At the bank · old record');
+      expect(cleared.displayLabel, 'Bank paid · old record');
       expect(deposited.reducesOutstanding, isFalse);
       expect(cleared.reducesOutstanding, isFalse);
       expect(deposited.canBounce, isTrue);
@@ -84,7 +84,7 @@ void main() {
       );
       expect(c.isTrackingOnly, isFalse);
       expect(c.isPendingApproval, isTrue);
-      expect(c.displayLabel, 'Collected · Pending approval');
+      expect(c.displayLabel, 'Received — needs approval');
       expect(c.canApproveCollection, isTrue);
       expect(c.canBounce, isFalse);
     });
@@ -93,7 +93,7 @@ void main() {
       final c = cheque(status: ChequeStatus.collected);
       expect(c.source, ChequeSource.sello);
       expect(c.isPendingApproval, isTrue);
-      expect(c.displayLabel, 'Collected · Pending approval');
+      expect(c.displayLabel, 'Received — needs approval');
     });
 
     test('CreateExistingChequeInput carries optional blank dates', () {

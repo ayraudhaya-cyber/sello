@@ -355,7 +355,7 @@ class CustomerDetailsDialog extends StatelessWidget {
       ),
       footer: canManage
           ? SelloDialogFooter(
-              cancelLabel: customer.isActive ? 'Archive' : 'Restore',
+              cancelLabel: customer.isActive ? 'Deactivate' : 'Reactivate',
               cancelVariant: SelloButtonVariant.ghost,
               onCancel: onToggleArchive,
               primaryLabel: 'Edit Customer',
@@ -782,7 +782,7 @@ class _CustomerHero extends StatelessWidget {
         ],
         const SizedBox(height: 14),
         SelloStatusBadge(
-          label: customer.isActive ? 'Active' : 'Archived',
+          label: customer.isActive ? 'Active' : 'Inactive',
           tone: customer.isActive
               ? SelloStatusTone.success
               : SelloStatusTone.neutral,
@@ -815,8 +815,8 @@ class _ArchivedNotice extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Archived customers are hidden from new sales but remain '
-              'available for reports and history.',
+              'This customer is inactive and is hidden from new sales. '
+              'Past orders and payments still show them.',
               style: _CustomerDetailType.label.copyWith(height: 1.4),
             ),
           ),

@@ -3,13 +3,29 @@ import 'package:sello/shared/models/visit_payment_arrangement.dart';
 
 /// Pure visit-checkout rules for payment arrangements (testable).
 abstract final class VisitCheckoutPaymentRules {
-  /// Whether submit should open Record cheque before finishing the visit.
+  /// Whether submit should offer Record cheque after the order is saved.
+  /// The dialog is skippable; dismissing it does not undo the order.
   static bool shouldOpenRecordCheque(VisitPaymentArrangement arrangement) =>
       arrangement.opensRecordCheque;
 
-  /// Whether submit may create a cheque / payment ledger entry for this choice.
-  static bool shouldCreateChequeRecord(VisitPaymentArrangement arrangement) =>
-      arrangement.opensRecordCheque;
+  /// Order just created on this visit — prefer it when recording a cheque.
+  static String? preferredOrderIdForCheque({
+    required VisitPaymentArrangement arrangement,
+    required String? createdOrderId,
+  }) {
+    if (!arrangement.opensRecordCheque) return null;
+    final id = createdOrderId?.trim();
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
+  /// A cheque ledger row is created only after Record cheque is saved.
+  /// Selecting “Cheque received” never inserts an empty or incomplete cheque.
+  static bool shouldCreateChequeRecord({
+    required VisitPaymentArrangement arrangement,
+    required bool recordChequeSubmitted,
+  }) =>
+      arrangement.opensRecordCheque && recordChequeSubmitted;
 
   /// Cheque later never requires an expected date.
   static bool requiresExpectedCollectionDate(

@@ -25,6 +25,14 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
   buffer.writeln('<div class="card">');
   buffer.writeln('<div class="title">${_esc(doc.documentTitle)}</div>');
   buffer.writeln('<div class="date">${_esc(date)}</div>');
+  if (!doc.purpose.isPaymentDocument && doc.collectionStatusTag != null) {
+    final cls = doc.collectionReview.showsPaymentDetails
+        ? 'status-tag approved'
+        : 'status-tag processing';
+    buffer.writeln(
+      '<div class="$cls">${_esc(doc.collectionStatusTag!)}</div>',
+    );
+  }
 
   if (doc.purpose.isPaymentDocument) {
     _writePaymentBody(buffer, doc);
@@ -42,8 +50,11 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
       ..writeln('</div>');
   }
 
+  buffer.writeln('<div class="thanks">Thank you for your business!</div>');
+  if (identity.hasTagline) {
+    buffer.writeln('<div class="tagline">${_esc(identity.tagline!)}</div>');
+  }
   buffer
-    ..writeln('<div class="thanks">Thank you for your business!</div>')
     ..writeln('</div>') // sheet
     ..writeln('<script>')
     ..writeln(r'''
@@ -103,6 +114,20 @@ void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
   }
   if (doc.salesRepName != null) {
     _meta(buffer, 'Sales Rep', doc.salesRepName!);
+  }
+  if (doc.collectionReview.showsPaymentDetails) {
+    if (doc.collectionPaymentNumber != null) {
+      _meta(buffer, 'Payment', doc.collectionPaymentNumber!);
+    }
+    if (doc.collectionMethodLabel != null) {
+      _meta(buffer, 'Method', doc.collectionMethodLabel!);
+    }
+    if (doc.collectionPaymentAmount != null) {
+      _meta(buffer, 'Amount received', doc.money(doc.collectionPaymentAmount!));
+    }
+    if (doc.collectionReceivedAt != null) {
+      _meta(buffer, 'Recorded on', SelloFormatters.date(doc.collectionReceivedAt!));
+    }
   }
   if (doc.outstandingBalance != null) {
     _meta(buffer, 'Outstanding balance', doc.money(doc.outstandingBalance!));
@@ -286,6 +311,24 @@ html, body {
   color: #57534e;
   font-size: 11px;
 }
+.status-tag {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.status-tag.processing {
+  background: #faf1df;
+  color: #c9862a;
+  border: 1px solid #f0dcb4;
+}
+.status-tag.approved {
+  background: #e2f5ec;
+  color: #149063;
+  border: 1px solid #b7e0cc;
+}
 .meta {
   margin-top: 12px;
   padding-top: 10px;
@@ -367,6 +410,14 @@ html, body {
   font-size: 13px;
   font-weight: 500;
   color: #57534e;
+}
+.tagline {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #57534e;
+  white-space: pre-wrap;
 }
 @media print {
   .sheet { max-width: none; }

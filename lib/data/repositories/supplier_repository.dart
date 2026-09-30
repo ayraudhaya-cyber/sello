@@ -1,4 +1,5 @@
 import 'package:sello/core/error/app_failure.dart';
+import 'package:sello/shared/lifecycle/business_entity_lifecycle.dart';
 import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
@@ -510,6 +511,16 @@ class SupplierRepository {
     }
   }
 
+  Future<bool> _referenced(String table, String column, String id) async {
+    try {
+      final rows =
+          await _client.from(table).select('id').eq(column, id).limit(1);
+      return (rows as List).isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Future<void> archiveSupplier({
     required String companyId,
     required String supplierId,
@@ -565,10 +576,16 @@ class SupplierRepository {
           'This supplier has already been permanently deleted.',
         );
       }
-      if (existing['is_active'] == true) {
-        throw const ValidationFailure(
-          'Archive the supplier before permanently deleting them.',
-        );
+      final used =
+          await _referenced('products', 'preferred_supplier_id', supplierId) ||
+              await _referenced('product_suppliers', 'supplier_id', supplierId);
+      final decision = BusinessEntityLifecycle.permanentDelete(
+        isActive: existing['is_active'] == true,
+        hasHistoricalUse: used,
+        noun: 'supplier',
+      );
+      if (!decision.allowed) {
+        throw ValidationFailure(decision.message!);
       }
 
       await _client.from('suppliers').update({

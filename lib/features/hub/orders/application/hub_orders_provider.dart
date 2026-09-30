@@ -171,7 +171,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         OrderDateFilter.thisMonth => DateTime.utc(now.year, now.month, 1),
       };
 
-      final result = await _repo.fetchOrders(
+      final ordersFuture = _repo.fetchOrders(
         search: state.search,
         statuses: switch (state.statusFilter) {
           OrderStatusFilter.all => null,
@@ -202,7 +202,9 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         page: page,
         pageSize: state.pageSize,
       );
-      final counts = await _repo.fetchCounts();
+      final countsFuture = _repo.fetchCounts();
+      final result = await ordersFuture;
+      final counts = await countsFuture;
 
       state = state.copyWith(
         items: result.items,
@@ -289,7 +291,10 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         unawaited(refreshHubProductsQuietly(ref));
       }
       state = state.copyWith(isSaving: false, clearError: true);
-      return OrderMutationResult.ok(confirmation: saved.confirmation);
+      return OrderMutationResult.ok(
+        confirmation: saved.confirmation,
+        orderId: saved.orderId,
+      );
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return OrderMutationResult.fail(failure.message);

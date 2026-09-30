@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/payments/application/order_collection_rules.dart';
+import 'package:sello/features/payments/presentation/record_order_collection_sheet.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
 import 'package:sello/shared/models/order_status.dart';
+import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/order_timeline.dart';
+import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/product_field.dart';
 import 'package:sello/shared/utils/country_catalog.dart';
@@ -30,7 +35,7 @@ abstract final class _OrderGrid {
 }
 
 /// Internal staff Order Details workspace — not the customer invoice document.
-class OrderDetailsDialog extends ConsumerWidget {
+class OrderDetailsDialog extends ConsumerStatefulWidget {
   const OrderDetailsDialog({
     super.key,
     required this.detail,
@@ -47,6 +52,7 @@ class OrderDetailsDialog extends ConsumerWidget {
     this.onPrintInvoice,
     this.onWhatsAppInvoice,
     this.onSmsInvoice,
+    this.onCollectionSaved,
     this.readOnly = false,
   });
 
@@ -64,12 +70,119 @@ class OrderDetailsDialog extends ConsumerWidget {
   final VoidCallback? onPrintInvoice;
   final VoidCallback? onWhatsAppInvoice;
   final VoidCallback? onSmsInvoice;
+
+  /// Called after a collection is saved so lists can refresh.
+  final VoidCallback? onCollectionSaved;
   final bool readOnly;
 
-  OrderSummary get order => detail.summary;
+  @override
+  ConsumerState<OrderDetailsDialog> createState() => _OrderDetailsDialogState();
+}
+
+class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
+  late OrderDetail _detail;
+  OrderCollectionBalance? _collections;
+  bool _recording = false;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    _detail = widget.detail;
+    Future.microtask(_loadCollections);
+  }
+
+  @override
+  void didUpdateWidget(OrderDetailsDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.detail.summary.id != widget.detail.summary.id) {
+      _detail = widget.detail;
+      Future.microtask(_loadCollections);
+    }
+  }
+
+  OrderDetail get detail => _detail;
+  OrderSummary get order => _detail.summary;
+  VoidCallback? get onEdit => widget.onEdit;
+  VoidCallback? get onComplete => widget.onComplete;
+  String get completeLabel => widget.completeLabel;
+  VoidCallback? get onFulfill => widget.onFulfill;
+  VoidCallback? get onFulfillAll => widget.onFulfillAll;
+  VoidCallback? get onCancelRemaining => widget.onCancelRemaining;
+  VoidCallback? get onCancelOrder => widget.onCancelOrder;
+  VoidCallback? get onArchive => widget.onArchive;
+  VoidCallback? get onViewInvoice => widget.onViewInvoice;
+  VoidCallback? get onPrintInvoice => widget.onPrintInvoice;
+  VoidCallback? get onWhatsAppInvoice => widget.onWhatsAppInvoice;
+  VoidCallback? get onSmsInvoice => widget.onSmsInvoice;
+  bool get readOnly => widget.readOnly;
+  String get currencySymbol => widget.currencySymbol;
+
+  Future<void> _loadCollections() async {
+    if (order.isDraft) return;
+    try {
+      final balance = await ref
+          .read(paymentRepositoryProvider)
+          .fetchOrderCollections(order.id);
+      if (!mounted) return;
+      setState(() => _collections = balance);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _collections = null);
+    }
+  }
+
+  num get _amountPaid => _collections?.amountPaid ?? 0;
+
+  num get _outstanding => _collections?.outstandingFor(order.total) ??
+      (order.paymentStatus == PaymentStatus.paid ? 0 : order.total);
+
+  bool get _canCollect =>
+      !readOnly &&
+      OrderCollectionRules.canCollect(
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        total: order.total,
+      ) &&
+      _outstanding > 0.001;
+
+  Future<void> _recordCollection() async {
+    if (_recording || !_canCollect) return;
+    setState(() => _recording = true);
+    final saved = await showRecordOrderCollectionSheet(
+      context: context,
+      customerId: order.customerId,
+      customerName: order.customerName ?? 'Customer',
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      outstanding: _outstanding,
+      currencySymbol: currencySymbol,
+    );
+    if (!mounted) return;
+    if (!saved) {
+      setState(() => _recording = false);
+      return;
+    }
+    try {
+      final fresh =
+          await ref.read(orderRepositoryProvider).fetchById(order.id);
+      final balance = await ref
+          .read(paymentRepositoryProvider)
+          .fetchOrderCollections(order.id);
+      if (!mounted) return;
+      setState(() {
+        if (fresh != null) _detail = fresh;
+        _collections = balance;
+        _recording = false;
+      });
+      widget.onCollectionSaved?.call();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _recording = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isMobile = context.isMobile;
     final dash = '—';
     final canManageDraft = !readOnly && order.isEditable;
@@ -223,8 +336,21 @@ class OrderDetailsDialog extends ConsumerWidget {
               discount: order.displayDiscountAmount,
               tax: order.taxAmount,
               total: order.total,
+              amountPaid: order.isDraft ? null : _amountPaid,
+              outstanding: order.isDraft ? null : _outstanding,
             ),
           ),
+          if (!order.isDraft &&
+              (_collections?.entries.isNotEmpty ?? false)) ...[
+            const SizedBox(height: _OrderGrid.sectionGap),
+            _Section(
+              label: 'Collections',
+              child: _CollectionsList(
+                entries: _collections!.entries,
+                currencySymbol: currencySymbol,
+              ),
+            ),
+          ],
           if (hasNotes) ...[
             const SizedBox(height: _OrderGrid.sectionGap),
             _Section(
@@ -260,7 +386,34 @@ class OrderDetailsDialog extends ConsumerWidget {
               primaryLabel: completeLabel,
               onPrimary: onComplete,
             )
-          : canFulfill
+          : _canCollect
+              ? SelloDialogFooter(
+                  destructiveLabel: canFulfill
+                      ? (totalDelivered > 0
+                          ? 'Cancel remaining'
+                          : 'Cancel order')
+                      : (canArchive ? 'Archive' : null),
+                  onDestructive: canFulfill
+                      ? (totalDelivered > 0
+                          ? onCancelRemaining
+                          : onCancelOrder)
+                      : (canArchive ? onArchive : null),
+                  leading: _InvoiceFooterLinks(
+                    onViewInvoice: onViewInvoice,
+                    onPrintInvoice: onPrintInvoice,
+                    onWhatsAppInvoice: onWhatsAppInvoice,
+                    onSmsInvoice: onSmsInvoice,
+                  ),
+                  cancelLabel: canFulfill ? 'Record delivery' : 'Close',
+                  cancelVariant: SelloButtonVariant.outline,
+                  onCancel: canFulfill
+                      ? onFulfill
+                      : () => Navigator.of(context).maybePop(),
+                  primaryLabel: 'Record collection',
+                  primaryLoading: _recording,
+                  onPrimary: _recording ? null : () => _recordCollection(),
+                )
+              : canFulfill
               ? SelloDialogFooter(
                   destructiveLabel: totalDelivered > 0
                       ? 'Cancel remaining'
@@ -933,6 +1086,57 @@ String _deliveryLine(OrderLineItem line) {
       '${line.cancelledQuantity > 0 ? ' · ${SelloFormatters.quantity(line.cancelledQuantity)} cancelled' : ''}';
 }
 
+class _CollectionsList extends StatelessWidget {
+  const _CollectionsList({
+    required this.entries,
+    required this.currencySymbol,
+  });
+
+  final List<OrderCollectionEntry> entries;
+  final String currencySymbol;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < entries.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entries[i].paymentNumber.isEmpty
+                          ? entries[i].method.label
+                          : entries[i].paymentNumber,
+                      style: _Type.productName,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${entries[i].method.label} · ${SelloFormatters.date(entries[i].receivedAt)}'
+                      '${entries[i].status == PaymentRecordStatus.completed ? '' : ' · ${entries[i].status.label}'}',
+                      style: _Type.meta,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                SelloFormatters.currency(
+                  entries[i].amount,
+                  symbol: currencySymbol,
+                ),
+                style: _Type.productName,
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _TotalsBlock extends StatelessWidget {
   const _TotalsBlock({
     required this.currencySymbol,
@@ -940,6 +1144,8 @@ class _TotalsBlock extends StatelessWidget {
     required this.discount,
     required this.tax,
     required this.total,
+    this.amountPaid,
+    this.outstanding,
   });
 
   final String currencySymbol;
@@ -947,6 +1153,8 @@ class _TotalsBlock extends StatelessWidget {
   final num discount;
   final num tax;
   final num total;
+  final num? amountPaid;
+  final num? outstanding;
 
   @override
   Widget build(BuildContext context) {
@@ -998,6 +1206,25 @@ class _TotalsBlock extends StatelessWidget {
                 emphasize: true,
               ),
             ),
+            if (amountPaid != null && outstanding != null) ...[
+              const SizedBox(height: 10),
+              _TotalLine(
+                label: 'Paid',
+                value: SelloFormatters.currency(
+                  amountPaid!,
+                  symbol: currencySymbol,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _TotalLine(
+                label: 'Outstanding',
+                value: SelloFormatters.currency(
+                  outstanding!,
+                  symbol: currencySymbol,
+                ),
+                emphasize: outstanding! > 0,
+              ),
+            ],
           ],
         ),
       ),

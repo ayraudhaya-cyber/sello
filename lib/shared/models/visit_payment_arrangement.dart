@@ -1,7 +1,8 @@
 /// How the buyer intends to settle during a customer visit.
 ///
 /// [paidToday] opens the receive-payment dialog.
-/// [chequeReceived] opens [RecordChequeDialog] for an actual cheque in hand.
+/// [chequeReceived] is collection intent only. Record cheque is offered next
+/// and may be skipped — no ledger row until the instrument is actually saved.
 /// [chequeCollectionScheduled] records intent only — no cheque ledger row.
 enum VisitPaymentArrangement {
   paidToday,
@@ -21,13 +22,15 @@ enum VisitPaymentArrangement {
   String get helpText => switch (this) {
         VisitPaymentArrangement.paidToday => 'Collect payment now',
         VisitPaymentArrangement.creditSale => 'On account',
-        VisitPaymentArrangement.chequeReceived => 'Cheque in hand',
+        VisitPaymentArrangement.chequeReceived =>
+          'Customer intends to pay by cheque',
         VisitPaymentArrangement.chequeCollectionScheduled =>
           'Customer will give the cheque later',
         VisitPaymentArrangement.noneYet => 'Settle later',
       };
 
-  /// Opens Record cheque and creates a cheque ledger row.
+  /// Offers Record cheque after checkout. Saving the form creates the ledger
+  /// row; skipping does not.
   bool get opensRecordCheque => this == VisitPaymentArrangement.chequeReceived;
 
   /// Optional expected-around date for cheque-later (informational only).

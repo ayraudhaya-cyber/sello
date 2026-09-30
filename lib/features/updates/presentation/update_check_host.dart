@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/responsive/responsive.dart';
@@ -5,6 +8,8 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/updates/presentation/app_updated_card.dart';
 import 'package:sello/features/updates/presentation/update_prompt.dart';
 import 'package:sello/features/updates/presentation/whats_new_banner.dart';
+import 'package:sello/services/updates/installer_download.dart';
+import 'package:sello/services/updates/installer_download_update.dart';
 import 'package:sello/services/updates/release_highlights_store.dart';
 import 'package:sello/services/updates/release_manifest_config.dart';
 import 'package:sello/services/updates/sello_build_meta.dart';
@@ -37,11 +42,29 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   String? _promptedIdentity;
   String? _highlightsIdentity;
   String? _dismissedHighlightsIdentity;
+  StreamSubscription<InstallerDownloadUpdate>? _downloadSub;
+  var _downloading = false;
+  double? _downloadFraction;
+  String? _downloadError;
+
+  bool _downloadsInApp(UpdateCheckSnapshot? snapshot) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) {
+      return false;
+    }
+    return snapshot?.channel?.destinationKind ==
+        ReleaseDestinationKind.installer;
+  }
 
   UpdatePresentationStyle get _optionalStyle =>
       UpdatePresentationPolicy.forPlatform(
         ReleaseManifestConfig.currentPlatform,
       );
+
+  @override
+  void dispose() {
+    _downloadSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,10 +84,13 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
 
     final showOptional = _optionalVisible &&
         snapshot?.status == UpdateCheckStatus.updateAvailable;
+    final inAppDownload = _downloadsInApp(snapshot);
     final useWhatsNew =
         showOptional && _optionalStyle == UpdatePresentationStyle.whatsNew;
-    final useModal =
-        showOptional && _optionalStyle == UpdatePresentationStyle.updateModal;
+    final useModal = showOptional &&
+        _optionalStyle == UpdatePresentationStyle.updateModal &&
+        !inAppDownload;
+    final useInstallerCard = showOptional && inAppDownload;
     final showHighlights = _highlightsVisible &&
         snapshot != null &&
         snapshot.status == UpdateCheckStatus.upToDate &&
@@ -95,6 +121,30 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
                       onUpdate: () => _openDestination(snapshot),
                     ),
                   ),
+                ),
+              ),
+            ),
+          )
+        else if (useInstallerCard)
+          Positioned(
+            right: isMobile ? 16 : 24,
+            left: isMobile ? 16 : null,
+            bottom: 16 + MediaQuery.paddingOf(context).bottom,
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isMobile ? double.infinity : 400,
+                ),
+                child: OptionalUpdatePrompt(
+                  snapshot: snapshot!,
+                  downloading: _downloading,
+                  downloadFraction: _downloadFraction,
+                  downloadError: _downloadError,
+                  onLater: _postpone,
+                  onUpdate: () => _openDestination(snapshot),
                 ),
               ),
             ),
@@ -214,6 +264,8 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   }
 
   Future<void> _postpone() async {
+    await _downloadSub?.cancel();
+    _downloading = false;
     await ref.read(updateCheckControllerProvider.notifier).postpone();
     if (!mounted) return;
     setState(() => _optionalVisible = false);
@@ -236,6 +288,10 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
       );
       return;
     }
+    if (_downloadsInApp(snapshot)) {
+      await _downloadWindowsInstaller(parsed);
+      return;
+    }
     final ok = await launchUrl(parsed, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       SelloSnackbars.info(
@@ -243,5 +299,39 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
         'Unable to open the update destination.',
       );
     }
+  }
+
+  Future<void> _downloadWindowsInstaller(Uri url) async {
+    if (_downloading) return;
+    await _downloadSub?.cancel();
+    setState(() {
+      _downloading = true;
+      _downloadFraction = null;
+      _downloadError = null;
+    });
+    _downloadSub = downloadInstaller(url).listen((update) async {
+      if (!mounted) return;
+      if (update.error != null) {
+        setState(() {
+          _downloading = false;
+          _downloadError = update.error;
+        });
+        return;
+      }
+      setState(() => _downloadFraction = update.fraction);
+      if (!update.isComplete) return;
+      final opened = await openInstaller(update.filePath!);
+      if (!mounted) return;
+      setState(() {
+        _downloading = false;
+        _downloadError = opened ? null : 'Unable to open the installer.';
+      });
+      if (opened) {
+        SelloSnackbars.success(
+          context,
+          'The installer is opening. You can keep using Sello until it starts.',
+        );
+      }
+    });
   }
 }

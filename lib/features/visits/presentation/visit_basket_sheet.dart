@@ -16,6 +16,7 @@ Future<bool?> showVisitBasketSheet({
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: true,
     backgroundColor: AppColors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(
@@ -67,22 +68,11 @@ class _VisitBasketSheetState extends State<_VisitBasketSheet> {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.outlinePanel,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
               const Text(
                 'Basket',
                 style: TextStyle(
@@ -201,66 +191,60 @@ class _BasketLine extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  line.displayTitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  meta,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  SelloFormatters.currency(
-                    line.lineTotal,
-                    symbol: currencySymbol,
-                  ),
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+          Text(
+            line.displayTitle,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              height: 1.3,
+              color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          ProductQuantityControl(
-            value: line.quantity,
-            allowZero: true,
-            showRemove: true,
-            maxQuantity: maxQuantity,
-            onIncreaseBlocked: onStockLimitReached,
-            onChanged: (qty) {
-              if (qty < 1) {
-                onRemove();
-              } else {
-                onQuantity(qty);
-              }
-            },
-            onRemove: onRemove,
-            compact: true,
+          const SizedBox(height: 2),
+          Text(
+            meta,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12.5,
+              height: 1.3,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            SelloFormatters.currency(
+              line.lineTotal,
+              symbol: currencySymbol,
+            ),
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ProductQuantityControl(
+              value: line.quantity,
+              allowZero: true,
+              showRemove: true,
+              maxQuantity: maxQuantity,
+              onIncreaseBlocked: onStockLimitReached,
+              onChanged: (qty) {
+                if (qty < 1) {
+                  onRemove();
+                } else {
+                  onQuantity(qty);
+                }
+              },
+              onRemove: onRemove,
+            ),
           ),
         ],
       ),

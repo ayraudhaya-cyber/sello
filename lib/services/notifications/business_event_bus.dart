@@ -398,15 +398,15 @@ abstract final class BusinessEvents {
     type: NotificationTypes.chequeRecorded,
     title: 'New cheque recorded',
     summary: awaitingCollection
-        ? '$amountLabel cheque from $customerName is awaiting collection.'
+        ? '$amountLabel cheque from $customerName is waiting to be received.'
         : pendingApproval
-            ? '$amountLabel cheque from $customerName is pending approval.'
-            : '$amountLabel cheque from $customerName was collected.',
+            ? '$amountLabel cheque from $customerName needs approval.'
+            : '$amountLabel cheque from $customerName was received.',
     body: awaitingCollection
-        ? 'Outstanding is unchanged until the cheque is collected.'
+        ? 'What they owe stays the same until you receive the cheque.'
         : pendingApproval
-            ? 'Outstanding is unchanged until an Owner or Manager approves.'
-            : 'Outstanding was reduced. Clearance is still pending.',
+            ? 'What they owe stays the same until an owner or manager approves.'
+            : 'What they owe went down. Take the cheque to the bank next.',
     priority: NotificationPriority.high,
     referenceType: 'cheque',
     referenceId: chequeId,

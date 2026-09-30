@@ -11,18 +11,24 @@ class OptionalUpdatePrompt extends StatefulWidget {
     required this.snapshot,
     required this.onLater,
     required this.onUpdate,
+    this.downloading = false,
+    this.downloadFraction,
+    this.downloadError,
   });
 
   final UpdateCheckSnapshot snapshot;
   final VoidCallback onLater;
   final VoidCallback onUpdate;
+  final bool downloading;
+  final double? downloadFraction;
+  final String? downloadError;
 
   @override
   State<OptionalUpdatePrompt> createState() => _OptionalUpdatePromptState();
 }
 
 class _OptionalUpdatePromptState extends State<OptionalUpdatePrompt> {
-  var _showNotes = false;
+  var _showNotes = true;
 
   @override
   Widget build(BuildContext context) {
@@ -118,17 +124,42 @@ class _OptionalUpdatePromptState extends State<OptionalUpdatePrompt> {
             ],
           ],
           const SizedBox(height: 18),
+          if (widget.downloading) ...[
+            LinearProgressIndicator(
+              value: widget.downloadFraction,
+              minHeight: 4,
+              borderRadius: BorderRadius.circular(99),
+              color: context.brandAccent,
+              backgroundColor: AppColors.outlineSubtle,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (widget.downloadError != null) ...[
+            Text(
+              widget.downloadError!,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12.5,
+                color: AppColors.error,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             children: [
               SelloButton(
                 label: 'Later',
                 variant: SelloButtonVariant.ghost,
-                onPressed: widget.onLater,
+                onPressed: widget.downloading ? null : widget.onLater,
               ),
               const Spacer(),
               SelloButton(
-                label: 'Update',
-                onPressed: widget.onUpdate,
+                label: widget.downloading
+                    ? (widget.downloadFraction == null
+                        ? 'Downloading…'
+                        : 'Downloading ${(widget.downloadFraction! * 100).round()}%')
+                    : 'Update',
+                onPressed: widget.downloading ? null : widget.onUpdate,
               ),
             ],
           ),

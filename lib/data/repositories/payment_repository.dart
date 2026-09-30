@@ -209,45 +209,20 @@ class PaymentRepository {
     try {
       final now = DateTime.now().toUtc();
       final startOfDay = DateTime.utc(now.year, now.month, now.day);
+      final startIso = startOfDay.toIso8601String();
 
-      final todayRows = await _client
-          .from('payments')
-          .select('amount')
-          .isFilter('deleted_at', null)
-          .eq('status', PaymentRecordStatus.completed.dbValue)
-          .gte('received_at', startOfDay.toIso8601String());
-
-      num collectedToday = 0;
-      for (final row in todayRows as List) {
-        collectedToday += _asNum((row as Map)['amount']);
-      }
-
-      final customerRows = await _client
-          .from('customers')
-          .select(
-            'current_balance, wallet_balance, credit_allowed, credit_limit',
-          )
-          .isFilter('deleted_at', null)
-          .eq('is_active', true);
-
-      num outstanding = 0;
-      num wallet = 0;
-      num pendingCredit = 0;
-      for (final row in customerRows as List) {
-        final map = Map<String, dynamic>.from(row as Map);
-        final balance = _asNum(map['current_balance']);
-        outstanding += balance;
-        wallet += _asNum(map['wallet_balance']);
-        if (map['credit_allowed'] == true && balance > 0) {
-          pendingCredit += balance;
-        }
-      }
+      final totals = await Future.wait([
+        _sumPaymentsCollectedSince(startIso),
+        _sumActiveCustomers('current_balance'),
+        _sumActiveCustomers('wallet_balance'),
+        _sumPendingCredit(),
+      ]);
 
       return PaymentDashboardStats(
-        collectedToday: collectedToday,
-        outstandingReceivables: outstanding,
-        walletIssued: wallet,
-        pendingCredit: pendingCredit,
+        collectedToday: totals[0],
+        outstandingReceivables: totals[1],
+        walletIssued: totals[2],
+        pendingCredit: totals[3],
       );
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
@@ -255,6 +230,98 @@ class PaymentRepository {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  Future<num> _sumPaymentsCollectedSince(String startIso) async {
+    try {
+      final rows = await _client
+          .from('payments')
+          .select('total:amount.sum()')
+          .isFilter('deleted_at', null)
+          .eq('status', PaymentRecordStatus.completed.dbValue)
+          .gte('received_at', startIso);
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } on PostgrestException {
+      // Database aggregates unavailable — fall through to a row scan.
+    }
+
+    final todayRows = await _client
+        .from('payments')
+        .select('amount')
+        .isFilter('deleted_at', null)
+        .eq('status', PaymentRecordStatus.completed.dbValue)
+        .gte('received_at', startIso);
+    num collected = 0;
+    for (final row in todayRows as List) {
+      collected += _asNum((row as Map)['amount']);
+    }
+    return collected;
+  }
+
+  Future<num> _sumActiveCustomers(String column) async {
+    try {
+      final rows = await _client
+          .from('customers')
+          .select('total:$column.sum()')
+          .isFilter('deleted_at', null)
+          .eq('is_active', true);
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } on PostgrestException {
+      // Database aggregates unavailable — fall through to a row scan.
+    }
+
+    final customerRows = await _client
+        .from('customers')
+        .select(column)
+        .isFilter('deleted_at', null)
+        .eq('is_active', true);
+    num total = 0;
+    for (final row in customerRows as List) {
+      total += _asNum((row as Map)[column]);
+    }
+    return total;
+  }
+
+  Future<num> _sumPendingCredit() async {
+    try {
+      final rows = await _client
+          .from('customers')
+          .select('total:current_balance.sum()')
+          .isFilter('deleted_at', null)
+          .eq('is_active', true)
+          .eq('credit_allowed', true)
+          .gt('current_balance', 0);
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } on PostgrestException {
+      // Database aggregates unavailable — fall through to a row scan.
+    }
+
+    final customerRows = await _client
+        .from('customers')
+        .select('current_balance, credit_allowed')
+        .isFilter('deleted_at', null)
+        .eq('is_active', true);
+    num pendingCredit = 0;
+    for (final row in customerRows as List) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final balance = _asNum(map['current_balance']);
+      if (map['credit_allowed'] == true && balance > 0) {
+        pendingCredit += balance;
+      }
+    }
+    return pendingCredit;
+  }
+
+  /// Aggregate select returns `[{alias: value}]`. Null means the response was
+  /// not an aggregate, so the caller should scan rows instead.
+  num? _readAggregate(dynamic response, String alias) {
+    if (response is! List || response.isEmpty) return 0;
+    final row = response.first;
+    if (row is! Map || !row.containsKey(alias)) return null;
+    return _asNum(row[alias]);
   }
 
   Future<PaymentDetail?> fetchById(String paymentId) async {
@@ -516,6 +583,58 @@ class PaymentRepository {
       );
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapPaymentError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  Future<OrderCollectionBalance> fetchOrderCollections(String orderId) async {
+    try {
+      final rows = await _client
+          .from('payment_allocations')
+          .select(
+            'amount, payments!inner(id, payment_number, method, status, received_at, deleted_at)',
+          )
+          .eq('order_id', orderId);
+
+      final entries = <OrderCollectionEntry>[];
+      for (final row in rows as List) {
+        final map = Map<String, dynamic>.from(row as Map);
+        final rawPayment = map['payments'];
+        final payment = rawPayment is List && rawPayment.isNotEmpty
+            ? rawPayment.first
+            : rawPayment;
+        if (payment is! Map) continue;
+        final pay = Map<String, dynamic>.from(payment);
+        if (pay['deleted_at'] != null) continue;
+        entries.add(
+          OrderCollectionEntry(
+            paymentId: pay['id'] as String,
+            paymentNumber: pay['payment_number'] as String? ?? '',
+            amount: _asNum(map['amount']),
+            method: PaymentMethod.fromDb(pay['method'] as String?) ??
+                PaymentMethod.cash,
+            status: PaymentRecordStatus.fromDb(pay['status'] as String?),
+            receivedAt: DateTime.tryParse(pay['received_at'] as String? ?? '') ??
+                DateTime.now().toUtc(),
+          ),
+        );
+      }
+      entries.sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+      final paid = entries
+          .where((entry) => entry.countsTowardPaid)
+          .fold<num>(0, (sum, entry) => sum + entry.amount);
+      final pending = entries
+          .where((entry) => entry.status.isPendingReview)
+          .fold<num>(0, (sum, entry) => sum + entry.amount);
+      return OrderCollectionBalance(
+        entries: entries,
+        amountPaid: paid,
+        amountPending: pending,
+      );
+    } on PostgrestException catch (error) {
+      throw ProvisioningFailure(error.message);
     } catch (error) {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());

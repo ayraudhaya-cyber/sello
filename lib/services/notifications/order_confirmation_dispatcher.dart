@@ -53,8 +53,7 @@ class OrderConfirmationDispatcher {
   final DocumentLinkFactory links;
   final OutboundSmsSender? smsSender;
 
-  static bool shouldDispatch(OrderStatus status) =>
-      status == OrderStatus.completed;
+  static bool shouldDispatch(OrderStatus status) => status.isSubmitted;
 
   Future<OutboundNotificationPolicies> _resolvePolicies() async {
     final resolver = policiesResolver;

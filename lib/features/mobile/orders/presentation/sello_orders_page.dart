@@ -13,11 +13,13 @@ import 'package:sello/features/mobile/orders/application/sello_orders_provider.d
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
+import 'package:sello/features/orders/presentation/order_fulfillment_dialog.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
 import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/notifications/outbound/outbound_sms.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
+import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -67,6 +69,11 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
   }
 
   String get _currencySymbol => ref.watch(selloCurrencySymbolProvider);
+
+  bool get _salesCanRecordDelivery =>
+      ref.watch(selloCompanySettingsProvider).valueOrNull
+          ?.salesRepsCanRecordDelivery ??
+      true;
 
   Future<void> _openEditor({
     OrderDetail? existing,
@@ -137,26 +144,35 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
                 await _cancel(detail.summary);
               }
             : null,
-        onArchive: detail.summary.status == OrderStatus.completed ||
-                detail.summary.status == OrderStatus.cancelled
+        onViewInvoice: detail.summary.status.canShareInvoice
+            ? () => _viewInvoice(detail.summary)
+            : null,
+        onPrintInvoice: detail.summary.status.canShareInvoice
+            ? () => _printInvoice(detail.summary)
+            : null,
+        onWhatsAppInvoice: detail.summary.status.canShareInvoice
+            ? () => _whatsAppInvoice(detail.summary)
+            : null,
+        onSmsInvoice: detail.summary.status.canShareInvoice
+            ? () => _smsInvoice(detail.summary)
+            : null,
+        onFulfill: _salesCanRecordDelivery && detail.summary.status.canFulfill
             ? () async {
                 final nav = Navigator.of(context);
                 nav.pop();
-                await _archive(detail.summary);
+                await _recordDelivery(detail);
               }
             : null,
-        onViewInvoice: detail.summary.status == OrderStatus.completed
-            ? () => _viewInvoice(detail.summary)
+        onFulfillAll: _salesCanRecordDelivery && detail.summary.status.canFulfill
+            ? () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                await _fulfillAll(detail.summary);
+              }
             : null,
-        onPrintInvoice: detail.summary.status == OrderStatus.completed
-            ? () => _printInvoice(detail.summary)
-            : null,
-        onWhatsAppInvoice: detail.summary.status == OrderStatus.completed
-            ? () => _whatsAppInvoice(detail.summary)
-            : null,
-        onSmsInvoice: detail.summary.status == OrderStatus.completed
-            ? () => _smsInvoice(detail.summary)
-            : null,
+        onCollectionSaved: () {
+          ref.read(selloOrdersProvider.notifier).refresh();
+        },
       ),
     );
   }
@@ -347,6 +363,54 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     }
   }
 
+  Future<void> _recordDelivery(OrderDetail detail) async {
+    final result = await OrderFulfillmentDialog.show(
+      context: context,
+      detail: detail,
+      currencySymbol: _currencySymbol,
+    );
+    if (result == null || !mounted) return;
+
+    final error = await ref.read(selloOrdersProvider.notifier).fulfillOrderItems(
+          orderId: detail.summary.id,
+          lines: result.lines,
+        );
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+      await _openDetails(detail.summary);
+    } else {
+      SelloSnackbars.success(context, 'Delivery recorded.');
+      await _openDetails(detail.summary);
+    }
+  }
+
+  Future<void> _fulfillAll(OrderSummary order) async {
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: 'Deliver remaining?',
+      message:
+          '${order.orderNumber}: deliver every remaining unit now. '
+          'Stock will be reduced only for remaining quantities. Payment is not settled automatically.',
+      confirmLabel: 'Deliver remaining',
+      cancelLabel: 'Back',
+    );
+    if (confirmed != true || !mounted) return;
+
+    final saved =
+        await ref.read(selloOrdersProvider.notifier).completeExisting(order);
+    if (!mounted) return;
+    if (!saved.isOk) {
+      SelloSnackbars.error(
+        context,
+        saved.error ?? 'Unable to record this delivery.',
+      );
+      return;
+    }
+    SelloSnackbars.success(context, 'Delivery recorded.');
+    await _openDetails(order);
+  }
+
   Future<void> _cancel(OrderSummary order) async {
     final confirmed = await showSelloDialog(
       context: context,
@@ -366,27 +430,6 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
       SelloSnackbars.error(context, error);
     } else {
       SelloSnackbars.success(context, 'Order cancelled.');
-    }
-  }
-
-  Future<void> _archive(OrderSummary order) async {
-    final confirmed = await showSelloDialog(
-      context: context,
-      title: 'Archive order?',
-      message: '${order.orderNumber} will be hidden from your Orders list.',
-      confirmLabel: 'Archive',
-      cancelLabel: 'Keep',
-      destructive: true,
-    );
-    if (confirmed != true || !mounted) return;
-
-    final error =
-        await ref.read(selloOrdersProvider.notifier).archiveOrder(order);
-    if (!mounted) return;
-    if (error != null) {
-      SelloSnackbars.error(context, error);
-    } else {
-      SelloSnackbars.success(context, 'Order archived.');
     }
   }
 
@@ -437,7 +480,7 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
             child: Row(
               children: [
                 _FilterChip(
-                  label: 'Drafts',
+                  label: 'In progress',
                   selected: !state.showAllStatuses &&
                       state.statusFilter == OrderStatus.draft,
                   onTap: () => ref
@@ -534,6 +577,23 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+Color _orderStatusColor(OrderStatus status) {
+  return switch (status) {
+    OrderStatus.cancelled => AppColors.error,
+    OrderStatus.completed => AppColors.success,
+    _ => AppColors.textSecondary,
+  };
+}
+
+Color _paymentStatusColor(PaymentStatus status) {
+  return switch (status) {
+    PaymentStatus.paid => AppColors.success,
+    PaymentStatus.unpaid => AppColors.warning,
+    PaymentStatus.partial => AppColors.info,
+    PaymentStatus.refunded => AppColors.error,
+  };
+}
+
 class _OrderCard extends StatelessWidget {
   const _OrderCard({
     required this.order,
@@ -588,16 +648,34 @@ class _OrderCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                [
-                  order.customerName ?? 'Customer',
-                  order.status.label,
-                  order.paymentStatus.label,
-                ].join(' · '),
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
+              Text.rich(
+                TextSpan(
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                  children: [
+                    TextSpan(text: order.customerName ?? 'Customer'),
+                    const TextSpan(text: ' · '),
+                    TextSpan(
+                      text: order.status.label,
+                      style: TextStyle(
+                        color: _orderStatusColor(order.status),
+                        fontWeight: order.status == OrderStatus.cancelled
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
+                    ),
+                    const TextSpan(text: ' · '),
+                    TextSpan(
+                      text: order.paymentStatus.label,
+                      style: TextStyle(
+                        color: _paymentStatusColor(order.paymentStatus),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

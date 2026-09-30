@@ -7,11 +7,105 @@ import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
-/// Shared catalog card typography — two-line name slot height.
+/// Shared catalog card typography.
 const double kOrderCatalogNameLineHeight = 1.25;
 const double kOrderCatalogNameFontSize = 13.0;
-const double kOrderCatalogNameAreaHeight =
-    kOrderCatalogNameFontSize * kOrderCatalogNameLineHeight * 2;
+
+/// Same 4:5 frame in grid, large card, and list so the product looks like
+/// itself when the layout density changes.
+class OrderCatalogMediaFrame extends StatelessWidget {
+  const OrderCatalogMediaFrame({
+    super.key,
+    required this.name,
+    this.imageUrl,
+    this.onTap,
+    this.badge,
+    this.onRemove,
+    this.width,
+    this.fillHeight = false,
+    this.topRadius = true,
+  });
+
+  final String name;
+  final String? imageUrl;
+  final VoidCallback? onTap;
+  final Widget? badge;
+
+  /// Shown at the top-right of the image when the product is in the basket.
+  final VoidCallback? onRemove;
+
+  /// Fixed width for list thumbnails. Null fills the parent at 4:5.
+  final double? width;
+
+  /// When set with [width], the frame uses the parent's height so a list
+  /// row can keep equal space above and below the image.
+  final bool fillHeight;
+  final bool topRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    if (width != null && fillHeight) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final height = constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : width! / MediaConstants.aspectRatio;
+          return _frame(width!, height);
+        },
+      );
+    }
+
+    if (width != null) {
+      final height = width! / MediaConstants.aspectRatio;
+      return _frame(width!, height);
+    }
+
+    return AspectRatio(
+      aspectRatio: MediaConstants.aspectRatio,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return _frame(constraints.maxWidth, constraints.maxHeight);
+        },
+      ),
+    );
+  }
+
+  Widget _frame(double w, double h) {
+    final radius = topRadius
+        ? const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.control - 1),
+          )
+        : BorderRadius.circular(12);
+    return ClipRRect(
+      borderRadius: radius,
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            GestureDetector(
+              onTap: onTap,
+              child: SelloEntityThumb(
+                name: name,
+                imageUrl: imageUrl,
+                width: w,
+                height: h,
+              ),
+            ),
+            if (badge != null) Positioned(left: 6, top: 6, child: badge!),
+            if (onRemove != null)
+              Positioned(
+                right: 6,
+                top: 6,
+                child: OrderCatalogRemoveButton(onPressed: onRemove!),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Grid card for two-column and single-column catalog layouts.
 class OrderCatalogGridCard extends StatelessWidget {
@@ -47,7 +141,6 @@ class OrderCatalogGridCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = quantity > 0;
-    final imageHeight = large ? 220.0 : 168.0;
     final available = product.availableStockQuantity;
 
     return Material(
@@ -67,62 +160,31 @@ class OrderCatalogGridCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GestureDetector(
+            OrderCatalogMediaFrame(
+              name: product.name,
+              imageUrl: product.imageUrl,
               onTap: onOpenPhotos,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppRadius.control - 1),
-                ),
-                child: SizedBox(
-                  height: imageHeight,
-                  width: double.infinity,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SelloEntityThumb(
-                            name: product.name,
-                            imageUrl: product.imageUrl,
-                            width: constraints.maxWidth,
-                            height: imageHeight,
-                          );
-                        },
-                      ),
-                      Positioned(
-                        left: 8,
-                        top: 8,
-                        child: OrderCatalogStockChip(
-                          available: available,
-                          reorderLevel: reorderLevel ?? product.reorderLevel,
-                          offlineHint: offlineStockHint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              badge: OrderCatalogStockChip(
+                available: available,
+                reorderLevel: reorderLevel ?? product.reorderLevel,
+                offlineHint: offlineStockHint,
               ),
+              onRemove: selected ? () => onQuantityChanged(0) : null,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    height: kOrderCatalogNameAreaHeight,
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: Text(
-                        product.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontWeight: FontWeight.w600,
-                          fontSize: kOrderCatalogNameFontSize,
-                          height: kOrderCatalogNameLineHeight,
-                        ),
-                      ),
+                  Text(
+                    product.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontWeight: FontWeight.w600,
+                      fontSize: kOrderCatalogNameFontSize,
+                      height: kOrderCatalogNameLineHeight,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -142,25 +204,17 @@ class OrderCatalogGridCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
-              child: selected
-                  ? ProductQuantityControl(
-                      value: quantity,
-                      allowZero: true,
-                      showRemove: true,
-                      maxQuantity: maxQuantity,
-                      onIncreaseBlocked: onStockLimitReached,
-                      onChanged: onQuantityChanged,
-                      compact: !large,
-                    )
-                  : Align(
-                      alignment: Alignment.centerRight,
-                      child: _CatalogAddButton(
-                        large: large,
-                        enabled: _canAdd,
-                        onPressed: _canAdd ? onAdd : onStockLimitReached,
-                      ),
-                    ),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+              child: OrderCatalogActionSlot(
+                selected: selected,
+                quantity: quantity,
+                maxQuantity: maxQuantity,
+                canAdd: _canAdd,
+                large: large,
+                onAdd: _canAdd ? onAdd : onStockLimitReached,
+                onQuantityChanged: onQuantityChanged,
+                onStockLimitReached: onStockLimitReached,
+              ),
             ),
           ],
         ),
@@ -201,8 +255,6 @@ class OrderCatalogListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = quantity > 0;
-    const thumbWidth = 56.0;
-    final thumbHeight = thumbWidth / MediaConstants.aspectRatio;
 
     return Material(
       color: selected
@@ -219,54 +271,58 @@ class OrderCatalogListTile extends StatelessWidget {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GestureDetector(
-                onTap: onOpenPhotos,
-                child: SizedBox(
-                  width: thumbWidth,
-                  height: thumbHeight,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      SelloEntityThumb(
-                        name: product.name,
-                        imageUrl: product.imageUrl,
-                        width: thumbWidth,
-                        height: thumbHeight,
-                      ),
-                      Positioned(
-                        left: 4,
-                        top: 4,
-                        child: OrderCatalogStockChip(
-                          available: product.availableStockQuantity,
-                          reorderLevel: reorderLevel ?? product.reorderLevel,
-                          offlineHint: offlineStockHint,
-                        ),
-                      ),
-                    ],
+              SizedBox(
+                width: 88,
+                child: OrderCatalogMediaFrame(
+                  name: product.name,
+                  imageUrl: product.imageUrl,
+                  width: 88,
+                  fillHeight: true,
+                  topRadius: false,
+                  onTap: onOpenPhotos,
+                  badge: OrderCatalogStockChip(
+                    available: product.availableStockQuantity,
+                    reorderLevel: reorderLevel ?? product.reorderLevel,
+                    offlineHint: offlineStockHint,
                   ),
+                  onRemove: selected ? () => onQuantityChanged(0) : null,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                      ),
                       style: const TextStyle(
                         fontFamily: AppTypography.fontFamily,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         height: 1.25,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    if (product.brand != null &&
+                        product.brand!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        product.brand!.trim(),
+                        style: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 13,
+                          height: 1.3,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 2),
                     Text(
                       SelloFormatters.currency(
                         product.sellingPrice,
@@ -275,30 +331,26 @@ class OrderCatalogListTile extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: AppTypography.fontFamily,
                         fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                        fontSize: 15,
                         color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OrderCatalogActionSlot(
+                        selected: selected,
+                        quantity: quantity,
+                        maxQuantity: maxQuantity,
+                        canAdd: _canAdd,
+                        onAdd: _canAdd ? onAdd : onStockLimitReached,
+                        onQuantityChanged: onQuantityChanged,
+                        onStockLimitReached: onStockLimitReached,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              if (selected)
-                ProductQuantityControl(
-                  value: quantity,
-                  allowZero: true,
-                  showRemove: true,
-                  maxQuantity: maxQuantity,
-                  onIncreaseBlocked: onStockLimitReached,
-                  onChanged: onQuantityChanged,
-                  compact: true,
-                )
-              else
-                _CatalogAddButton(
-                  large: true,
-                  enabled: _canAdd,
-                  onPressed: _canAdd ? onAdd : onStockLimitReached,
-                ),
             ],
           ),
         ),
@@ -307,11 +359,87 @@ class OrderCatalogListTile extends StatelessWidget {
   }
 }
 
-class _CatalogAddButton extends StatelessWidget {
-  const _CatalogAddButton({
-    required this.large,
+/// Right-aligned add or quantity group so the action stays in one place.
+class OrderCatalogActionSlot extends StatelessWidget {
+  const OrderCatalogActionSlot({
+    super.key,
+    required this.selected,
+    required this.quantity,
+    required this.canAdd,
+    required this.onAdd,
+    required this.onQuantityChanged,
+    this.maxQuantity,
+    this.onStockLimitReached,
+    this.large = false,
+  });
+
+  final bool selected;
+  final num quantity;
+  final bool canAdd;
+  final VoidCallback? onAdd;
+  final ValueChanged<num> onQuantityChanged;
+  final num? maxQuantity;
+  final VoidCallback? onStockLimitReached;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: selected
+          ? ProductQuantityControl(
+              value: quantity,
+              allowZero: true,
+              maxQuantity: maxQuantity,
+              onIncreaseBlocked: onStockLimitReached,
+              onChanged: onQuantityChanged,
+            )
+          : OrderCatalogAddButton(
+              large: large,
+              enabled: canAdd,
+              onPressed: onAdd,
+            ),
+    );
+  }
+}
+
+/// Compact image overlay that removes the product without changing card height.
+class OrderCatalogRemoveButton extends StatelessWidget {
+  const OrderCatalogRemoveButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Remove from order',
+      child: Material(
+        color: AppColors.surface.withValues(alpha: 0.92),
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onPressed,
+          customBorder: const CircleBorder(),
+          child: const SizedBox(
+            width: 32,
+            height: 32,
+            child: Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: AppColors.attention,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class OrderCatalogAddButton extends StatelessWidget {
+  const OrderCatalogAddButton({
+    super.key,
     required this.enabled,
     required this.onPressed,
+    this.large = false,
   });
 
   final bool large;
@@ -330,8 +458,8 @@ class _CatalogAddButton extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(AppRadius.button),
           child: SizedBox(
-            width: AppSpacing.touchTarget,
-            height: AppSpacing.touchTarget,
+            width: ProductQuantityControl.buttonSize,
+            height: ProductQuantityControl.buttonSize,
             child: Center(
               child: Icon(
                 Icons.add_circle_rounded,

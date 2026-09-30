@@ -193,29 +193,52 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
           }
         },
         onArchive: () async {
-          Navigator.of(context).pop();
+          final host = this.context;
+          final confirmed = await showSelloDialog(
+            context: host,
+            title: 'Deactivate team member?',
+            message:
+                '${employee.fullName} will be hidden from new orders and visits. '
+                'Past orders still show their name. '
+                'You can reactivate them from the Inactive filter.',
+            confirmLabel: 'Deactivate',
+            cancelLabel: 'Cancel',
+            destructive: true,
+          );
+          if (confirmed != true || !host.mounted) return;
+          Navigator.of(host).pop();
           final error = await notifier.setStatus(
             employee,
-            status: EmploymentStatus.archived,
+            status: EmploymentStatus.inactive,
           );
-          if (!mounted) return;
+          if (!host.mounted) return;
           if (error != null) {
-            SelloSnackbars.error(context, error);
+            SelloSnackbars.error(host, error);
           } else {
-            SelloSnackbars.success(context, 'Team member archived.');
+            SelloSnackbars.success(host, 'Team member deactivated.');
           }
         },
         onRestore: () async {
-          Navigator.of(context).pop();
+          final host = this.context;
+          final confirmed = await showSelloDialog(
+            context: host,
+            title: 'Reactivate team member?',
+            message:
+                '${employee.fullName} will be available for new orders and visits again.',
+            confirmLabel: 'Reactivate',
+            cancelLabel: 'Cancel',
+          );
+          if (confirmed != true || !host.mounted) return;
+          Navigator.of(host).pop();
           final error = await notifier.setStatus(
             employee,
             status: EmploymentStatus.active,
           );
-          if (!mounted) return;
+          if (!host.mounted) return;
           if (error != null) {
-            SelloSnackbars.error(context, error);
+            SelloSnackbars.error(host, error);
           } else {
-            SelloSnackbars.success(context, 'Team member set to active.');
+            SelloSnackbars.success(host, 'Team member reactivated.');
           }
         },
       ),
@@ -704,10 +727,6 @@ class _Toolbar extends StatelessWidget {
           DropdownMenuItem(
             value: EmployeeStatusFilter.suspended,
             child: Text('Suspended'),
-          ),
-          DropdownMenuItem(
-            value: EmployeeStatusFilter.archived,
-            child: Text('Archived'),
           ),
         ],
       ),

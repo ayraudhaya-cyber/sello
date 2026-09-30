@@ -14,7 +14,6 @@ class ProductQuantityControl extends StatelessWidget {
     this.allowZero = false,
     this.showRemove = false,
     this.onRemove,
-    this.compact = false,
     this.maxQuantity,
     this.onIncreaseBlocked,
   });
@@ -24,11 +23,14 @@ class ProductQuantityControl extends StatelessWidget {
   final bool allowZero;
   final bool showRemove;
   final VoidCallback? onRemove;
-  final bool compact;
   final num? maxQuantity;
   final VoidCallback? onIncreaseBlocked;
 
-  static const double _controlSize = AppSpacing.touchTarget;
+  /// Width reserved for the number so 1, 99 and 999 stay in the same place.
+  static const double quantitySlotWidth = 44;
+
+  /// Comfortable thumb target. Shared by every catalog view.
+  static const double buttonSize = 44;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +38,7 @@ class ProductQuantityControl extends StatelessWidget {
     final max = maxQuantity;
     final canIncrease = max == null || value < max;
 
-    return Row(
+    final stepper = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _StepButton(
@@ -46,55 +48,89 @@ class ProductQuantityControl extends StatelessWidget {
             final next = value - 1;
             if (allowZero || next >= 1) onChanged(next);
           },
-          compact: compact,
           tooltip: 'Decrease quantity',
         ),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _openQuantityEditor(context),
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            child: Tooltip(
-              message: 'Edit quantity',
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 6 : 10,
-                  vertical: 6,
-                ),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: compact ? 28 : 36),
-                  child: Text(
-                    SelloFormatters.quantity(value),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontWeight: FontWeight.w700,
-                      fontSize: compact ? 13 : 15,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+        const SizedBox(width: 2),
+        _quantityLabel(context),
+        const SizedBox(width: 2),
         _StepButton(
           icon: Icons.add_rounded,
           enabled: canIncrease,
           onTap: () => onChanged(value + 1),
           onDisabledTap: onIncreaseBlocked,
-          compact: compact,
           tooltip:
               canIncrease ? 'Increase quantity' : 'Maximum quantity reached',
         ),
-        if (showRemove && value > 0) ...[
-          const SizedBox(width: 4),
-          _RemoveButton(
-            onTap: onRemove ?? () => onChanged(0),
-            compact: compact,
-          ),
-        ],
       ],
+    );
+
+    final showDelete = showRemove && value > 0;
+    if (!showDelete) return stepper;
+
+    const deleteGap = 10.0;
+    final remove = _RemoveButton(onTap: onRemove ?? () => onChanged(0));
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final needed = _stepperWidth + deleteGap + buttonSize;
+        final fits = !constraints.maxWidth.isFinite ||
+            constraints.maxWidth >= needed;
+        if (fits) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              stepper,
+              const SizedBox(width: deleteGap),
+              remove,
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            stepper,
+            const SizedBox(height: 8),
+            remove,
+          ],
+        );
+      },
+    );
+  }
+
+  static double get _stepperWidth =>
+      buttonSize + 2 + quantitySlotWidth + 2 + buttonSize;
+
+  Widget _quantityLabel(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceMuted.withValues(alpha: 0.7),
+      borderRadius: BorderRadius.circular(AppRadius.button),
+      child: InkWell(
+        onTap: () => _openQuantityEditor(context),
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        child: Tooltip(
+          message: 'Edit quantity',
+          child: SizedBox(
+            width: quantitySlotWidth,
+            height: buttonSize,
+            child: Center(
+              child: Text(
+                SelloFormatters.quantity(value),
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AppColors.textPrimary,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -103,6 +139,7 @@ class ProductQuantityControl extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
+      showDragHandle: false,
       shape: const RoundedRectangleBorder(
         borderRadius: AppRadius.bottomSheetAll,
       ),
@@ -253,7 +290,6 @@ class _StepButton extends StatelessWidget {
     required this.icon,
     required this.enabled,
     required this.onTap,
-    required this.compact,
     required this.tooltip,
     this.onDisabledTap,
   });
@@ -262,13 +298,10 @@ class _StepButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
   final VoidCallback? onDisabledTap;
-  final bool compact;
   final String tooltip;
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 40.0 : ProductQuantityControl._controlSize;
-
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -278,8 +311,8 @@ class _StepButton extends StatelessWidget {
           onTap: enabled ? onTap : onDisabledTap,
           borderRadius: BorderRadius.circular(AppRadius.button),
           child: Container(
-            width: size,
-            height: size,
+            width: ProductQuantityControl.buttonSize,
+            height: ProductQuantityControl.buttonSize,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.button),
@@ -287,7 +320,7 @@ class _StepButton extends StatelessWidget {
             ),
             child: Icon(
               icon,
-              size: compact ? 18 : 20,
+              size: 20,
               color: enabled ? AppColors.textSecondary : AppColors.textFaint,
             ),
           ),
@@ -298,18 +331,12 @@ class _StepButton extends StatelessWidget {
 }
 
 class _RemoveButton extends StatelessWidget {
-  const _RemoveButton({
-    required this.onTap,
-    required this.compact,
-  });
+  const _RemoveButton({required this.onTap});
 
   final VoidCallback onTap;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 36.0 : 40.0;
-
     return Tooltip(
       message: 'Remove from order',
       child: Material(
@@ -318,12 +345,12 @@ class _RemoveButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadius.button),
-          child: SizedBox(
-            width: size,
-            height: size,
+          child: const SizedBox(
+            width: ProductQuantityControl.buttonSize,
+            height: ProductQuantityControl.buttonSize,
             child: Icon(
               Icons.delete_outline_rounded,
-              size: compact ? 18 : 20,
+              size: 20,
               color: AppColors.attention,
             ),
           ),

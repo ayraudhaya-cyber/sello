@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.8",
-        "build": 9,
-        "released_at": "2026-09-20",
-        "notes": "Print invoice on completed orders uses the same A4 template as the customer link\nInventory Export data downloads an Excel file with options, stock, status, and selling price\nProducts stock stays in sync after Inventory adjusts, and Refresh shows clear progress on Hub lists"
+        "version": "1.0.10",
+        "build": 11,
+        "released_at": "2026-10-01",
+        "notes": "You can record delivery on an order, unless the owner turns that off\nA visit sale is submitted first — goods stay undelivered until someone records delivery\nYou can skip the cheque at checkout and record it later\nThe customer invoice shows Payment approved after the owner accepts the payment"
       },
       "minimum": {
         "version": "1.0.0",
@@ -26,15 +26,19 @@
         "web": {
           "destination_kind": "web",
           "destination_url": ""
+        },
+        "windows": {
+          "destination_kind": "installer",
+          "destination_url": "https://cashro.pro/sello-updates/sales-rep/sello-sales-rep.exe"
         }
       }
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.8",
-        "build": 9,
-        "released_at": "2026-09-20",
-        "notes": "Print invoice on completed orders uses the same A4 template as the customer link\nInventory Export data downloads an Excel file with options, stock, status, and selling price\nProducts stock stays in sync after Inventory adjusts, and Refresh shows clear progress on Hub lists\nOrders filters sit on their own labeled row so Status, Payment, Date, and Rep stay clear"
+        "version": "1.0.10",
+        "build": 11,
+        "released_at": "2026-10-01",
+        "notes": "Settings lets you turn off Sales recording delivery\nThe invoice shows the date the payment was first recorded, not the approval date\nCheque steps use plain words: received, take to bank, bank paid, bank returned\nA visit sale is submitted first — Owner or Sales can record delivery later\nHub dropdowns support arrow keys and Enter"
       },
       "minimum": {
         "version": "1.0.0",
@@ -53,6 +57,10 @@
         "web": {
           "destination_kind": "web",
           "destination_url": ""
+        },
+        "windows": {
+          "destination_kind": "installer",
+          "destination_url": "https://cashro.pro/sello-updates/owner-manager/sello-owner-manager.exe"
         }
       }
     }

@@ -363,7 +363,7 @@ class ChequeRepository {
       if (detail == null) {
         throw const UnexpectedFailure('Unable to load collected cheque.');
       }
-      await _notifyStatus(detail, title: 'Cheque collected');
+      await _notifyStatus(detail, title: 'Cheque received');
       return detail;
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapChequeError(error.message));
@@ -378,7 +378,7 @@ class ChequeRepository {
       rpc: 'deposit_cheque',
       params: {'p_cheque_id': chequeId},
       chequeId: chequeId,
-      title: 'Cheque deposited',
+      title: 'Cheque taken to the bank',
     );
   }
 
@@ -387,7 +387,7 @@ class ChequeRepository {
       rpc: 'clear_cheque',
       params: {'p_cheque_id': chequeId},
       chequeId: chequeId,
-      title: 'Cheque cleared',
+      title: 'Bank paid this cheque',
     );
   }
 
@@ -396,7 +396,7 @@ class ChequeRepository {
       rpc: 'approve_cheque_collection',
       params: {'p_cheque_id': chequeId},
       chequeId: chequeId,
-      title: 'Cheque collection approved',
+      title: 'Cheque approved',
     );
   }
 
@@ -405,7 +405,7 @@ class ChequeRepository {
       rpc: 'bounce_cheque',
       params: {'p_cheque_id': chequeId, 'p_reason': reason},
       chequeId: chequeId,
-      title: 'Cheque bounced',
+      title: 'Bank returned this cheque',
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/error/app_failure.dart';
+import 'package:sello/services/media/media_display_jpeg.dart';
 import 'package:sello/shared/models/processed_media.dart';
 
 /// Image processing pipeline — resize, compress, strip metadata.
@@ -89,22 +90,46 @@ class MediaProcessor {
       // Let input events run before heavy pixel work.
       await Future<void>.delayed(Duration.zero);
 
-      if (kIsWeb || preferPng) {
-        // Fully async — does not freeze text fields on Chrome.
-        // Logos stay PNG so reverse wordmarks keep transparency.
-        final png = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (png == null) {
-          throw const ValidationFailure(
-            'Unable to optimize that image.',
+      // Logos stay PNG so reverse wordmarks keep transparency.
+      if (preferPng) {
+        return await _encodePng(image);
+      }
+
+      if (kIsWeb) {
+        final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        if (rgba != null) {
+          final raw = rgba.buffer.asUint8List(
+            rgba.offsetInBytes,
+            rgba.lengthInBytes,
           );
+          var jpeg = await encodeDisplayJpeg(
+            rgba: raw,
+            width: image.width,
+            height: image.height,
+            quality: quality,
+          );
+          if (jpeg != null &&
+              jpeg.lengthInBytes > MediaConstants.targetMaxBytes &&
+              quality > 70) {
+            jpeg = await encodeDisplayJpeg(
+                  rgba: raw,
+                  width: image.width,
+                  height: image.height,
+                  quality: 72,
+                ) ??
+                jpeg;
+          }
+          if (jpeg != null) {
+            return ProcessedMedia(
+              bytes: jpeg,
+              contentType: MediaConstants.jpegContentType,
+              extension: MediaConstants.jpegExtension,
+              width: image.width,
+              height: image.height,
+            );
+          }
         }
-        return ProcessedMedia(
-          bytes: png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
-          contentType: 'image/png',
-          extension: 'png',
-          width: image.width,
-          height: image.height,
-        );
+        return await _encodePng(image);
       }
 
       final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -116,7 +141,7 @@ class MediaProcessor {
 
       await Future<void>.delayed(Duration.zero);
 
-      return compute(
+      return await compute(
         _encodeJpegIsolate,
         _EncodeRequest(
           rgba: rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes),
@@ -136,6 +161,20 @@ class MediaProcessor {
       image?.dispose();
       codec?.dispose();
     }
+  }
+
+  Future<ProcessedMedia> _encodePng(ui.Image image) async {
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) {
+      throw const ValidationFailure('Unable to optimize that image.');
+    }
+    return ProcessedMedia(
+      bytes: png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+      contentType: 'image/png',
+      extension: 'png',
+      width: image.width,
+      height: image.height,
+    );
   }
 
   /// Downscale for the crop UI so Crop widget doesn't decode multi‑MB originals.

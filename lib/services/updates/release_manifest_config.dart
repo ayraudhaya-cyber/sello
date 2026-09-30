@@ -56,6 +56,7 @@ abstract final class ReleaseManifestConfig {
     return switch (defaultTargetPlatform) {
       TargetPlatform.android => AppReleasePlatform.android,
       TargetPlatform.iOS => AppReleasePlatform.ios,
+      TargetPlatform.windows => AppReleasePlatform.windows,
       _ => AppReleasePlatform.other,
     };
   }

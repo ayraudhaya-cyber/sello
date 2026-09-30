@@ -30,17 +30,20 @@ class ProductMediaRepository {
           .eq('product_id', productId)
           .order('sort_order');
 
-      final images = <ProductImage>[];
-      for (final row in rows as List) {
-        final image = ProductImage.fromJson(Map<String, dynamic>.from(row));
-        try {
-          final url = await _storage.signProductImage(image.storagePath);
-          images.add(image.copyWith(networkUrl: url));
-        } catch (_) {
-          images.add(image);
-        }
-      }
-      return images;
+      final images = [
+        for (final row in rows as List)
+          ProductImage.fromJson(Map<String, dynamic>.from(row as Map)),
+      ];
+      final urls = await _storage.signProductImages([
+        for (final image in images) image.storagePath,
+      ]);
+      return [
+        for (final image in images)
+          if (urls[image.storagePath] != null)
+            image.copyWith(networkUrl: urls[image.storagePath])
+          else
+            image,
+      ];
     } on PostgrestException catch (error) {
       throw ValidationFailure(error.message);
     } catch (error) {

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/payments/application/cheque_lifecycle.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_status.dart';
@@ -62,6 +62,7 @@ class _AddExistingChequeDialogState
   String? _uploadedPhotoPath;
   bool _uploadingPhoto = false;
   bool _submitting = false;
+  bool _extrasOpen = false;
   String? _error;
 
   bool get _showCollectionDate =>
@@ -95,25 +96,16 @@ class _AddExistingChequeDialogState
     super.dispose();
   }
 
-  Future<void> _pickCustomer() async {
-    if (widget.lockCustomer) return;
-    final selected = await showDialog<CustomerSummary>(
-      context: context,
-      builder: (context) => _CustomerPicker(
-        currencySymbol: widget.currencySymbol,
-      ),
-    );
-    if (selected == null || !mounted) return;
-    _applyCustomer(selected);
-  }
-
   void _applyCustomer(CustomerSummary selected) {
+    final previousName = _customer?.name;
     setState(() {
+      _holder.text = defaultChequeHolderName(
+        currentHolder: _holder.text,
+        selectedCustomerName: selected.name,
+        previousCustomerName: previousName,
+      );
       _customer = selected;
       _error = null;
-      if (_holder.text.trim().isEmpty) {
-        _holder.text = selected.name;
-      }
     });
   }
 
@@ -141,6 +133,7 @@ class _AddExistingChequeDialogState
     setState(() {
       _uploadingPhoto = true;
       _error = null;
+      _extrasOpen = true;
     });
     try {
       final file = await _media.pickWithBestExperience(context);
@@ -273,12 +266,12 @@ class _AddExistingChequeDialogState
     return SelloFormDialog(
       title: 'Add existing cheque',
       subtitle:
-          'Record a cheque received before you started using Sello. This won’t change the customer’s balance.',
+          'Old cheque record only — does not change what the customer owes. Use Record cheque for a new cheque.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
         isMobile ? 20 : 32,
-        20,
+        16,
         isMobile ? 20 : 32,
         8,
       ),
@@ -297,23 +290,45 @@ class _AddExistingChequeDialogState
             ),
             const SizedBox(height: 12),
           ],
-          SelloDialogSection(
-            title: 'Customer',
-            children: [
-              if (_customer == null)
-                SelloButton(
-                  label: 'Select customer',
-                  icon: Icons.person_search_rounded,
-                  variant: SelloButtonVariant.outline,
-                  onPressed: _pickCustomer,
-                )
-              else
-                _CustomerStrip(
-                  customer: _customer!,
-                  onChange: widget.lockCustomer ? null : _pickCustomer,
-                ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.outlinePanel),
+            ),
+            child: const Text(
+              'This is not a new collection. Sello stores the instrument for tracking only.',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
+          const SizedBox(height: 14),
+          SelloCustomerSearchField(
+            customer: _customer,
+            currencySymbol: widget.currencySymbol,
+            enabled: !widget.lockCustomer,
+            onChanged: (selected) {
+              if (selected == null) {
+                if (widget.lockCustomer) return;
+                setState(() => _customer = null);
+                return;
+              }
+              _applyCustomer(selected);
+            },
+          ),
+          const SizedBox(height: 14),
+          SelloTextField(
+            controller: _holder,
+            label: 'Holder',
+            required: true,
+          ),
+          const SizedBox(height: 8),
           SelloDialogSection(
             title: 'Cheque details',
             children: [
@@ -327,22 +342,15 @@ class _AddExistingChequeDialogState
               ),
               const SizedBox(height: 12),
               SelloFormRow(
-                left: SelloTextField(
+                left: SelloSriLankaBankField(
                   controller: _bank,
-                  label: 'Bank',
-                  required: true,
+                  onChanged: (_) => setState(() => _error = null),
                 ),
                 right: SelloTextField(
                   controller: _chequeNumber,
                   label: 'Cheque number',
                   required: true,
                 ),
-              ),
-              const SizedBox(height: 12),
-              SelloTextField(
-                controller: _holder,
-                label: 'Cheque holder',
-                required: true,
               ),
               const SizedBox(height: 12),
               _dateField(
@@ -394,7 +402,7 @@ class _AddExistingChequeDialogState
               if (_showCollectionDate) ...[
                 const SizedBox(height: 12),
                 _dateField(
-                  label: 'Collection date',
+                  label: 'Date received',
                   value: _collectionDate,
                   onTap: () => _pickDate(
                     current: _collectionDate,
@@ -405,7 +413,7 @@ class _AddExistingChequeDialogState
               if (_showDepositDate) ...[
                 const SizedBox(height: 12),
                 _dateField(
-                  label: 'Deposit date',
+                  label: 'Taken to bank',
                   value: _depositDate,
                   onTap: () => _pickDate(
                     current: _depositDate,
@@ -416,7 +424,7 @@ class _AddExistingChequeDialogState
               if (_showClearanceDate) ...[
                 const SizedBox(height: 12),
                 _dateField(
-                  label: 'Clearance date',
+                  label: 'Date bank paid',
                   value: _clearanceDate,
                   onTap: () => _pickDate(
                     current: _clearanceDate,
@@ -426,33 +434,43 @@ class _AddExistingChequeDialogState
               ],
             ],
           ),
-          SelloDialogSection(
-            title: 'Photo',
-            children: [
-              SelloImagePickerPanel(
-                title: 'Cheque image',
-                localBytes: _photoBytes,
-                onUpload: _uploadingPhoto ? () {} : _pickPhoto,
-                onRemove: _photoBytes == null ? null : _clearPhoto,
-                uploadLabel: _uploadingPhoto ? 'Uploading…' : 'Add photo',
-                height: 180,
-                hints: const [
-                  'Optional photo of the physical cheque',
-                  'Supports: PNG, JPG, WEBP',
-                ],
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded:
+                  _extrasOpen || _photoBytes != null || _notes.text.isNotEmpty,
+              onExpansionChanged: (open) => setState(() => _extrasOpen = open),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: const Text(
+                'Add photo or notes',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ],
-          ),
-          SelloDialogSection(
-            title: 'Notes',
-            bottomSpacing: 8,
-            children: [
-              SelloTextField(
-                controller: _notes,
-                label: 'Internal notes',
-                maxLines: 3,
-              ),
-            ],
+              children: [
+                SelloImagePickerPanel(
+                  title: 'Cheque image',
+                  localBytes: _photoBytes,
+                  onUpload: _uploadingPhoto ? () {} : _pickPhoto,
+                  onRemove: _photoBytes == null ? null : _clearPhoto,
+                  uploadLabel: _uploadingPhoto ? 'Uploading…' : 'Add photo',
+                  height: 140,
+                  hints: const [
+                    'Optional photo of the physical cheque',
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SelloTextField(
+                  controller: _notes,
+                  label: 'Internal notes',
+                  maxLines: 2,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -460,192 +478,6 @@ class _AddExistingChequeDialogState
         cancelLabel: 'Cancel',
         primaryLabel: _submitting ? 'Saving…' : 'Save existing cheque',
         onPrimary: _submitting || _uploadingPhoto ? null : _confirm,
-      ),
-    );
-  }
-}
-
-class _CustomerStrip extends StatelessWidget {
-  const _CustomerStrip({
-    required this.customer,
-    this.onChange,
-  });
-
-  final CustomerSummary customer;
-  final VoidCallback? onChange;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppRadius.panel),
-        border: Border.all(color: AppColors.outlinePanel),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  customer.name,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                if (customer.phone != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    customer.phone!,
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 13,
-                      height: 1.4,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (onChange != null)
-            SelloButton(
-              label: 'Change',
-              size: SelloButtonSize.small,
-              variant: SelloButtonVariant.ghost,
-              onPressed: onChange,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CustomerPicker extends ConsumerStatefulWidget {
-  const _CustomerPicker({required this.currencySymbol});
-
-  final String currencySymbol;
-
-  @override
-  ConsumerState<_CustomerPicker> createState() => _CustomerPickerState();
-}
-
-class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
-  final _search = TextEditingController();
-  Timer? _debounce;
-  List<CustomerSummary> _items = const [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(_load);
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _search.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-            search: _search.text,
-            isActive: true,
-            pageSize: 40,
-          );
-      if (!mounted) return;
-      setState(() {
-        _items = result.items;
-        _loading = false;
-      });
-    } on AppFailure catch (failure) {
-      if (!mounted) return;
-      setState(() {
-        _error = failure.message;
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SelloFormDialog(
-      title: 'Select customer',
-      subtitle: 'Choose the customer this cheque belongs to.',
-      maxWidth: 720,
-      fullscreenOnMobile: true,
-      body: Column(
-        children: [
-          SelloSearchBar(
-            controller: _search,
-            hint: 'Search name, phone or code…',
-            onChanged: (_) {
-              _debounce?.cancel();
-              _debounce = Timer(const Duration(milliseconds: 280), _load);
-            },
-          ),
-          const SizedBox(height: 16),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            )
-          else if (_error != null)
-            SelloStateView.error(
-              title: 'Unable to load customers',
-              message: _error,
-              actionLabel: 'Try again',
-              onAction: _load,
-            )
-          else if (_items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('No matching customers.'),
-            )
-          else
-            SizedBox(
-              height: 420,
-              child: ListView.separated(
-                itemCount: _items.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final customer = _items[index];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      customer.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      [
-                        if (customer.phone != null) customer.phone!,
-                        'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: widget.currencySymbol)}',
-                      ].join(' · '),
-                    ),
-                    onTap: () => Navigator.of(context).pop(customer),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
-      footer: SelloDialogFooter(
-        cancelLabel: 'Close',
-        primaryLabel: 'Done',
-        primaryEnabled: false,
-        onPrimary: () => Navigator.of(context).maybePop(),
       ),
     );
   }

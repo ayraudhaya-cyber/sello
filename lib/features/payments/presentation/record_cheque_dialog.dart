@@ -1,12 +1,11 @@
-import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/payments/application/cheque_lifecycle.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
@@ -23,12 +22,21 @@ class RecordChequeDialog extends ConsumerStatefulWidget {
     this.visitId,
     this.initialCustomer,
     this.markCollected = false,
+    this.preferredOrderId,
+    this.recordingIsOptional = false,
   });
 
   final String currencySymbol;
   final String? visitId;
   final CustomerSummary? initialCustomer;
   final bool markCollected;
+
+  /// Visit/order just created — allocate this receivable first when in hand.
+  final String? preferredOrderId;
+
+  /// After visit checkout the order is already saved. Later / close skips
+  /// without creating a cheque.
+  final bool recordingIsOptional;
 
   @override
   ConsumerState<RecordChequeDialog> createState() => _RecordChequeDialogState();
@@ -40,6 +48,8 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
   CustomerSummary? _customer;
   List<ReceivableOrder> _receivables = const [];
   final Map<String, num> _allocations = {};
+  final Set<String> _selectedOrderIds = {};
+  bool _allocationsManual = false;
 
   final _amount = TextEditingController();
   final _bank = TextEditingController();
@@ -49,19 +59,20 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
 
   DateTime _chequeDate = DateTime.now();
   DateTime? _collectionDate;
-  bool _markCollected = false;
+  bool _inHand = false;
   Uint8List? _photoBytes;
   String? _uploadedPhotoPath;
   bool _uploadingPhoto = false;
   bool _loadingOrders = false;
   bool _submitting = false;
+  bool _extrasOpen = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _markCollected = widget.markCollected;
-    if (_markCollected) {
+    _inHand = widget.markCollected;
+    if (_inHand) {
       _collectionDate = DateTime.now();
     }
     final initial = widget.initialCustomer;
@@ -82,26 +93,20 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
     super.dispose();
   }
 
-  Future<void> _pickCustomer() async {
-    final selected = await showDialog<CustomerSummary>(
-      context: context,
-      builder: (context) => _CustomerPicker(
-        currencySymbol: widget.currencySymbol,
-      ),
-    );
-    if (selected == null || !mounted) return;
-    await _applyCustomer(selected);
-  }
-
   Future<void> _applyCustomer(CustomerSummary selected) async {
+    final previousName = _customer?.name;
     setState(() {
+      _holder.text = defaultChequeHolderName(
+        currentHolder: _holder.text,
+        selectedCustomerName: selected.name,
+        previousCustomerName: previousName,
+      );
       _customer = selected;
       _allocations.clear();
+      _selectedOrderIds.clear();
+      _allocationsManual = false;
       _error = null;
       _loadingOrders = true;
-      if (_holder.text.trim().isEmpty) {
-        _holder.text = selected.name;
-      }
     });
     try {
       final orders = await ref
@@ -111,14 +116,19 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       setState(() {
         _receivables = orders;
         _loadingOrders = false;
-        if (_markCollected && orders.isNotEmpty) {
+        if (_inHand && orders.isNotEmpty) {
           final amount = num.tryParse(_amount.text.trim()) ?? 0;
           if (amount > 0) {
             _rebalanceAllocations(amount);
           } else {
-            final totalDue = orders.fold<num>(0, (sum, o) => sum + o.remaining);
-            _amount.text = totalDue.toStringAsFixed(2);
-            _rebalanceAllocations(totalDue);
+            final preferred = preferredChequeDefaultAmount(
+              orders: orders,
+              preferredOrderId: widget.preferredOrderId,
+            );
+            final fill = preferred ??
+                orders.fold<num>(0, (sum, o) => sum + o.remaining);
+            _amount.text = fill.toStringAsFixed(2);
+            _rebalanceAllocations(fill);
           }
         }
       });
@@ -132,37 +142,64 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
   }
 
   void _rebalanceAllocations(num paymentAmount) {
+    if (_allocationsManual) return;
+    _applyFifoAllocations(paymentAmount);
+  }
+
+  void _applyFifoAllocations(num paymentAmount) {
     _allocations.clear();
-    if (!_markCollected) return;
-    var remaining = paymentAmount;
-    for (final order in _receivables) {
-      if (remaining <= 0) break;
-      final take = order.remaining.clamp(0, remaining);
-      if (take > 0) {
-        _allocations[order.id] = take;
-        remaining -= take;
-      }
+    _selectedOrderIds.clear();
+    if (!_inHand) return;
+    for (final alloc in fifoChequeAllocations(
+      amount: paymentAmount,
+      orders: _receivables,
+      preferredOrderId: widget.preferredOrderId,
+    )) {
+      _allocations[alloc.orderId] = alloc.amount;
+      _selectedOrderIds.add(alloc.orderId);
     }
   }
 
-  Future<void> _pickDate({required bool collection}) async {
-    final initial = collection
-        ? (_collectionDate ?? DateTime.now())
-        : _chequeDate;
+  void _toggleOrder(ReceivableOrder order, bool selected) {
+    setState(() {
+      _allocationsManual = true;
+      _error = null;
+      if (selected) {
+        _selectedOrderIds.add(order.id);
+        _allocations[order.id] = chequeOrderSelectionAmount(order);
+      } else {
+        _selectedOrderIds.remove(order.id);
+        _allocations.remove(order.id);
+      }
+    });
+  }
+
+  void _editOrderAmount(ReceivableOrder order, num amount) {
+    setState(() {
+      _allocationsManual = true;
+      _error = null;
+      final clamped = clampChequeOrderAllocation(
+        amount: amount,
+        remaining: order.remaining,
+      );
+      _selectedOrderIds.add(order.id);
+      if (clamped > 0) {
+        _allocations[order.id] = clamped;
+      } else {
+        _allocations[order.id] = 0;
+      }
+    });
+  }
+
+  Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
+      initialDate: _chequeDate,
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
     );
     if (picked == null || !mounted) return;
-    setState(() {
-      if (collection) {
-        _collectionDate = picked;
-      } else {
-        _chequeDate = picked;
-      }
-    });
+    setState(() => _chequeDate = picked);
   }
 
   Future<void> _pickPhoto() async {
@@ -175,6 +212,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
     setState(() {
       _uploadingPhoto = true;
       _error = null;
+      _extrasOpen = true;
     });
     try {
       final file = await _media.pickWithBestExperience(context);
@@ -247,9 +285,20 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       setState(() => _error = 'Enter the cheque holder name.');
       return null;
     }
-    if (_markCollected && _collectionDate == null) {
-      setState(() => _error = 'Collection date is required when marked collected.');
+    if (_inHand && _collectionDate == null) {
+      setState(() => _error = 'Date received is required when you already have the cheque.');
       return null;
+    }
+    if (_inHand) {
+      final allocationError = chequeManualAllocationError(
+        chequeAmount: amount,
+        allocations: _allocations,
+        orders: _receivables,
+      );
+      if (allocationError != null) {
+        setState(() => _error = allocationError);
+        return null;
+      }
     }
 
     return CreateChequeInput(
@@ -259,10 +308,10 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       chequeNumber: _chequeNumber.text.trim(),
       holderName: _holder.text.trim(),
       chequeDate: _chequeDate,
-      collectionDate: _markCollected ? _collectionDate : null,
+      collectionDate: _inHand ? _collectionDate : null,
       photoPath: _uploadedPhotoPath,
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-      allocations: _markCollected
+      allocations: _inHand
           ? [
               for (final entry in _allocations.entries)
                 if (entry.value > 0)
@@ -273,7 +322,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
             ]
           : const [],
       visitId: widget.visitId,
-      markCollected: _markCollected,
+      markCollected: _inHand,
     );
   }
 
@@ -286,27 +335,20 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
     Navigator.of(context).pop(input);
   }
 
-  Widget _dateField({
-    required String label,
-    required DateTime? value,
-    required VoidCallback onTap,
-    bool required = false,
-  }) {
+  Widget _dateField() {
     return InkWell(
-      onTap: onTap,
+      onTap: _pickDate,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InputDecorator(
         decoration: InputDecoration(
-          label: SelloFieldLabel(label: label, required: required),
+          label: const SelloFieldLabel(label: 'Cheque date', required: true),
           border: const OutlineInputBorder(),
         ),
         child: Text(
-          value == null ? 'Select date' : SelloFormatters.date(value),
-          style: TextStyle(
+          SelloFormatters.date(_chequeDate),
+          style: const TextStyle(
             fontFamily: AppTypography.fontFamily,
-            color: value == null
-                ? AppColors.textFaint
-                : AppColors.textPrimary,
+            color: AppColors.textPrimary,
           ),
         ),
       ),
@@ -320,14 +362,16 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
 
     return SelloFormDialog(
       title: 'Record cheque',
-      subtitle: _markCollected
-          ? 'Record the cheque received from this customer.'
-          : 'Enter the cheque details. Leave collected off until the cheque is in hand.',
+      subtitle: widget.recordingIsOptional
+          ? 'The order is already saved. Record this cheque now, or skip and record it later from the order.'
+          : _inHand
+              ? 'We have this cheque.'
+              : 'Turn this off if the customer has not given the cheque yet.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
         isMobile ? 20 : 32,
-        20,
+        16,
         isMobile ? 20 : 32,
         8,
       ),
@@ -346,188 +390,108 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
             ),
             const SizedBox(height: 12),
           ],
-          SelloDialogSection(
-            title: 'Customer',
-            children: [
-              if (_customer == null)
-                SelloButton(
-                  label: 'Select customer',
-                  icon: Icons.person_search_rounded,
-                  variant: SelloButtonVariant.outline,
-                  onPressed: _pickCustomer,
-                )
-              else
-                _CustomerStrip(
-                  customer: _customer!,
-                  currencySymbol: symbol,
-                  onChange: _pickCustomer,
-                ),
-            ],
+          SelloCustomerSearchField(
+            customer: _customer,
+            currencySymbol: symbol,
+            onChanged: (selected) {
+              if (selected == null) {
+                setState(() {
+                  _customer = null;
+                  _receivables = const [];
+                  _allocations.clear();
+                  _selectedOrderIds.clear();
+                  _allocationsManual = false;
+                });
+                return;
+              }
+              _applyCustomer(selected);
+            },
           ),
-          SelloDialogSection(
-            title: 'Cheque details',
-            children: [
-              SelloTextField(
-                controller: _amount,
-                label: 'Amount',
-                required: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (value) {
-                  final parsed = num.tryParse(value.trim()) ?? 0;
-                  setState(() {
-                    _error = null;
-                    _rebalanceAllocations(parsed);
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              SelloFormRow(
-                left: SelloTextField(
-                  controller: _bank,
-                  label: 'Bank',
-                  required: true,
-                ),
-                right: SelloTextField(
-                  controller: _chequeNumber,
-                  label: 'Cheque number',
-                  required: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SelloTextField(
-                controller: _holder,
-                label: 'Cheque holder',
-                required: true,
-              ),
-              const SizedBox(height: 12),
-              _dateField(
-                label: 'Cheque date',
-                value: _chequeDate,
-                required: true,
-                onTap: () => _pickDate(collection: false),
-              ),
-            ],
+          const SizedBox(height: 14),
+          SelloTextField(
+            controller: _holder,
+            label: 'Holder',
+            required: true,
           ),
-          SelloDialogSection(
-            title: 'Collection',
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Mark as collected',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  SelloSwitch(
-                    value: _markCollected,
-                    onChanged: (value) {
-                      setState(() {
-                        _markCollected = value;
-                        if (value) {
-                          _collectionDate ??= DateTime.now();
-                          final amount =
-                              num.tryParse(_amount.text.trim()) ?? 0;
-                          if (amount > 0) _rebalanceAllocations(amount);
-                        } else {
-                          _collectionDate = null;
-                          _allocations.clear();
-                        }
-                      });
-                    },
-                  ),
-                ],
-              ),
-              if (_markCollected) ...[
-                const SizedBox(height: 12),
-                _dateField(
-                  label: 'Collection date',
-                  value: _collectionDate,
-                  required: true,
-                  onTap: () => _pickDate(collection: true),
-                ),
-              ],
-            ],
+          const SizedBox(height: 14),
+          SelloTextField(
+            controller: _amount,
+            label: 'Amount',
+            required: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (value) {
+              final parsed = num.tryParse(value.trim()) ?? 0;
+              setState(() {
+                _error = null;
+                _rebalanceAllocations(parsed);
+              });
+            },
           ),
-          if (_markCollected && _customer != null)
-            SelloDialogSection(
-              title: 'Outstanding orders',
-              children: [
-                if (_loadingOrders)
-                  const LinearProgressIndicator(minHeight: 2)
-                else if (_receivables.isEmpty)
-                  Text(
-                    'No unpaid completed orders. Amount will reduce the '
-                    'customer balance / credit the wallet if overpaid.',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 13.5,
-                      color: AppColors.textFaint,
-                    ),
-                  )
-                else
-                  Column(
-                    children: [
-                      for (final order in _receivables) ...[
-                        _OrderAllocRow(
-                          order: order,
-                          currencySymbol: symbol,
-                          allocated: _allocations[order.id] ?? 0,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value <= 0) {
-                                _allocations.remove(order.id);
-                              } else {
-                                _allocations[order.id] =
-                                    value.clamp(0, order.remaining);
-                              }
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
-                  ),
-              ],
+          const SizedBox(height: 14),
+          SelloFormRow(
+            stackBelow: 560,
+            left: SelloSriLankaBankField(
+              controller: _bank,
+              onChanged: (_) => setState(() => _error = null),
             ),
-          SelloDialogSection(
-            title: 'Photo',
-            children: [
-              SelloImagePickerPanel(
-                title: 'Cheque image',
-                localBytes: _photoBytes,
-                onUpload: _uploadingPhoto ? () {} : _pickPhoto,
-                onRemove: _photoBytes == null ? null : _clearPhoto,
-                uploadLabel: _uploadingPhoto ? 'Uploading…' : 'Add photo',
-                height: 180,
-                hints: const [
-                  'Optional photo of the physical cheque',
-                  'Supports: PNG, JPG, WEBP',
-                ],
-              ),
-            ],
+            right: SelloTextField(
+              controller: _chequeNumber,
+              label: 'Cheque number',
+              required: true,
+            ),
           ),
-          SelloDialogSection(
-            title: 'Notes',
-            bottomSpacing: 8,
-            children: [
-              SelloTextField(
-                controller: _notes,
-                label: 'Internal notes',
-                maxLines: 3,
+          const SizedBox(height: 14),
+          _dateField(),
+          const SizedBox(height: 18),
+          _InHandToggle(
+            value: _inHand,
+            onChanged: (value) {
+              setState(() {
+                _inHand = value;
+                if (value) {
+                  _collectionDate ??= DateTime.now();
+                  final amount = num.tryParse(_amount.text.trim()) ?? 0;
+                  if (!_allocationsManual && amount > 0) {
+                    _rebalanceAllocations(amount);
+                  }
+                } else {
+                  _collectionDate = null;
+                  _allocations.clear();
+                  _selectedOrderIds.clear();
+                  _allocationsManual = false;
+                }
+              });
+            },
+          ),
+          if (_inHand && _customer != null) ...[
+            const SizedBox(height: 16),
+            _OutstandingOrdersBlock(
+              loading: _loadingOrders,
+              receivables: orderReceivablesForCheque(
+                orders: _receivables,
+                preferredOrderId: widget.preferredOrderId,
               ),
-            ],
+              selectedIds: _selectedOrderIds,
+              allocations: _allocations,
+              currencySymbol: symbol,
+              onSelected: _toggleOrder,
+              onAmountChanged: _editOrderAmount,
+            ),
+          ],
+          const SizedBox(height: 8),
+          _ChequeExtrasSection(
+            expanded: _extrasOpen || _photoBytes != null || _notes.text.isNotEmpty,
+            onExpansionChanged: (open) => setState(() => _extrasOpen = open),
+            photoBytes: _photoBytes,
+            uploading: _uploadingPhoto,
+            onPickPhoto: _pickPhoto,
+            onClearPhoto: _photoBytes == null ? null : _clearPhoto,
+            notes: _notes,
           ),
         ],
       ),
       footer: SelloDialogFooter(
-        cancelLabel: 'Cancel',
+        cancelLabel: widget.recordingIsOptional ? 'Later' : 'Cancel',
         primaryLabel: _submitting ? 'Saving…' : 'Save cheque',
         onPrimary: _submitting || _uploadingPhoto ? null : _confirm,
       ),
@@ -535,62 +499,186 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
   }
 }
 
-class _CustomerStrip extends StatelessWidget {
-  const _CustomerStrip({
-    required this.customer,
-    required this.currencySymbol,
-    required this.onChange,
-  });
+class _InHandToggle extends StatelessWidget {
+  const _InHandToggle({required this.value, required this.onChanged});
 
-  final CustomerSummary customer;
-  final String currencySymbol;
-  final VoidCallback onChange;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       decoration: BoxDecoration(
         color: AppColors.surfaceMuted,
         borderRadius: BorderRadius.circular(AppRadius.panel),
         border: Border.all(color: AppColors.outlinePanel),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  customer.name,
-                  style: const TextStyle(
+                const Text(
+                  'I already have this cheque',
+                  style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
-                  [
-                    if (customer.phone != null) customer.phone!,
-                    'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: currencySymbol)}',
-                    'Wallet ${SelloFormatters.currency(customer.walletBalance, symbol: currencySymbol)}',
-                  ].join(' · '),
+                  value
+                      ? 'We have the paper cheque. What the customer owes will update, or wait for approval.'
+                      : 'We do not have this cheque yet. What the customer owes stays the same.',
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
-                    fontSize: 13,
-                    height: 1.4,
+                    fontSize: 12.5,
+                    height: 1.35,
                     color: AppColors.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
-          SelloButton(
-            label: 'Change',
-            size: SelloButtonSize.small,
-            variant: SelloButtonVariant.ghost,
-            onPressed: onChange,
+          SelloSwitch(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutstandingOrdersBlock extends StatelessWidget {
+  const _OutstandingOrdersBlock({
+    required this.loading,
+    required this.receivables,
+    required this.selectedIds,
+    required this.allocations,
+    required this.currencySymbol,
+    required this.onSelected,
+    required this.onAmountChanged,
+  });
+
+  final bool loading;
+  final List<ReceivableOrder> receivables;
+  final Set<String> selectedIds;
+  final Map<String, num> allocations;
+  final String currencySymbol;
+  final void Function(ReceivableOrder order, bool selected) onSelected;
+  final void Function(ReceivableOrder order, num amount) onAmountChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Outstanding orders',
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Select the orders this cheque should cover. Edit an amount for a partial payment.',
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 12.5,
+            height: 1.35,
+            color: AppColors.textFaint,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (loading)
+          const LinearProgressIndicator(minHeight: 2)
+        else if (receivables.isEmpty)
+          const Text(
+            'No unpaid completed orders. Amount will reduce the customer balance / credit the wallet if overpaid.',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              height: 1.4,
+              color: AppColors.textFaint,
+            ),
+          )
+        else
+          for (final order in receivables) ...[
+            _OrderAllocRow(
+              order: order,
+              currencySymbol: currencySymbol,
+              selected: selectedIds.contains(order.id),
+              allocated: allocations[order.id] ?? 0,
+              onSelected: (selected) => onSelected(order, selected),
+              onAmountChanged: (value) => onAmountChanged(order, value),
+            ),
+            const SizedBox(height: 8),
+          ],
+      ],
+    );
+  }
+}
+
+class _ChequeExtrasSection extends StatelessWidget {
+  const _ChequeExtrasSection({
+    required this.expanded,
+    required this.onExpansionChanged,
+    required this.photoBytes,
+    required this.uploading,
+    required this.onPickPhoto,
+    required this.onClearPhoto,
+    required this.notes,
+  });
+
+  final bool expanded;
+  final ValueChanged<bool> onExpansionChanged;
+  final Uint8List? photoBytes;
+  final bool uploading;
+  final VoidCallback onPickPhoto;
+  final VoidCallback? onClearPhoto;
+  final TextEditingController notes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: expanded,
+        onExpansionChanged: onExpansionChanged,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        title: const Text(
+          'Add photo or notes',
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        children: [
+          SelloImagePickerPanel(
+            title: 'Cheque image',
+            localBytes: photoBytes,
+            onUpload: uploading ? () {} : onPickPhoto,
+            onRemove: onClearPhoto,
+            uploadLabel: uploading ? 'Uploading…' : 'Add photo',
+            height: 140,
+            hints: const [
+              'Optional photo of the physical cheque',
+            ],
+          ),
+          const SizedBox(height: 12),
+          SelloTextField(
+            controller: notes,
+            label: 'Internal notes',
+            maxLines: 2,
           ),
         ],
       ),
@@ -602,14 +690,18 @@ class _OrderAllocRow extends StatefulWidget {
   const _OrderAllocRow({
     required this.order,
     required this.currencySymbol,
+    required this.selected,
     required this.allocated,
-    required this.onChanged,
+    required this.onSelected,
+    required this.onAmountChanged,
   });
 
   final ReceivableOrder order;
   final String currencySymbol;
+  final bool selected;
   final num allocated;
-  final ValueChanged<num> onChanged;
+  final ValueChanged<bool> onSelected;
+  final ValueChanged<num> onAmountChanged;
 
   @override
   State<_OrderAllocRow> createState() => _OrderAllocRowState();
@@ -617,27 +709,34 @@ class _OrderAllocRow extends StatefulWidget {
 
 class _OrderAllocRowState extends State<_OrderAllocRow> {
   late final TextEditingController _controller;
+  late final FocusNode _amountFocus;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(
-      text: widget.allocated > 0 ? widget.allocated.toStringAsFixed(2) : '',
-    );
+    _amountFocus = FocusNode();
+    _controller = TextEditingController(text: _displayAmount(widget));
   }
 
   @override
   void didUpdateWidget(covariant _OrderAllocRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final next =
-        widget.allocated > 0 ? widget.allocated.toStringAsFixed(2) : '';
+    if (_amountFocus.hasFocus) return;
+    final next = _displayAmount(widget);
     if (_controller.text != next) {
       _controller.text = next;
     }
   }
 
+  String _displayAmount(_OrderAllocRow widget) {
+    if (!widget.selected) return '';
+    if (widget.allocated <= 0) return '';
+    return widget.allocated.toStringAsFixed(2);
+  }
+
   @override
   void dispose() {
+    _amountFocus.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -645,181 +744,114 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.outlinePanel),
+    final selected = widget.selected;
+
+    return Material(
+      color: selected
+          ? context.brandAccentContainer.withValues(alpha: 0.45)
+          : AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.panel),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  order.orderNumber,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
+      child: Container(
+          padding: const EdgeInsets.fromLTRB(6, 10, 12, 10),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected
+                  ? context.brandAccent.withValues(alpha: 0.28)
+                  : AppColors.outlinePanel,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.panel),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => widget.onSelected(!selected),
+                  borderRadius: BorderRadius.circular(AppRadius.panel),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: selected,
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          activeColor: context.brandAccent,
+                          onChanged: (value) =>
+                              widget.onSelected(value ?? false),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order.orderNumber,
+                                style: const TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Due ${SelloFormatters.currency(order.remaining, symbol: widget.currencySymbol)} · '
+                                '${SelloFormatters.date(order.orderedAt)}',
+                                style: const TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 12.5,
+                                  color: AppColors.textFaint,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Due ${SelloFormatters.currency(order.remaining, symbol: widget.currencySymbol)} · '
-                  '${SelloFormatters.date(order.orderedAt)}',
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 118,
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _amountFocus,
+                  enabled: selected,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textFaint,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
                   ),
+                  decoration: InputDecoration(
+                    label: const SelloFieldLabel(label: 'Amount'),
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                  ),
+                  onChanged: (value) {
+                    widget.onAmountChanged(num.tryParse(value.trim()) ?? 0);
+                  },
                 ),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 120,
-            child: TextField(
-              controller: _controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Allocate',
-                isDense: true,
               ),
-              onChanged: (value) {
-                widget.onChanged(num.tryParse(value.trim()) ?? 0);
-              },
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CustomerPicker extends ConsumerStatefulWidget {
-  const _CustomerPicker({required this.currencySymbol});
-
-  final String currencySymbol;
-
-  @override
-  ConsumerState<_CustomerPicker> createState() => _CustomerPickerState();
-}
-
-class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
-  final _search = TextEditingController();
-  Timer? _debounce;
-  List<CustomerSummary> _items = const [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(_load);
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _search.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-            search: _search.text,
-            isActive: true,
-            pageSize: 40,
-          );
-      if (!mounted) return;
-      setState(() {
-        _items = result.items;
-        _loading = false;
-      });
-    } on AppFailure catch (failure) {
-      if (!mounted) return;
-      setState(() {
-        _error = failure.message;
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SelloFormDialog(
-      title: 'Select customer',
-      subtitle: 'Active customers with receivables or wallet activity.',
-      maxWidth: 720,
-      fullscreenOnMobile: true,
-      body: Column(
-        children: [
-          SelloSearchBar(
-            controller: _search,
-            hint: 'Search name, phone or code…',
-            onChanged: (_) {
-              _debounce?.cancel();
-              _debounce = Timer(const Duration(milliseconds: 280), _load);
-            },
-          ),
-          const SizedBox(height: 16),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            )
-          else if (_error != null)
-            SelloStateView.error(
-              title: 'Unable to load customers',
-              message: _error,
-              actionLabel: 'Try again',
-              onAction: _load,
-            )
-          else if (_items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('No matching customers.'),
-            )
-          else
-            SizedBox(
-              height: 420,
-              child: ListView.separated(
-                itemCount: _items.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final customer = _items[index];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      customer.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      [
-                        if (customer.phone != null) customer.phone!,
-                        'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: widget.currencySymbol)}',
-                      ].join(' · '),
-                    ),
-                    onTap: () => Navigator.of(context).pop(customer),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
-      footer: SelloDialogFooter(
-        cancelLabel: 'Close',
-        primaryLabel: 'Done',
-        primaryEnabled: false,
-        onPrimary: () => Navigator.of(context).maybePop(),
-      ),
+        ),
     );
   }
 }

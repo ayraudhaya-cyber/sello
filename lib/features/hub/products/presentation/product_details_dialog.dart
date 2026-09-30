@@ -107,11 +107,7 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
   }
 
   void _openLightbox(int index) {
-    showSelloImageLightbox(
-      context,
-      images: _gallery,
-      initialIndex: index,
-    );
+    showSelloImageLightbox(context, images: _gallery, initialIndex: index);
   }
 
   @override
@@ -130,13 +126,12 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
       ),
       body: isMobile ? _buildMobileBody() : _buildDesktopBody(),
       footer: SelloDialogFooter(
-        cancelLabel: product.isActive ? 'Archive' : 'Restore',
+        cancelLabel: product.isActive ? 'Deactivate' : 'Reactivate',
         cancelVariant: SelloButtonVariant.ghost,
         onCancel: widget.onToggleArchive,
         primaryLabel: 'Edit Product',
         onPrimary: widget.onEdit,
-        destructiveLabel:
-            product.isActive ? null : 'Delete permanently',
+        destructiveLabel: product.isActive ? null : 'Delete permanently',
         onDestructive: product.isActive ? null : widget.onDeletePermanently,
       ),
     );
@@ -189,13 +184,12 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
   Widget _buildProfileContent() {
     final dash = '—';
     final fieldConfigAsync = ref.watch(productFieldConfigProvider);
-    final fieldConfig = fieldConfigAsync.valueOrNull ??
-        ProductFieldConfig(fields: []);
+    final fieldConfig =
+        fieldConfigAsync.valueOrNull ?? ProductFieldConfig(fields: []);
     final configReady = fieldConfigAsync.hasValue;
     final showBarcode = !configReady || fieldConfig.isEnabled('barcode');
     final showBrand = !configReady || fieldConfig.isEnabled('brand');
-    final showReorder =
-        !configReady || fieldConfig.isEnabled('reorder_level');
+    final showReorder = !configReady || fieldConfig.isEnabled('reorder_level');
     // Description is a standard product field — not gated by Product Details config.
     final hasDescription =
         product.description != null && product.description!.trim().isNotEmpty;
@@ -210,10 +204,8 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
               !f.showInCatalog,
         )
         .toList(growable: false);
-    final specFields = <CompanyProductField>[
-      ...catalogSpecs,
-      ...listOnlySpecs,
-    ]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final specFields = <CompanyProductField>[...catalogSpecs, ...listOnlySpecs]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     final filledSpecs = <(CompanyProductField, String)>[];
     for (final field in specFields) {
       final raw = productFieldRawValue(product, field.fieldKey);
@@ -345,26 +337,24 @@ class _ProductDetailsDialogState extends ConsumerState<ProductDetailsDialog> {
                           ),
                         )
                       : showBarcode
-                          ? _ProfileField(
-                              label: 'Barcode',
-                              value: product.barcode?.trim().isNotEmpty == true
-                                  ? product.barcode!
-                                  : dash,
-                              mutedEmpty:
-                                  product.barcode?.trim().isNotEmpty != true,
-                            )
-                          : _ProfileField(
-                              label: 'Brand',
-                              value: product.brand?.trim().isNotEmpty == true
-                                  ? product.brand!
-                                  : dash,
-                              mutedEmpty:
-                                  product.brand?.trim().isNotEmpty != true,
-                            ),
+                      ? _ProfileField(
+                          label: 'Barcode',
+                          value: product.barcode?.trim().isNotEmpty == true
+                              ? product.barcode!
+                              : dash,
+                          mutedEmpty:
+                              product.barcode?.trim().isNotEmpty != true,
+                        )
+                      : _ProfileField(
+                          label: 'Brand',
+                          value: product.brand?.trim().isNotEmpty == true
+                              ? product.brand!
+                              : dash,
+                          mutedEmpty: product.brand?.trim().isNotEmpty != true,
+                        ),
                 if ((showBarcode || showBrand) && filledSpecs.isNotEmpty)
                   const SizedBox(height: 16),
-                if (filledSpecs.isNotEmpty)
-                  _SpecGrid(entries: filledSpecs),
+                if (filledSpecs.isNotEmpty) _SpecGrid(entries: filledSpecs),
               ],
             ),
           ),
@@ -486,7 +476,8 @@ class _ProductHero extends StatelessWidget {
     final metaParts = <String>[
       product.sku,
       product.categoryName ?? 'Uncategorized',
-      if (product.unitLabel?.trim().isNotEmpty == true) product.unitLabel!.trim(),
+      if (product.unitLabel?.trim().isNotEmpty == true)
+        product.unitLabel!.trim(),
     ];
 
     return Column(
@@ -497,7 +488,7 @@ class _ProductHero extends StatelessWidget {
         Text(metaParts.join(' · '), style: _ProductDetailType.subtitle),
         const SizedBox(height: 14),
         SelloStatusBadge(
-          label: product.isActive ? 'Active' : 'Archived',
+          label: product.isActive ? 'Active' : 'Inactive',
           tone: product.isActive
               ? SelloStatusTone.success
               : SelloStatusTone.neutral,
@@ -530,8 +521,8 @@ class _ArchivedNotice extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Archived products are hidden from sales but remain available '
-              'for reports and history.',
+              'This product is inactive. It stays out of new sales. '
+              'Past orders keep its name, price, and options.',
               style: _ProductDetailType.label.copyWith(height: 1.4),
             ),
           ),
@@ -643,10 +634,7 @@ class _ActiveOptionReadonlyRow extends StatelessWidget {
 }
 
 class _ProfileSection extends StatelessWidget {
-  const _ProfileSection({
-    required this.label,
-    required this.child,
-  });
+  const _ProfileSection({required this.label, required this.child});
 
   final String label;
   final Widget child;
@@ -711,7 +699,9 @@ class _SpecGrid extends StatelessWidget {
       final right = i + 1 < entries.length ? entries[i + 1] : null;
       rows.add(
         Padding(
-          padding: EdgeInsets.only(bottom: right != null || i + 2 < entries.length ? 16 : 0),
+          padding: EdgeInsets.only(
+            bottom: right != null || i + 2 < entries.length ? 16 : 0,
+          ),
           child: right == null
               ? _ProfileField(label: left.$1.label, value: left.$2)
               : SelloFormRow(

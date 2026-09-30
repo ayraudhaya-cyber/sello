@@ -50,7 +50,7 @@ class SupplierDetailsDialog extends StatelessWidget {
             runSpacing: 8,
             children: [
               SelloStatusBadge(
-                label: supplier.isActive ? 'Active' : 'Archived',
+                label: supplier.isActive ? 'Active' : 'Inactive',
                 tone: supplier.isActive
                     ? SelloStatusTone.success
                     : SelloStatusTone.neutral,
@@ -68,8 +68,8 @@ class SupplierDetailsDialog extends StatelessWidget {
           if (!supplier.isActive) ...[
             const SizedBox(height: 16),
             const Text(
-              'This supplier is archived. Historical purchase orders and '
-              'payments will remain available when those modules ship.',
+              'This supplier is inactive. New sourcing will not offer them. '
+              'Products already linked to this supplier keep that link.',
               style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 13,
@@ -372,7 +372,7 @@ class SupplierDetailsDialog extends StatelessWidget {
         ],
       ),
       footer: SelloDialogFooter(
-        cancelLabel: supplier.isActive ? 'Archive' : 'Restore',
+        cancelLabel: supplier.isActive ? 'Deactivate' : 'Reactivate',
         cancelVariant: SelloButtonVariant.ghost,
         onCancel: onToggleArchive,
         primaryLabel: 'Edit supplier',
@@ -430,7 +430,7 @@ class _ProductRow extends StatelessWidget {
                   [
                     product.sku,
                     if (product.categoryName != null) product.categoryName!,
-                    product.isActive ? 'Active' : 'Archived',
+                    product.isActive ? 'Active' : 'Inactive',
                   ].join(' · '),
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,

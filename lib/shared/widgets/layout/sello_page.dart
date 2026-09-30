@@ -28,38 +28,57 @@ class SelloSectionHeader extends StatelessWidget {
         ? context.texts.headlineMedium
         : context.texts.headlineLarge;
 
-    return Row(
+    final heading = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
+        if (eyebrow != null) ...[
+          Text(eyebrow!.toUpperCase(), style: AppTypography.eyebrow),
+          const SizedBox(height: AppSpacing.xs),
+        ],
+        Text(
+          title,
+          style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: AppSpacing.xxs),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Text(
+              subtitle!,
+              style: context.texts.bodyMedium?.copyWith(
+                color: context.selloColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    if (action == null) return heading;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = !constraints.maxWidth.isFinite ||
+            constraints.maxWidth < ResponsiveLayout.formFieldMinWidth * 2;
+        if (stack) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (eyebrow != null) ...[
-                Text(eyebrow!.toUpperCase(), style: AppTypography.eyebrow),
-                const SizedBox(height: AppSpacing.xs),
-              ],
-              Text(
-                title,
-                style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: AppSpacing.xxs),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: Text(
-                    subtitle!,
-                    style: context.texts.bodyMedium?.copyWith(
-                      color: context.selloColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
+              heading,
+              const SizedBox(height: AppSpacing.sm),
+              action!,
             ],
-          ),
-        ),
-        ?action,
-      ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: heading),
+            const SizedBox(width: AppSpacing.sm),
+            action!,
+          ],
+        );
+      },
     );
   }
 }

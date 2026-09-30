@@ -6,7 +6,7 @@ import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/supplier_summary.dart';
 import 'package:sello/shared/models/supplier_upsert_input.dart';
 
-enum SupplierStatusFilter { all, active, archived }
+enum SupplierStatusFilter { all, active, inactive }
 
 class HubSuppliersState {
   const HubSuppliersState({
@@ -126,7 +126,7 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
         isActive: switch (state.statusFilter) {
           SupplierStatusFilter.all => null,
           SupplierStatusFilter.active => true,
-          SupplierStatusFilter.archived => false,
+          SupplierStatusFilter.inactive => false,
         },
         category: state.category,
         page: page,
@@ -224,7 +224,7 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'No active session found.';
     if (supplier.isActive) {
-      return 'Archive the supplier before permanently deleting them.';
+      return 'Deactivate the supplier before permanently deleting them.';
     }
 
     state = state.copyWith(isSaving: true, clearError: true);

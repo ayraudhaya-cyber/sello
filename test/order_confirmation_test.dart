@@ -10,9 +10,19 @@ import 'package:sello/shared/models/payment_record_status.dart';
 
 void main() {
   group('order confirmation trigger rules', () {
-    test('only completed orders should dispatch', () {
+    test('submitted sales can dispatch a customer invoice', () {
       expect(
         OrderConfirmationDispatcher.shouldDispatch(OrderStatus.completed),
+        isTrue,
+      );
+      expect(
+        OrderConfirmationDispatcher.shouldDispatch(OrderStatus.placed),
+        isTrue,
+      );
+      expect(
+        OrderConfirmationDispatcher.shouldDispatch(
+          OrderStatus.partiallyDelivered,
+        ),
         isTrue,
       );
       expect(

@@ -150,25 +150,21 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                 await _cancel(detail.summary);
               }
             : null,
-        onArchive: detail.summary.status == OrderStatus.completed ||
-                detail.summary.status == OrderStatus.cancelled
-            ? () async {
-                Navigator.of(context).pop();
-                await _archive(detail.summary);
-              }
-            : null,
-        onViewInvoice: detail.summary.status == OrderStatus.completed
+        onViewInvoice: detail.summary.status.canShareInvoice
             ? () => _viewInvoice(detail.summary)
             : null,
-        onPrintInvoice: detail.summary.status == OrderStatus.completed
+        onPrintInvoice: detail.summary.status.canShareInvoice
             ? () => _printInvoice(detail.summary)
             : null,
-        onWhatsAppInvoice: detail.summary.status == OrderStatus.completed
+        onWhatsAppInvoice: detail.summary.status.canShareInvoice
             ? () => _whatsAppInvoice(detail.summary)
             : null,
-        onSmsInvoice: detail.summary.status == OrderStatus.completed
+        onSmsInvoice: detail.summary.status.canShareInvoice
             ? () => _smsInvoice(detail.summary)
             : null,
+        onCollectionSaved: () {
+          ref.read(hubOrdersProvider.notifier).refresh();
+        },
       ),
     );
   }
@@ -461,29 +457,6 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       SelloSnackbars.error(context, error);
     } else {
       SelloSnackbars.success(context, 'Remaining quantities cancelled.');
-    }
-  }
-
-  Future<void> _archive(OrderSummary order) async {
-    final confirmed = await showSelloDialog(
-      context: context,
-      title: 'Archive order?',
-      message:
-          '${order.orderNumber} will be hidden from the Orders list. '
-          'History remains available for reporting.',
-      confirmLabel: 'Archive',
-      cancelLabel: 'Keep',
-      destructive: true,
-    );
-    if (confirmed != true || !mounted) return;
-
-    final error =
-        await ref.read(hubOrdersProvider.notifier).archiveOrder(order);
-    if (!mounted) return;
-    if (error != null) {
-      SelloSnackbars.error(context, error);
-    } else {
-      SelloSnackbars.success(context, 'Order archived.');
     }
   }
 

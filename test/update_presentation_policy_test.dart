@@ -26,6 +26,13 @@ void main() {
       );
     });
 
+    test('Windows keeps Update Available modal', () {
+      expect(
+        UpdatePresentationPolicy.forPlatform(AppReleasePlatform.windows),
+        UpdatePresentationStyle.updateModal,
+      );
+    });
+
     test('desktop / Electron (other) keeps Update Available modal', () {
       expect(
         UpdatePresentationPolicy.forPlatform(AppReleasePlatform.other),

@@ -187,7 +187,7 @@ void main() {
   });
 
   group('OrderCatalogGridCard', () {
-    testWidgets('truncates long names to two lines with fixed name area',
+    testWidgets('keeps a two-line name without reserving empty space',
         (tester) async {
       await tester.pumpWidget(
         _wrap(
@@ -210,16 +210,9 @@ void main() {
       final text = tester.widget<Text>(nameFinder);
       expect(text.maxLines, 2);
       expect(text.overflow, TextOverflow.ellipsis);
-
-      final sizedBoxes = tester.widgetList<SizedBox>(
-        find.descendant(
-          of: find.byType(OrderCatalogGridCard),
-          matching: find.byType(SizedBox),
-        ),
-      );
       expect(
-        sizedBoxes.any((box) => box.height == kOrderCatalogNameAreaHeight),
-        isTrue,
+        find.byType(OrderCatalogMediaFrame),
+        findsOneWidget,
       );
     });
   });

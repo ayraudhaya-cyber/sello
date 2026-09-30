@@ -30,6 +30,7 @@ class _DocumentIdentitySettingsSectionState
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _termsController = TextEditingController();
+  final _taglineController = TextEditingController();
 
   ProcessedMedia? _pendingLogo;
   bool _clearLogo = false;
@@ -44,6 +45,7 @@ class _DocumentIdentitySettingsSectionState
     _phoneController.dispose();
     _emailController.dispose();
     _termsController.dispose();
+    _taglineController.dispose();
     super.dispose();
   }
 
@@ -53,12 +55,14 @@ class _DocumentIdentitySettingsSectionState
     required String? phone,
     required String? email,
     required String? terms,
+    required String? tagline,
   }) {
     if (_hydrated && _hydratedSettingsId == settingsId) return;
     _addressController.text = address ?? '';
     _phoneController.text = phone ?? '';
     _emailController.text = email ?? '';
     _termsController.text = terms ?? '';
+    _taglineController.text = tagline ?? '';
     _hydrated = true;
     _hydratedSettingsId = settingsId;
   }
@@ -69,6 +73,7 @@ class _DocumentIdentitySettingsSectionState
     required String? savedPhone,
     required String? savedEmail,
     required String? savedTerms,
+    required String? savedTagline,
   }) {
     if (_pendingLogo != null || _clearLogo) return true;
     final show = _showNameWithLogo ?? savedShowName;
@@ -79,6 +84,9 @@ class _DocumentIdentitySettingsSectionState
     if (_phoneController.text.trim() != (savedPhone ?? '').trim()) return true;
     if (_emailController.text.trim() != (savedEmail ?? '').trim()) return true;
     if (_termsController.text.trim() != (savedTerms ?? '').trim()) return true;
+    if (_taglineController.text.trim() != (savedTagline ?? '').trim()) {
+      return true;
+    }
     return false;
   }
 
@@ -125,6 +133,7 @@ class _DocumentIdentitySettingsSectionState
           documentPhone: _phoneController.text,
           documentEmail: _emailController.text,
           documentTerms: _termsController.text,
+          documentTagline: _taglineController.text,
         );
     if (!mounted) return;
     if (error != null) {
@@ -145,6 +154,7 @@ class _DocumentIdentitySettingsSectionState
     required String? savedPhone,
     required String? savedEmail,
     required String? savedTerms,
+    required String? savedTagline,
   }) {
     setState(() {
       _pendingLogo = null;
@@ -154,6 +164,7 @@ class _DocumentIdentitySettingsSectionState
       _phoneController.text = savedPhone ?? '';
       _emailController.text = savedEmail ?? '';
       _termsController.text = savedTerms ?? '';
+      _taglineController.text = savedTagline ?? '';
     });
   }
 
@@ -168,6 +179,7 @@ class _DocumentIdentitySettingsSectionState
     final savedPhone = saved?.documentPhone;
     final savedEmail = saved?.documentEmail;
     final savedTerms = saved?.documentTerms;
+    final savedTagline = saved?.documentTagline;
 
     if (saved != null) {
       _hydrateFromSaved(
@@ -176,6 +188,7 @@ class _DocumentIdentitySettingsSectionState
         phone: savedPhone,
         email: savedEmail,
         terms: savedTerms,
+        tagline: savedTagline,
       );
     }
 
@@ -192,6 +205,7 @@ class _DocumentIdentitySettingsSectionState
       savedPhone: savedPhone,
       savedEmail: savedEmail,
       savedTerms: savedTerms,
+      savedTagline: savedTagline,
     );
     final saving = state.isSavingBranding;
 
@@ -209,6 +223,7 @@ class _DocumentIdentitySettingsSectionState
                 savedPhone: savedPhone,
                 savedEmail: savedEmail,
                 savedTerms: savedTerms,
+                savedTagline: savedTagline,
               ),
             )
           : null,
@@ -300,6 +315,18 @@ class _DocumentIdentitySettingsSectionState
               controller: _termsController,
               hint: 'Payment terms, return policy, or thank-you note',
               maxLines: 5,
+              enabled: canEdit && !saving,
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SettingsCompactField(
+            label: 'Business tagline',
+            helper: 'Shown at the bottom of invoices and receipts.',
+            child: SelloTextField(
+              controller: _taglineController,
+              hint: 'Quality you can count on',
+              maxLines: 2,
               enabled: canEdit && !saving,
               onChanged: (_) => setState(() {}),
             ),

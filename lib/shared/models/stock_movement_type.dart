@@ -74,6 +74,6 @@ enum StockStatus {
         StockStatus.healthy => 'In stock',
         StockStatus.low => 'Low stock',
         StockStatus.out => 'Out of stock',
-        StockStatus.archived => 'Archived',
+        StockStatus.archived => 'Inactive',
       };
 }

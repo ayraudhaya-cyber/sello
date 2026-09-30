@@ -348,7 +348,11 @@ class EmployeeRepository {
           .eq('company_id', companyId)
           .isFilter('deleted_at', null);
 
-      if (status != null) {
+      if (status == EmploymentStatus.inactive) {
+        query = query.or(
+          'employment_status.eq.inactive,employment_status.eq.archived',
+        );
+      } else if (status != null) {
         query = query.eq('employment_status', status.code);
       }
       if (roleId != null) {

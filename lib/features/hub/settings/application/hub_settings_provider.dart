@@ -266,6 +266,7 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
     String? documentPhone,
     String? documentEmail,
     String? documentTerms,
+    String? documentTagline,
   }) async {
     final session = ref.read(currentSessionProvider);
     final permissions = ref.read(permissionServiceProvider);
@@ -309,6 +310,9 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
       final nextTerms = documentTerms != null
           ? blankToNull(documentTerms)
           : current.documentTerms;
+      final nextTagline = documentTagline != null
+          ? blankToNull(documentTagline)
+          : current.documentTagline;
 
       final saved = await _repo.updateDocumentIdentity(
         companyId: session.company.id,
@@ -319,6 +323,7 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
         documentPhone: nextPhone,
         documentEmail: nextEmail,
         documentTerms: nextTerms,
+        documentTagline: nextTagline,
       );
 
       final draft = state.draft;
@@ -334,11 +339,13 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
                 documentPhone: saved.documentPhone,
                 documentEmail: saved.documentEmail,
                 documentTerms: saved.documentTerms,
+                documentTagline: saved.documentTagline,
                 clearDocumentLogoUrl: saved.documentLogoUrl == null,
                 clearDocumentAddress: saved.documentAddress == null,
                 clearDocumentPhone: saved.documentPhone == null,
                 clearDocumentEmail: saved.documentEmail == null,
                 clearDocumentTerms: saved.documentTerms == null,
+                clearDocumentTagline: saved.documentTagline == null,
               ),
         isSavingBranding: false,
         clearError: true,

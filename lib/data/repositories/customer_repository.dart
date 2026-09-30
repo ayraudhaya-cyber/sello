@@ -1,4 +1,5 @@
 import 'package:sello/core/error/app_failure.dart';
+import 'package:sello/shared/lifecycle/business_entity_lifecycle.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/customer_summary.dart';
@@ -110,6 +111,27 @@ class CustomerRepository {
     }
   }
 
+  /// Active, non-deleted customers. A head count — no customer rows returned.
+  Future<int> countActiveCustomers() async {
+    try {
+      return await _client
+          .from('customers')
+          .count()
+          .isFilter('deleted_at', null)
+          .eq('is_active', true);
+    } on PostgrestException catch (error) {
+      throw AuthFailure(
+        error.message.trim().isEmpty
+            ? 'Unable to count customers. Please try again.'
+            : error.message,
+      );
+    } catch (error) {
+      throw const UnexpectedFailure(
+        'Unable to count customers. Please try again.',
+      );
+    }
+  }
+
   Future<CustomerSummary?> fetchById(String customerId) async {
     try {
       final row = await _client
@@ -190,11 +212,42 @@ class CustomerRepository {
           .eq('id', input.customerId!);
       return input.customerId!;
     } on PostgrestException catch (error) {
-      throw ValidationFailure(_mapCustomerError(error.message));
+      throw ValidationFailure(mapCustomerSaveError(error.message));
     } on AppFailure {
       rethrow;
     } catch (error) {
       throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Lets a completed field sale leave a balance that can be collected later.
+  ///
+  /// Must set [employeeId] as `updated_by` so the customers UPDATE policy
+  /// (`updated_by = current_employee_id()`) can accept the new row.
+  Future<void> allowOnAccount({
+    required String customerId,
+    required String employeeId,
+  }) async {
+    try {
+      await _client
+          .from('customers')
+          .update(customerAllowOnAccountPatch(employeeId: employeeId))
+          .eq('id', customerId);
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(mapCustomerSaveError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw const UnexpectedFailure('Unable to update this customer.');
+    }
+  }
+
+  Future<bool> _referenced(String table, String column, String id) async {
+    try {
+      final rows =
+          await _client.from(table).select('id').eq(column, id).limit(1);
+      return (rows as List).isNotEmpty;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -246,7 +299,7 @@ class CustomerRepository {
     } on ValidationFailure {
       rethrow;
     } on PostgrestException catch (error) {
-      throw ValidationFailure(_mapCustomerError(error.message));
+      throw ValidationFailure(mapCustomerSaveError(error.message));
     } catch (error) {
       throw UnexpectedFailure(error.toString());
     }
@@ -271,10 +324,18 @@ class CustomerRepository {
           'This customer has already been permanently deleted.',
         );
       }
-      if (existing['is_active'] == true) {
-        throw const ValidationFailure(
-          'Archive the customer before permanently deleting them.',
-        );
+      final used = await _referenced('orders', 'customer_id', customerId) ||
+          await _referenced('payments', 'customer_id', customerId) ||
+          await _referenced('customer_visits', 'customer_id', customerId) ||
+          await _referenced('scheduled_visits', 'customer_id', customerId) ||
+          await _referenced('cheques', 'customer_id', customerId);
+      final decision = BusinessEntityLifecycle.permanentDelete(
+        isActive: existing['is_active'] == true,
+        hasHistoricalUse: used,
+        noun: 'customer',
+      );
+      if (!decision.allowed) {
+        throw ValidationFailure(decision.message!);
       }
 
       await _client.from('customers').update({
@@ -285,7 +346,7 @@ class CustomerRepository {
     } on ValidationFailure {
       rethrow;
     } on PostgrestException catch (error) {
-      throw ValidationFailure(_mapCustomerError(error.message));
+      throw ValidationFailure(mapCustomerSaveError(error.message));
     } catch (error) {
       throw UnexpectedFailure(error.toString());
     }
@@ -297,18 +358,31 @@ class CustomerRepository {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  String _mapCustomerError(String message) {
-    final lower = message.toLowerCase();
-    if (lower.contains('customers_company_code_active_key') ||
-        lower.contains('code')) {
-      return 'A customer with this code already exists.';
-    }
-    if (lower.contains('email')) {
-      return 'Enter a valid email address.';
-    }
-    if (message.trim().isEmpty) {
-      return 'Unable to save this customer. Please try again.';
-    }
-    return message;
+}
+
+/// Customers UPDATE RLS requires `updated_by` to be the signed-in employee.
+Map<String, dynamic> customerAllowOnAccountPatch({required String employeeId}) {
+  return {
+    'credit_allowed': true,
+    'updated_by': employeeId,
+  };
+}
+
+String mapCustomerSaveError(String message) {
+  final lower = message.toLowerCase();
+  if (lower.contains('row-level security') ||
+      lower.contains('violates row-level')) {
+    return 'Unable to save this customer.';
   }
+  if (lower.contains('customers_company_code_active_key') ||
+      lower.contains('code')) {
+    return 'A customer with this code already exists.';
+  }
+  if (lower.contains('email')) {
+    return 'Enter a valid email address.';
+  }
+  if (message.trim().isEmpty) {
+    return 'Unable to save this customer. Please try again.';
+  }
+  return message;
 }

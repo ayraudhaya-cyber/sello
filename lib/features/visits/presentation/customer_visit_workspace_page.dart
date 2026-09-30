@@ -30,6 +30,7 @@ import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/app_session.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/customer_summary.dart';
+import 'package:sello/shared/models/customer_upsert_input.dart';
 import 'package:sello/shared/models/customer_visit.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_upsert_input.dart';
@@ -76,8 +77,10 @@ class _CustomerVisitWorkspacePageState
   final _orderKey = GlobalKey<OrderEditorDialogState>();
   final _signatureKey = GlobalKey<SelloSignaturePadState>();
   final _visitNotes = TextEditingController();
-  final _orderDiscount = TextEditingController(text: '0');
-  final _orderDiscountPercent = TextEditingController(text: '0');
+  final _orderDiscount = TextEditingController();
+  final _orderDiscountPercent = TextEditingController();
+  final _discountAmountFocus = FocusNode();
+  final _discountPercentFocus = FocusNode();
 
   CustomerSummary? _customer;
   bool _booting = true;
@@ -85,6 +88,9 @@ class _CustomerVisitWorkspacePageState
   int _basketCount = 0;
   num _basketQty = 0;
   num _basketTotal = 0;
+  num _basketSavings = 0;
+  bool _orderSubmitted = false;
+  String? _savedVisitOrderId;
   _VisitStage _stage = _VisitStage.catalog;
   VisitPaymentArrangement _arrangement = VisitPaymentArrangement.noneYet;
   DateTime? _chequeFollowUpDate;
@@ -93,7 +99,6 @@ class _CustomerVisitWorkspacePageState
   late bool _isWalkIn;
   final _draftStore = VisitOrderDraftStore();
   VisitOrderDraft? _pendingDraft;
-  bool _draftSaved = false;
 
   @override
   void initState() {
@@ -102,11 +107,23 @@ class _CustomerVisitWorkspacePageState
     _visitNotes.addListener(_onVisitNotesChanged);
     _orderDiscount.addListener(_onDiscountChanged);
     _orderDiscountPercent.addListener(_onDiscountChanged);
+    _bindZeroClear(_discountAmountFocus, _orderDiscount);
+    _bindZeroClear(_discountPercentFocus, _orderDiscountPercent);
     Future.microtask(_bootstrap);
   }
 
   void _onVisitNotesChanged() {
     unawaited(_persistDraft());
+  }
+
+  void _bindZeroClear(FocusNode node, TextEditingController controller) {
+    node.addListener(() {
+      if (!node.hasFocus) return;
+      final text = controller.text.trim();
+      if (text == '0' || text == '0.0' || text == '0.00') {
+        controller.clear();
+      }
+    });
   }
 
   void _onDiscountChanged() {
@@ -126,6 +143,8 @@ class _CustomerVisitWorkspacePageState
     _visitNotes.dispose();
     _orderDiscount.dispose();
     _orderDiscountPercent.dispose();
+    _discountAmountFocus.dispose();
+    _discountPercentFocus.dispose();
     super.dispose();
   }
 
@@ -209,8 +228,28 @@ class _CustomerVisitWorkspacePageState
     final session = ref.read(currentSessionProvider);
     if (session == null) return null;
 
-    final input = await WalkInCustomerSheet.show(context);
-    if (input == null || !mounted) return null;
+    final sheetInput = await WalkInCustomerSheet.show(context);
+    if (sheetInput == null || !mounted) return null;
+
+    // The sale is completed on account first. Paid today collects against
+    // that balance in the payment dialog; credit and cheque stay outstanding.
+    final input = CustomerUpsertInput(
+      name: sheetInput.name,
+      customerType: sheetInput.customerType,
+      creditAllowed: true,
+      creditLimit: sheetInput.creditLimit,
+      openingBalance: sheetInput.openingBalance,
+      code: sheetInput.code,
+      companyName: sheetInput.companyName,
+      phone: sheetInput.phone,
+      whatsapp: sheetInput.whatsapp,
+      email: sheetInput.email,
+      addressLine1: sheetInput.addressLine1,
+      city: sheetInput.city,
+      taxNumber: sheetInput.taxNumber,
+      notes: sheetInput.notes,
+      isActive: sheetInput.isActive,
+    );
 
     final branchId = _branchIdFor(session);
 
@@ -317,7 +356,6 @@ class _CustomerVisitWorkspacePageState
         companyId: session.company.id,
         employeeId: session.employee.id,
       );
-      if (mounted) setState(() => _draftSaved = false);
       return;
     }
 
@@ -349,7 +387,6 @@ class _CustomerVisitWorkspacePageState
           num.tryParse(_orderDiscountPercent.text.trim()) ?? 0,
     );
     await _draftStore.save(draft);
-    if (mounted) setState(() => _draftSaved = true);
   }
 
   Future<void> _continueDraft({
@@ -379,10 +416,10 @@ class _CustomerVisitWorkspacePageState
     }
     _chequeFollowUpDate = draft.chequeFollowUpAt;
     _orderDiscount.text = draft.orderDiscount == 0
-        ? '0'
+        ? ''
         : draft.orderDiscount.toString();
     _orderDiscountPercent.text = draft.orderDiscountPercent == 0
-        ? '0'
+        ? ''
         : draft.orderDiscountPercent.toString();
     _orderKey.currentState?.setOrderDiscounts(
       amount: draft.orderDiscount,
@@ -453,7 +490,6 @@ class _CustomerVisitWorkspacePageState
     _stage = _VisitStage.catalog;
     setState(() {
       _pendingDraft = null;
-      _draftSaved = false;
       _basketCount = 0;
       _basketQty = 0;
       _basketTotal = 0;
@@ -525,13 +561,18 @@ class _CustomerVisitWorkspacePageState
     final count = editor?.lines.length ?? 0;
     final qty = editor?.itemQuantity ?? 0;
     final total = editor?.runningTotal ?? 0;
-    if (_basketCount == count && _basketQty == qty && _basketTotal == total) {
+    final savings = editor?.discountSavings ?? 0;
+    if (_basketCount == count &&
+        _basketQty == qty &&
+        _basketTotal == total &&
+        _basketSavings == savings) {
       return;
     }
     setState(() {
       _basketCount = count;
       _basketQty = qty;
       _basketTotal = total;
+      _basketSavings = savings;
       if (count == 0) {
         _stage = _VisitStage.catalog;
       }
@@ -576,6 +617,7 @@ class _CustomerVisitWorkspacePageState
   }
 
   Future<void> _finishVisit() async {
+    if (_saving) return;
     final orderState = _orderKey.currentState;
     final hasLines = orderState?.lines.isNotEmpty ?? false;
 
@@ -615,7 +657,7 @@ class _CustomerVisitWorkspacePageState
       }
 
       OrderConfirmationOutcome? confirmation;
-      if (hasLines && orderState != null) {
+      if (!_orderSubmitted && hasLines && orderState != null) {
         orderState.setOrderDiscounts(
           amount: num.tryParse(_orderDiscount.text.trim()) ?? 0,
           percent: num.tryParse(_orderDiscountPercent.text.trim()) ?? 0,
@@ -625,38 +667,34 @@ class _CustomerVisitWorkspacePageState
           setState(() => _saving = false);
           return;
         }
-        var input = result.input;
-        if (_arrangement == VisitPaymentArrangement.creditSale) {
-          input = OrderUpsertInput(
-            orderId: input.orderId,
-            customerId: input.customerId,
-            lines: input.lines,
-            notes: input.notes,
-            paymentMethod: PaymentMethod.credit,
-            paymentStatus: PaymentStatus.unpaid,
-            orderDiscount: input.orderDiscount,
-            orderDiscountPercent: input.orderDiscountPercent,
-            taxAmount: input.taxAmount,
-            status: input.status,
-            visitId: visit.isLocalOnly ? null : visit.id,
-            offlineClientId: input.offlineClientId,
-          );
-        } else if (input.visitId == null && !visit.isLocalOnly) {
-          input = OrderUpsertInput(
-            orderId: input.orderId,
-            customerId: input.customerId,
-            lines: input.lines,
-            notes: input.notes,
-            paymentMethod: input.paymentMethod,
-            paymentStatus: input.paymentStatus,
-            orderDiscount: input.orderDiscount,
-            orderDiscountPercent: input.orderDiscountPercent,
-            taxAmount: input.taxAmount,
-            status: input.status,
-            visitId: visit.id,
-            offlineClientId: input.offlineClientId,
-          );
+        final draft = result.input;
+        if (!customer.creditAllowed) {
+          final session = ref.read(currentSessionProvider);
+          final employeeId = session?.employee.id;
+          if (employeeId == null || employeeId.isEmpty) {
+            throw const ValidationFailure('No active session found.');
+          }
+          await ref.read(customerRepositoryProvider).allowOnAccount(
+                customerId: customer.id,
+                employeeId: employeeId,
+              );
         }
+        // Record demand (placed). Delivery is a separate step and is what
+        // marks the order completed and moves stock.
+        final input = OrderUpsertInput(
+          orderId: draft.orderId,
+          customerId: draft.customerId,
+          lines: draft.lines,
+          notes: draft.notes,
+          paymentMethod: PaymentMethod.credit,
+          paymentStatus: PaymentStatus.unpaid,
+          orderDiscount: draft.orderDiscount,
+          orderDiscountPercent: draft.orderDiscountPercent,
+          taxAmount: draft.taxAmount,
+          status: draft.status,
+          visitId: visit.isLocalOnly ? null : visit.id,
+          offlineClientId: draft.offlineClientId,
+        );
         final saved = await ref
             .read(selloOrdersProvider.notifier)
             .saveOrder(
@@ -683,6 +721,8 @@ class _CustomerVisitWorkspacePageState
           }
           return;
         }
+        _orderSubmitted = true;
+        _savedVisitOrderId = saved.orderId;
         confirmation = saved.confirmation;
       }
 
@@ -711,28 +751,38 @@ class _CustomerVisitWorkspacePageState
         }
       }
 
+      var skippedOptionalCheque = false;
       if (VisitCheckoutPaymentRules.shouldOpenRecordCheque(_arrangement)) {
         if (!mounted) return;
         final chequeInput = await showDialog<CreateChequeInput>(
           context: context,
-          barrierDismissible: false,
+          barrierDismissible: true,
           builder: (_) => RecordChequeDialog(
             currencySymbol: _currency,
             visitId: visit.isLocalOnly ? null : visit.id,
             initialCustomer: customer,
             markCollected: true,
+            recordingIsOptional: true,
+            preferredOrderId: VisitCheckoutPaymentRules.preferredOrderIdForCheque(
+              arrangement: _arrangement,
+              createdOrderId: _savedVisitOrderId,
+            ),
           ),
         );
         if (!mounted) return;
-        if (chequeInput != null) {
+        if (VisitCheckoutPaymentRules.shouldCreateChequeRecord(
+          arrangement: _arrangement,
+          recordChequeSubmitted: chequeInput != null,
+        )) {
           try {
-            await ref.read(chequeRepositoryProvider).createCheque(chequeInput);
+            await ref.read(chequeRepositoryProvider).createCheque(chequeInput!);
           } on AppFailure catch (failure) {
             if (!mounted) return;
             SelloSnackbars.error(context, failure.message);
-            setState(() => _saving = false);
-            return;
+            skippedOptionalCheque = true;
           }
+        } else {
+          skippedOptionalCheque = true;
         }
       }
 
@@ -756,13 +806,22 @@ class _CustomerVisitWorkspacePageState
         ),
       ];
 
-      await ref
+      final completed = await ref
           .read(activeCustomerVisitProvider.notifier)
           .completeVisit(
             outcome: outcome,
             notes: noteParts.isEmpty ? null : noteParts.join('\n'),
             signatureStoragePath: signaturePath,
           );
+      if (!completed.pendingSync) {
+        await ref.read(activeCustomerVisitProvider.notifier).reload();
+        final stillOpen = ref.read(activeCustomerVisitProvider).valueOrNull;
+        if (stillOpen != null && stillOpen.isActive) {
+          throw const ValidationFailure(
+            'The visit is still open. Submit again to close it.',
+          );
+        }
+      }
 
       final session = ref.read(currentSessionProvider);
       if (session != null) {
@@ -773,7 +832,12 @@ class _CustomerVisitWorkspacePageState
       }
 
       if (!mounted) return;
-      SelloSnackbars.success(context, 'Visit saved.');
+      SelloSnackbars.success(
+        context,
+        skippedOptionalCheque && hasLines
+            ? 'Visit saved. Record the cheque later from the order.'
+            : 'Visit saved.',
+      );
       if (confirmation != null && confirmation.hasShareActions && mounted) {
         await showOrderConfirmationShareSheet(context, confirmation);
       } else if (confirmation?.customerWasSkipped == true && mounted) {
@@ -783,6 +847,10 @@ class _CustomerVisitWorkspacePageState
       context.go(RoutePaths.selloDashboard);
     } on AppFailure catch (error) {
       if (!mounted) return;
+      if (error.message.toLowerCase().contains('already finished')) {
+        context.go(RoutePaths.selloDashboard);
+        return;
+      }
       SelloSnackbars.error(context, error.message);
     } catch (_) {
       if (!mounted) return;
@@ -874,7 +942,6 @@ class _CustomerVisitWorkspacePageState
                       ),
                     VisitOrderStatusBanner(
                       visitPendingSync: active?.pendingSync ?? false,
-                      draftSaved: _draftSaved || _pendingDraft != null,
                     ),
                     if (!onCheckout && _pendingDraft != null)
                       VisitDraftRestoreBanner(
@@ -923,9 +990,14 @@ class _CustomerVisitWorkspacePageState
                               total:
                                   _orderKey.currentState?.runningTotal ??
                                   _basketTotal,
+                              savings:
+                                  _orderKey.currentState?.discountSavings ??
+                                  _basketSavings,
                               currencySymbol: _currency,
                               discountAmount: _orderDiscount,
                               discountPercent: _orderDiscountPercent,
+                              discountAmountFocus: _discountAmountFocus,
+                              discountPercentFocus: _discountPercentFocus,
                               arrangement: _arrangement,
                               chequeDate: _chequeFollowUpDate,
                               onArrangementChanged: (value) {

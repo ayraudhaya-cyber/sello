@@ -1,4 +1,8 @@
-/// Centralized layout breakpoints for adaptive UI.
+/// Centralized layout breakpoints for adaptive **chrome** (nav, gutters).
+///
+/// Card columns, two-up splits, and chart heights should use content-width
+/// math in `responsive_layout.dart` — Hub pages sit beside a sidebar, so
+/// window size is wider than the content column.
 abstract final class AppBreakpoints {
   /// Phones — bottom navigation, single column.
   static const double mobile = 600;

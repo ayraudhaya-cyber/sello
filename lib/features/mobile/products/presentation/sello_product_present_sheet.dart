@@ -683,10 +683,17 @@ class _HeroPhoto extends StatelessWidget {
       return Image.memory(photo.bytes!, fit: BoxFit.cover);
     }
     if (photo.networkUrl != null && photo.networkUrl!.isNotEmpty) {
+      final cacheWidth =
+          (MediaQuery.sizeOf(context).width *
+                  MediaQuery.devicePixelRatioOf(context))
+              .round()
+              .clamp(480, 1600);
       return Image.network(
         photo.networkUrl!,
         fit: BoxFit.cover,
-        filterQuality: FilterQuality.high,
+        filterQuality: FilterQuality.medium,
+        gaplessPlayback: true,
+        cacheWidth: cacheWidth,
         errorBuilder: (_, _, _) => const ColoredBox(color: AppColors.veil),
       );
     }

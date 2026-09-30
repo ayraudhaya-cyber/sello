@@ -207,6 +207,20 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
 
   Future<void> _toggleArchive(CustomerSummary customer) async {
     final archived = customer.isActive;
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: archived ? 'Deactivate customer?' : 'Reactivate customer?',
+      message: archived
+          ? '"${customer.name}" will be hidden from new sales. '
+              'Past orders and payments still show this customer. '
+              'You can reactivate them from the Inactive filter.'
+          : '"${customer.name}" will be available for new sales again.',
+      confirmLabel: archived ? 'Deactivate' : 'Reactivate',
+      cancelLabel: 'Cancel',
+      destructive: archived,
+    );
+    if (confirmed != true || !mounted) return;
+
     final error = await ref
         .read(hubCustomersProvider.notifier)
         .setArchived(customer, archived: archived);
@@ -217,8 +231,8 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
       SelloSnackbars.success(
         context,
         archived
-            ? 'Customer archived.'
-            : 'Customer restored to the active list.',
+            ? 'Customer deactivated.'
+            : 'Customer reactivated.',
       );
     }
   }
@@ -227,7 +241,7 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
     if (customer.isActive) {
       SelloSnackbars.warning(
         context,
-        'Archive the customer before permanently deleting them.',
+        'Deactivate the customer before permanently deleting them.',
       );
       return;
     }
@@ -236,11 +250,11 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
       context: context,
       title: 'Delete permanently?',
       message:
-          '"${customer.name}" will be removed from your customer list forever. '
-          'Historical orders and reports that reference this customer are '
-          'preserved, but this action cannot be undone.',
+          '"${customer.name}" will be removed permanently. '
+          'This is only for a customer with no orders, payments, or visits. '
+          'This cannot be undone.',
       confirmLabel: 'Delete permanently',
-      cancelLabel: 'Keep archived',
+      cancelLabel: 'Keep inactive',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
@@ -303,7 +317,7 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          if (state.statusFilter == CustomerStatusFilter.archived) ...[
+          if (state.statusFilter == CustomerStatusFilter.inactive) ...[
             const _ArchivedCustomersBanner(),
             const SizedBox(height: AppSpacing.md),
           ],
@@ -336,22 +350,23 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
             else if (state.isEmpty)
               SelloCard(
                 child: SelloEmptyState(
-                  title: state.statusFilter == CustomerStatusFilter.archived
-                      ? 'No archived customers'
+                  title: state.statusFilter == CustomerStatusFilter.inactive
+                      ? 'No inactive customers'
                       : 'Start building your customer base',
-                  message: state.statusFilter == CustomerStatusFilter.archived
-                      ? 'Archived customers will appear here. You can restore them '
-                            'to active sales or permanently delete them when you are sure.'
+                  message: state.statusFilter == CustomerStatusFilter.inactive
+                      ? 'Inactive customers stay out of new sales. Past orders '
+                            'and payments still show them. Reactivate one here '
+                            'when you need them again.'
                       : 'Add your first customer with contact details, credit terms, '
                             'and opening balance. Orders, payments, and reporting build on these relationships.',
-                  icon: state.statusFilter == CustomerStatusFilter.archived
+                  icon: state.statusFilter == CustomerStatusFilter.inactive
                       ? Icons.people_outline_rounded
                       : Icons.people_rounded,
                   actionLabel:
-                      state.statusFilter == CustomerStatusFilter.archived
+                      state.statusFilter == CustomerStatusFilter.inactive
                       ? null
                       : 'Add Customer',
-                  onAction: state.statusFilter == CustomerStatusFilter.archived
+                  onAction: state.statusFilter == CustomerStatusFilter.inactive
                       ? null
                       : () => _openEditor(),
                 ),
@@ -590,8 +605,8 @@ class _CustomersToolbar extends StatelessWidget {
             child: Text('Active'),
           ),
           DropdownMenuItem(
-            value: CustomerStatusFilter.archived,
-            child: Text('Archived'),
+            value: CustomerStatusFilter.inactive,
+            child: Text('Inactive'),
           ),
         ],
       ),
@@ -686,7 +701,7 @@ class _CustomersSummaryRow extends StatelessWidget {
           tone: AppColors.success,
         ),
         SelloStatCard(
-          label: 'Archived',
+          label: 'Inactive',
           value: '$archivedCount',
           hint: 'Hidden from new sales',
           icon: Icons.archive_outlined,
@@ -726,8 +741,8 @@ class _ArchivedCustomersBanner extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              'Archived customers are hidden from new sales but remain available '
-              'for reports and history.',
+              'Inactive customers are hidden from new sales. Past orders '
+              'and payments still show them.',
               style: context.texts.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
                 height: 1.4,
@@ -778,7 +793,7 @@ class _RowActionGroup extends StatelessWidget {
             onPressed: onEdit,
           ),
           _ActionIconButton(
-            tooltip: isActive ? 'Archive' : 'Restore',
+            tooltip: isActive ? 'Deactivate' : 'Reactivate',
             icon: isActive ? Icons.archive_outlined : Icons.unarchive_outlined,
             onPressed: onToggleArchive,
           ),
@@ -1045,7 +1060,7 @@ class _CustomerListCard extends StatelessWidget {
                       ? Icons.archive_outlined
                       : Icons.unarchive_outlined,
                 ),
-                label: Text(customer.isActive ? 'Archive' : 'Restore'),
+                label: Text(customer.isActive ? 'Deactivate' : 'Reactivate'),
               ),
               if (onDeletePermanently != null)
                 TextButton.icon(
@@ -1070,7 +1085,7 @@ class _CustomerStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SelloStatusBadge(
-      label: active ? 'Active' : 'Archived',
+      label: active ? 'Active' : 'Inactive',
       tone: active ? SelloStatusTone.success : SelloStatusTone.neutral,
     );
   }

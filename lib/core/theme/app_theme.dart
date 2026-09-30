@@ -68,6 +68,7 @@ abstract final class AppTheme {
         selloColors,
         SelloMetrics.standard,
       ],
+      disabledColor: AppColors.textDisabled,
       hoverColor: primary.withValues(alpha: 0.06),
       splashColor: primary.withValues(alpha: 0.08),
       highlightColor: Colors.transparent,
@@ -100,7 +101,12 @@ abstract final class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return AppColors.surfaceMuted;
+          }
+          return AppColors.surface;
+        }),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 13,
@@ -112,6 +118,10 @@ abstract final class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.inputAll,
           borderSide: const BorderSide(color: AppColors.outline),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: AppRadius.inputAll,
+          borderSide: const BorderSide(color: AppColors.outlineSubtle),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.inputAll,
@@ -125,19 +135,41 @@ abstract final class AppTheme {
           borderRadius: AppRadius.inputAll,
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
-        hintStyle: textTheme.bodyMedium?.copyWith(
-          color: AppColors.textTertiary,
-        ),
-        labelStyle: textTheme.bodyMedium?.copyWith(
-          color: AppColors.textSecondary,
-        ),
-        floatingLabelStyle: textTheme.labelLarge?.copyWith(
-          color: primary,
-        ),
+        hintStyle: WidgetStateTextStyle.resolveWith((states) {
+          final base = textTheme.bodyMedium ?? const TextStyle();
+          if (states.contains(WidgetState.disabled)) {
+            return base.copyWith(color: AppColors.textDisabled);
+          }
+          return base.copyWith(color: AppColors.textTertiary);
+        }),
+        labelStyle: WidgetStateTextStyle.resolveWith((states) {
+          final base = textTheme.bodyMedium ?? const TextStyle();
+          if (states.contains(WidgetState.disabled)) {
+            return base.copyWith(color: AppColors.textTertiary);
+          }
+          return base.copyWith(color: AppColors.textSecondary);
+        }),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith((states) {
+          final base = textTheme.labelLarge ?? const TextStyle();
+          if (states.contains(WidgetState.disabled)) {
+            return base.copyWith(color: AppColors.textTertiary);
+          }
+          return base.copyWith(color: primary);
+        }),
         helperStyle: AppTypography.helper,
         errorStyle: textTheme.bodySmall?.copyWith(color: AppColors.error),
-        prefixIconColor: AppColors.textTertiary,
-        suffixIconColor: AppColors.textTertiary,
+        prefixIconColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return AppColors.textDisabled;
+          }
+          return AppColors.textTertiary;
+        }),
+        suffixIconColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return AppColors.textDisabled;
+          }
+          return AppColors.textTertiary;
+        }),
       ),
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: primary,

@@ -17,6 +17,7 @@ class SelloDataTable extends StatelessWidget {
     this.footer,
     this.horizontalMargin = 24,
     this.columnSpacing = 28,
+    this.flexColumnIndex = 0,
   });
 
   final List<DataColumn> columns;
@@ -28,6 +29,10 @@ class SelloDataTable extends StatelessWidget {
   final Widget? footer;
   final double horizontalMargin;
   final double columnSpacing;
+
+  /// Column that absorbs leftover width. Identity (name / number), not a
+  /// leading checkbox.
+  final int flexColumnIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +57,7 @@ class SelloDataTable extends StatelessWidget {
               final expandedColumns = _columnsFillingWidth(
                 columns: columns,
                 tableWidth: resolvedMinWidth,
+                flexColumnIndex: flexColumnIndex,
               );
 
               return SingleChildScrollView(
@@ -112,40 +118,49 @@ class SelloDataTable extends StatelessWidget {
     );
   }
 
-  /// Stretch the leading identity column so the table uses the full card width
-  /// instead of leaving a dead zone after the last column.
+  /// Stretch [flexColumnIndex] so the table uses the full card width instead
+  /// of leaving a dead zone after the last column.
   List<DataColumn> _columnsFillingWidth({
     required List<DataColumn> columns,
     required double tableWidth,
+    required int flexColumnIndex,
   }) {
     if (columns.isEmpty || !tableWidth.isFinite || tableWidth <= 0) {
       return columns;
     }
 
+    final flexIndex = flexColumnIndex.clamp(0, columns.length - 1);
     final otherCount = columns.length - 1;
-    // Keep this slightly lean so leftover width prefers the identity column.
     const estimatedOtherColumn = 96.0;
-    final reserved = (horizontalMargin * 2) +
-        (columnSpacing * otherCount) +
-        (estimatedOtherColumn * otherCount);
+    const estimatedSelectColumn = 40.0;
+    var reserved = (horizontalMargin * 2) + (columnSpacing * otherCount);
+    for (var i = 0; i < columns.length; i++) {
+      if (i == flexIndex) continue;
+      reserved += i == 0 && flexIndex != 0
+          ? estimatedSelectColumn
+          : estimatedOtherColumn;
+    }
     final leadWidth = (tableWidth - reserved).clamp(220.0, 640.0);
 
-    final first = columns.first;
     return [
-      DataColumn(
-        label: SizedBox(
-          width: leadWidth,
-          child: Align(
-            alignment:
-                first.numeric ? Alignment.centerRight : Alignment.centerLeft,
-            child: first.label,
-          ),
-        ),
-        numeric: first.numeric,
-        tooltip: first.tooltip,
-        onSort: first.onSort,
-      ),
-      ...columns.skip(1),
+      for (var i = 0; i < columns.length; i++)
+        if (i == flexIndex)
+          DataColumn(
+            label: SizedBox(
+              width: leadWidth,
+              child: Align(
+                alignment: columns[i].numeric
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: columns[i].label,
+              ),
+            ),
+            numeric: columns[i].numeric,
+            tooltip: columns[i].tooltip,
+            onSort: columns[i].onSort,
+          )
+        else
+          columns[i],
     ];
   }
 }
@@ -200,6 +215,14 @@ class SelloTableText extends StatelessWidget {
       style: numeric ? AppTypography.numeric(base) : base,
     );
   }
+}
+
+/// Compact leading checkbox column. Pair with [SelloDataTable.flexColumnIndex]
+/// set to the identity column (usually 1).
+DataColumn selloSelectDataColumn() {
+  return const DataColumn(
+    label: SizedBox(width: 28),
+  );
 }
 
 /// Table column helper so headings stay consistent across screens.

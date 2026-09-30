@@ -41,6 +41,8 @@ extension on EmployeeStatusFilter {
         EmployeeStatusFilter.active => EmploymentStatus.active,
         EmployeeStatusFilter.inactive => EmploymentStatus.inactive,
         EmployeeStatusFilter.suspended => EmploymentStatus.suspended,
+        // Legacy rows only. New deactivation writes inactive, and the
+        // Inactive filter also includes this status.
         EmployeeStatusFilter.archived => EmploymentStatus.archived,
       };
 }

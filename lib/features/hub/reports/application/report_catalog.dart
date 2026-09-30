@@ -1,3 +1,4 @@
+import 'package:sello/shared/models/collections_report.dart';
 import 'package:sello/shared/models/report_models.dart';
 
 /// Static catalog of report questions — UI navigation, not data.
@@ -176,6 +177,13 @@ abstract final class ReportCatalog {
       title: 'Outstanding amount',
       question: 'What is total collection due?',
       icon: 'request_quote',
+    ),
+    ReportDefinition(
+      id: kCollectionsReportId,
+      category: ReportCategory.payments,
+      title: kCollectionsReportTitle,
+      question: kCollectionsReportQuestion,
+      icon: 'receipt_long',
     ),
     ReportDefinition(
       id: 'payments_methods',

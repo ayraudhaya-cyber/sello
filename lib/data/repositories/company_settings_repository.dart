@@ -31,6 +31,7 @@ class CompanySettingsRepository {
     sales_reps_can_view_outstanding_balances,
     financial_visibility_policies,
     collection_approval_required,
+    sales_reps_can_record_delivery,
     outbound_notification_policies,
     sms_sender_id,
     sms_sender_id_editable,
@@ -42,6 +43,7 @@ class CompanySettingsRepository {
     document_phone,
     document_email,
     document_terms,
+    document_tagline,
     primary_color,
     nav_background_color,
     custom_branding_enabled,
@@ -121,6 +123,8 @@ class CompanySettingsRepository {
                 CompanySettings.defaults.allowOrdersAboveAvailableStock,
             'sales_reps_can_view_outstanding_balances':
                 CompanySettings.defaults.salesRepsCanViewOutstandingBalances,
+            'sales_reps_can_record_delivery':
+                CompanySettings.defaults.salesRepsCanRecordDelivery,
             'financial_visibility_policies':
                 CompanySettings.defaults.financialVisibility.toJson(),
             'owner_setup_completed': true,
@@ -208,6 +212,7 @@ class CompanySettingsRepository {
     required String? documentPhone,
     required String? documentEmail,
     required String? documentTerms,
+    required String? documentTagline,
   }) async {
     try {
       final updated = await _client
@@ -219,6 +224,7 @@ class CompanySettingsRepository {
             'document_phone': documentPhone,
             'document_email': documentEmail,
             'document_terms': documentTerms,
+            'document_tagline': documentTagline,
             'updated_by': employeeId,
           })
           .eq('company_id', companyId)

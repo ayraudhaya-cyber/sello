@@ -3,9 +3,10 @@ import 'package:sello/features/hub/inventory/application/hub_inventory_provider.
 
 /// Quietly reloads Hub Inventory after product/order stock mutations.
 ///
-/// Avoids a blocking spinner; Inventory tab picks up valuation without a
-/// manual refresh. Safe when the Inventory provider was never opened yet.
+/// Skips the reload when Inventory has not been opened this session, so a
+/// product or order save does not start that query in the background.
 Future<void> refreshHubInventoryQuietly(Ref ref) async {
+  if (!ref.exists(hubInventoryProvider)) return;
   try {
     await ref
         .read(hubInventoryProvider.notifier)

@@ -14,7 +14,18 @@ enum ChequeStatusFilter {
   deposited,
   cleared,
   bounced,
-  cancelled,
+  cancelled;
+
+  String get label => switch (this) {
+        ChequeStatusFilter.all => 'All',
+        ChequeStatusFilter.awaitingCollection => 'Waiting to receive',
+        ChequeStatusFilter.pendingApproval => 'Needs approval',
+        ChequeStatusFilter.collected => 'In hand',
+        ChequeStatusFilter.deposited => 'At the bank',
+        ChequeStatusFilter.cleared => 'Bank paid',
+        ChequeStatusFilter.bounced => 'Bank returned',
+        ChequeStatusFilter.cancelled => 'Cancelled',
+      };
 }
 
 class HubChequesState {
@@ -254,6 +265,24 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> depositCheques(List<String> chequeIds) async {
+    final ids = chequeIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return 'Select collected cheques to deposit.';
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      for (final id in ids) {
+        await _repo.depositCheque(id);
+      }
+      await loadCheques(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      await loadCheques(showLoading: false);
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }

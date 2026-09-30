@@ -444,10 +444,10 @@ class EmployeeDetailsDialog extends StatelessWidget {
         cancelLabel:
             onArchive != null &&
                 employee.employmentStatus == EmploymentStatus.active
-            ? 'Archive'
+            ? 'Deactivate'
             : onRestore != null &&
                   employee.employmentStatus != EmploymentStatus.active
-            ? 'Set active'
+            ? 'Reactivate'
             : 'Close',
         cancelVariant: SelloButtonVariant.outline,
         onCancel:

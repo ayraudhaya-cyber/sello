@@ -147,19 +147,9 @@ class ChequeSummary extends Equatable {
 
   String get displayLabel {
     if (isTrackingOnly) {
-      return switch (status) {
-        ChequeStatus.awaitingCollection => 'Awaiting collection',
-        ChequeStatus.collected => 'Collected · Historical',
-        ChequeStatus.deposited => 'Deposited · Historical',
-        ChequeStatus.cleared => 'Cleared · Historical',
-        ChequeStatus.bounced => 'Bounced · Historical',
-        ChequeStatus.cancelled => 'Cancelled · Historical',
-      };
+      return '${status.shortLabel} · old record';
     }
-    if (isPendingApproval) return 'Collected · Pending approval';
-    if (status == ChequeStatus.collected && balanceAppliedAt != null) {
-      return 'Collected · Pending clearance';
-    }
+    if (isPendingApproval) return 'Received — needs approval';
     return status.shortLabel;
   }
 

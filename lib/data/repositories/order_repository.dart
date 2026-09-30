@@ -268,35 +268,24 @@ class OrderRepository {
 
   Future<OrderCounts> fetchCounts() async {
     try {
-      final rows = await _client
-          .from('orders')
-          .select('status')
-          .isFilter('deleted_at', null);
-
-      var draft = 0;
-      var completed = 0;
-      var cancelled = 0;
-      final list = rows as List;
-      for (final row in list) {
-        final status = OrderStatus.fromDb(
-          (row as Map)['status'] as String?,
-        );
-        switch (status) {
-          case OrderStatus.draft:
-          case OrderStatus.placed:
-          case OrderStatus.partiallyDelivered:
-            draft++;
-          case OrderStatus.completed:
-            completed++;
-          case OrderStatus.cancelled:
-            cancelled++;
-        }
-      }
+      // Head counts — do not download every order row just to tally statuses.
+      // Open includes legacy `submitted`, which maps to placed.
+      final counts = await Future.wait([
+        _countOrders(),
+        _countOrders(const [
+          'draft',
+          'placed',
+          'partially_delivered',
+          'submitted',
+        ]),
+        _countOrders(const ['completed']),
+        _countOrders(const ['cancelled']),
+      ]);
       return OrderCounts(
-        total: list.length,
-        draft: draft,
-        completed: completed,
-        cancelled: cancelled,
+        total: counts[0],
+        draft: counts[1],
+        completed: counts[2],
+        cancelled: counts[3],
       );
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
@@ -304,6 +293,14 @@ class OrderRepository {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  Future<int> _countOrders([List<String>? statuses]) {
+    var query = _client.from('orders').count().isFilter('deleted_at', null);
+    if (statuses != null && statuses.isNotEmpty) {
+      query = query.inFilter('status', statuses);
+    }
+    return query;
   }
 
   /// Open fulfillment demand + orders currently blocked by available stock.
@@ -905,7 +902,11 @@ class OrderRepository {
 
       OrderConfirmationOutcome? confirmation;
       if (place) {
-        await placeOrder(orderId);
+        confirmation = await placeOrder(
+          orderId,
+          companyId: companyId,
+          employeeId: employeeId,
+        );
       } else if (complete) {
         confirmation = await completeOrder(
           orderId,
@@ -977,6 +978,34 @@ class OrderRepository {
       );
     }
 
+    return _dispatchConfirmation(orderId, detail: detail);
+  }
+
+  /// Record demand without inventory movement or payment settlement.
+  Future<OrderConfirmationOutcome?> placeOrder(
+    String orderId, {
+    String? companyId,
+    String? employeeId,
+  }) async {
+    try {
+      await _client.rpc('place_sales_order', params: {
+        'p_order_id': orderId,
+      });
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+
+    final detail = await fetchById(orderId);
+    return _dispatchConfirmation(orderId, detail: detail);
+  }
+
+  Future<OrderConfirmationOutcome?> _dispatchConfirmation(
+    String orderId, {
+    OrderDetail? detail,
+  }) async {
     final dispatcher = confirmations;
     if (dispatcher == null) return null;
     if (detail != null &&
@@ -987,20 +1016,6 @@ class OrderRepository {
       return await dispatcher.dispatch(orderId);
     } catch (_) {
       return null;
-    }
-  }
-
-  /// Record demand without inventory movement or payment settlement.
-  Future<void> placeOrder(String orderId) async {
-    try {
-      await _client.rpc('place_sales_order', params: {
-        'p_order_id': orderId,
-      });
-    } on PostgrestException catch (error) {
-      throw ValidationFailure(_mapOrderError(error.message));
-    } catch (error) {
-      if (error is AppFailure) rethrow;
-      throw UnexpectedFailure(error.toString());
     }
   }
 
@@ -1170,8 +1185,8 @@ class OrderRepository {
     if (lower.contains('orders_company_order_number')) {
       return 'Order number conflict. Try saving again.';
     }
-    if (lower.contains('only draft')) {
-      return message;
+    if (lower.contains('cannot record delivery')) {
+      return 'Recording delivery is turned off for Sales. Ask an Owner or Manager to complete this order.';
     }
     return message;
   }

@@ -5,11 +5,13 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/hub/reports/application/hub_reports_provider.dart';
 import 'package:sello/features/hub/reports/application/report_catalog.dart';
+import 'package:sello/features/hub/reports/presentation/collections_report_dialog.dart';
 import 'package:sello/features/hub/reports/presentation/report_charts.dart';
 import 'package:sello/features/hub/reports/presentation/report_detail_dialog.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/intelligence/application/intelligence_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/collections_report.dart';
 import 'package:sello/shared/models/report_models.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -28,6 +30,14 @@ class HubReportsPage extends ConsumerWidget {
     WidgetRef ref,
     ReportDefinition definition,
   ) async {
+    if (definition.id == kCollectionsReportId) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => const CollectionsReportDialog(),
+      );
+      return;
+    }
+
     final overview = ref.read(hubReportsProvider).overview;
     if (overview == null) return;
 
@@ -173,142 +183,70 @@ class HubReportsPage extends ConsumerWidget {
               granularity: state.query.granularity,
             ),
             const SizedBox(height: AppSpacing.lg),
-            ResponsiveBuilder(
-              mobile: (_) => Column(
-                children: [
-                  _RankCard(
-                    title: 'Best selling products',
-                    subtitle: 'Revenue leaders this period',
-                    child: ReportComparisonBars(
-                      items: overview.topProducts,
-                      valueLabel: (i) => SelloFormatters.currency(
-                        i.value,
-                        symbol: currency,
-                      ),
-                    ),
-                    onOpen: () => _openReport(
-                      context,
-                      ref,
-                      ReportCatalog.definitions
-                          .firstWhere((d) => d.id == 'sales_top_products'),
+            SelloEqualHeightRow(
+              gap: AppSpacing.lg,
+              minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+              children: [
+                _RankCard(
+                  title: 'Best selling products',
+                  subtitle: 'Revenue leaders this period',
+                  child: ReportComparisonBars(
+                    items: overview.topProducts,
+                    valueLabel: (i) => SelloFormatters.currency(
+                      i.value,
+                      symbol: currency,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _RankCard(
-                    title: 'Top customers',
-                    subtitle: 'Highest completed order value',
-                    child: ReportComparisonBars(
-                      items: overview.topCustomers,
-                      valueLabel: (i) => SelloFormatters.currency(
-                        i.value,
-                        symbol: currency,
-                      ),
-                    ),
-                    onOpen: () => _openReport(
-                      context,
-                      ref,
-                      ReportCatalog.definitions
-                          .firstWhere((d) => d.id == 'customers_top'),
+                  onOpen: () => _openReport(
+                    context,
+                    ref,
+                    ReportCatalog.definitions
+                        .firstWhere((d) => d.id == 'sales_top_products'),
+                  ),
+                ),
+                _RankCard(
+                  title: 'Top customers',
+                  subtitle: 'Highest completed order value',
+                  child: ReportComparisonBars(
+                    items: overview.topCustomers,
+                    valueLabel: (i) => SelloFormatters.currency(
+                      i.value,
+                      symbol: currency,
                     ),
                   ),
-                ],
-              ),
-              tablet: (_) => Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _RankCard(
-                      title: 'Best selling products',
-                      subtitle: 'Revenue leaders this period',
-                      child: ReportComparisonBars(
-                        items: overview.topProducts,
-                        valueLabel: (i) => SelloFormatters.currency(
-                          i.value,
-                          symbol: currency,
-                        ),
-                      ),
-                      onOpen: () => _openReport(
-                        context,
-                        ref,
-                        ReportCatalog.definitions
-                            .firstWhere((d) => d.id == 'sales_top_products'),
-                      ),
-                    ),
+                  onOpen: () => _openReport(
+                    context,
+                    ref,
+                    ReportCatalog.definitions
+                        .firstWhere((d) => d.id == 'customers_top'),
                   ),
-                  const SizedBox(width: AppSpacing.lg),
-                  Expanded(
-                    child: _RankCard(
-                      title: 'Top customers',
-                      subtitle: 'Highest completed order value',
-                      child: ReportComparisonBars(
-                        items: overview.topCustomers,
-                        valueLabel: (i) => SelloFormatters.currency(
-                          i.value,
-                          symbol: currency,
-                        ),
-                      ),
-                      onOpen: () => _openReport(
-                        context,
-                        ref,
-                        ReportCatalog.definitions
-                            .firstWhere((d) => d.id == 'customers_top'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            ResponsiveBuilder(
-              mobile: (_) => Column(
-                children: [
-                  _StatusCard(overview: overview),
-                  const SizedBox(height: AppSpacing.lg),
-                  _RankCard(
-                    title: 'Top sales representatives',
-                    subtitle: 'Completed order value by rep',
-                    child: ReportComparisonBars(
-                      items: overview.topSalesReps,
-                      valueLabel: (i) => SelloFormatters.currency(
-                        i.value,
-                        symbol: currency,
-                      ),
-                    ),
-                    onOpen: () => _openReport(
-                      context,
-                      ref,
-                      ReportCatalog.definitions
-                          .firstWhere((d) => d.id == 'sales_top_reps'),
+            SelloEqualHeightRow(
+              gap: AppSpacing.lg,
+              minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+              children: [
+                _StatusCard(overview: overview),
+                _RankCard(
+                  title: 'Top sales representatives',
+                  subtitle: 'Completed order value by rep',
+                  child: ReportComparisonBars(
+                    items: overview.topSalesReps,
+                    valueLabel: (i) => SelloFormatters.currency(
+                      i.value,
+                      symbol: currency,
                     ),
                   ),
-                ],
-              ),
-              tablet: (_) => Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _StatusCard(overview: overview)),
-                  const SizedBox(width: AppSpacing.lg),
-                  Expanded(
-                    child: _RankCard(
-                      title: 'Top sales representatives',
-                      subtitle: 'Completed order value by rep',
-                      child: ReportComparisonBars(
-                        items: overview.topSalesReps,
-                        valueLabel: (i) => SelloFormatters.currency(
-                          i.value,
-                          symbol: currency,
-                        ),
-                      ),
-                      onOpen: () => _openReport(
-                        context,
-                        ref,
-                        ReportCatalog.definitions
-                            .firstWhere((d) => d.id == 'sales_top_reps'),
-                      ),
-                    ),
+                  onOpen: () => _openReport(
+                    context,
+                    ref,
+                    ReportCatalog.definitions
+                        .firstWhere((d) => d.id == 'sales_top_reps'),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.xl),
             const SelloSectionHeader(
@@ -381,21 +319,36 @@ class _SalesTrendCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                SelloFormatters.currency(
-                  overview.salesInPeriod,
-                  symbol: currencySymbol,
-                ),
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+              const SizedBox(width: 12),
+              Flexible(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      SelloFormatters.currency(
+                        overview.salesInPeriod,
+                        symbol: currencySymbol,
+                      ),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          ReportBarChart(points: points),
+          ReportBarChart(
+            points: points,
+            currencySymbol: currencySymbol,
+          ),
         ],
       ),
     );
@@ -612,11 +565,13 @@ class _ReportLibrary extends StatelessWidget {
             const SizedBox(height: 10),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1000
-                  ? 3
-                  : constraints.maxWidth >= 640
-                      ? 2
-                      : 1;
+              final columns = ResponsiveLayout.columnsFor(
+                width: constraints.maxWidth,
+                itemCount: 3,
+                minItemWidth: ResponsiveLayout.sectionCardMinWidth,
+                maxColumns: 3,
+                gap: AppSpacing.md,
+              );
               final width =
                   (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
                       columns;

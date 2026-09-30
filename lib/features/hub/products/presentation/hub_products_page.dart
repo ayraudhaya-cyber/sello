@@ -9,7 +9,9 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/features/hub/products/application/hub_products_provider.dart';
 import 'package:sello/features/hub/products/presentation/product_details_dialog.dart';
+import 'package:sello/features/hub/products/presentation/product_editor_widgets.dart';
 import 'package:sello/features/hub/products/presentation/product_options_section.dart';
+import 'package:sello/features/hub/products/presentation/product_variant_rules.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
@@ -20,6 +22,7 @@ import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
 import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/utils/formatters.dart';
+import 'package:sello/shared/utils/item_code_generator.dart';
 import 'package:sello/shared/utils/product_detail_suggestions.dart';
 import 'package:sello/shared/utils/quick_new_query.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -63,7 +66,7 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
     final result = await showDialog<_EditorResult>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _ProductEditorDialog(
+      builder: (context) => ProductEditorDialog(
         product: product,
         categories: state.categories,
         repository: ref.read(productRepositoryProvider),
@@ -115,19 +118,30 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
 
   Future<void> _toggleArchive(ProductSummary product) async {
     final archived = product.isActive;
-    final error = await ref.read(hubProductsProvider.notifier).setArchived(
-          product,
-          archived: archived,
-        );
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: archived ? 'Deactivate product?' : 'Reactivate product?',
+      message: archived
+          ? '"${product.name}" will be hidden from new sales. '
+                'Past orders keep its name, price, and options. '
+                'You can reactivate it from the Inactive filter.'
+          : '"${product.name}" will be available for new sales again.',
+      confirmLabel: archived ? 'Deactivate' : 'Reactivate',
+      cancelLabel: 'Cancel',
+      destructive: archived,
+    );
+    if (confirmed != true || !mounted) return;
+
+    final error = await ref
+        .read(hubProductsProvider.notifier)
+        .setArchived(product, archived: archived);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
     } else {
       SelloSnackbars.success(
         context,
-        archived
-            ? 'Product archived.'
-            : 'Product restored to the active catalog.',
+        archived ? 'Product deactivated.' : 'Product reactivated.',
       );
     }
   }
@@ -136,7 +150,7 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
     if (product.isActive) {
       SelloSnackbars.warning(
         context,
-        'Archive the product before permanently deleting it.',
+        'Deactivate the product before permanently deleting it.',
       );
       return;
     }
@@ -145,17 +159,18 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
       context: context,
       title: 'Delete permanently?',
       message:
-          '"${product.name}" will be removed from your catalog forever. '
-          'Product photos will be deleted. Historical orders and reports that '
-          'reference this product are preserved, but this action cannot be undone.',
+          '"${product.name}" will be removed permanently. '
+          'This is only for a product that was never sold and has no stock history. '
+          'This cannot be undone.',
       confirmLabel: 'Delete permanently',
-      cancelLabel: 'Keep archived',
+      cancelLabel: 'Keep inactive',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
-    final error =
-        await ref.read(hubProductsProvider.notifier).permanentlyDelete(product);
+    final error = await ref
+        .read(hubProductsProvider.notifier)
+        .permanentlyDelete(product);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -170,17 +185,19 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
     // Warm company settings so Add Product can apply inventory defaults.
     ref.watch(hubSettingsProvider);
     final session = ref.watch(currentSessionProvider);
-    final currencySymbol = session?.company.companyCode == 'UNITECH' ? '\$' : '\$';
+    final currencySymbol = session?.company.companyCode == 'UNITECH'
+        ? '\$'
+        : '\$';
 
-    ref.listen<String?>(
-      hubProductsProvider.select((s) => s.errorMessage),
-      (previous, next) {
-        if (next == null || next == previous) return;
-        if (!next.startsWith('Product saved, but photos')) return;
-        if (!context.mounted) return;
-        SelloSnackbars.warning(context, next);
-      },
-    );
+    ref.listen<String?>(hubProductsProvider.select((s) => s.errorMessage), (
+      previous,
+      next,
+    ) {
+      if (next == null || next == previous) return;
+      if (!next.startsWith('Product saved, but photos')) return;
+      if (!context.mounted) return;
+      SelloSnackbars.warning(context, next);
+    });
 
     if (_searchController.text != state.search) {
       _searchController.value = TextEditingValue(
@@ -221,7 +238,7 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          if (state.statusFilter == ProductStatusFilter.archived) ...[
+          if (state.statusFilter == ProductStatusFilter.inactive) ...[
             const _ArchivedProductsBanner(),
             const SizedBox(height: AppSpacing.md),
           ],
@@ -241,63 +258,216 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
             ),
             const SizedBox(height: AppSpacing.lg),
             if (state.errorMessage != null && state.items.isEmpty)
-            SizedBox(
-              height: 320,
-              child: SelloStateView.error(
-                title: 'Unable to load products',
-                message: state.errorMessage,
-                actionLabel: 'Try again',
-                onAction: () => ref.read(hubProductsProvider.notifier).refresh(),
-              ),
-            )
-          else if (state.isEmpty)
-            SelloCard(
-              child: SelloEmptyState(
-                title: state.statusFilter == ProductStatusFilter.archived
-                    ? 'No archived products'
-                    : 'Start building your catalog',
-                message: state.statusFilter == ProductStatusFilter.archived
-                    ? 'Archived products will appear here. You can restore them '
-                        'to sales or permanently delete them when you are sure.'
-                    : 'Add your first sellable product with pricing, stock, and an image. '
-                        'Orders, inventory, and reporting will build on this catalog.',
-                icon: state.statusFilter == ProductStatusFilter.archived
-                    ? Icons.inventory_2_outlined
-                    : Icons.inventory_2_rounded,
-                actionLabel: state.statusFilter == ProductStatusFilter.archived
-                    ? null
-                    : 'Add Product',
-                onAction: state.statusFilter == ProductStatusFilter.archived
-                    ? null
-                    : () => _openEditor(),
-              ),
-            )
-          else if (context.isMobile)
-            SelloFadeIn(
-              child: Column(
-              children: [
-                for (final product in state.items) ...[
-                  _ProductListCard(
-                    product: product,
-                    currencySymbol: currencySymbol,
-                    onTap: () => _openDetails(product),
-                    onEdit: () => _openEditor(product: product),
-                    onToggleArchive: () => _toggleArchive(product),
-                    onDeletePermanently: product.isActive
-                        ? null
-                        : () => _deletePermanently(product),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                const SizedBox(height: AppSpacing.xs),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: AppRadius.panelAll,
-                    border: Border.all(color: AppColors.outlinePanel),
-                    boxShadow: AppShadows.panel,
-                  ),
-                  child: _TablePaginationFooter(
+              SizedBox(
+                height: 320,
+                child: SelloStateView.error(
+                  title: 'Unable to load products',
+                  message: state.errorMessage,
+                  actionLabel: 'Try again',
+                  onAction: () =>
+                      ref.read(hubProductsProvider.notifier).refresh(),
+                ),
+              )
+            else if (state.isEmpty)
+              SelloCard(
+                child: SelloEmptyState(
+                  title: state.statusFilter == ProductStatusFilter.inactive
+                      ? 'No inactive products'
+                      : 'Start building your catalog',
+                  message: state.statusFilter == ProductStatusFilter.inactive
+                      ? 'Inactive products stay out of new sales. Past orders keep '
+                            'the product name, price, and options. Reactivate one '
+                            'here when you need it again.'
+                      : 'Add your first sellable product with pricing, stock, and an image. '
+                            'Orders, inventory, and reporting will build on this catalog.',
+                  icon: state.statusFilter == ProductStatusFilter.inactive
+                      ? Icons.inventory_2_outlined
+                      : Icons.inventory_2_rounded,
+                  actionLabel:
+                      state.statusFilter == ProductStatusFilter.inactive
+                      ? null
+                      : 'Add Product',
+                  onAction: state.statusFilter == ProductStatusFilter.inactive
+                      ? null
+                      : () => _openEditor(),
+                ),
+              )
+            else if (context.isMobile)
+              SelloFadeIn(
+                child: Column(
+                  children: [
+                    for (final product in state.items) ...[
+                      _ProductListCard(
+                        product: product,
+                        currencySymbol: currencySymbol,
+                        onTap: () => _openDetails(product),
+                        onEdit: () => _openEditor(product: product),
+                        onToggleArchive: () => _toggleArchive(product),
+                        onDeletePermanently: product.isActive
+                            ? null
+                            : () => _deletePermanently(product),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                    const SizedBox(height: AppSpacing.xs),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: AppRadius.panelAll,
+                        border: Border.all(color: AppColors.outlinePanel),
+                        boxShadow: AppShadows.panel,
+                      ),
+                      child: _TablePaginationFooter(
+                        page: state.page,
+                        pageSize: state.pageSize,
+                        itemCount: state.items.length,
+                        hasMore: state.hasMore,
+                        onPrevious: state.page == 0
+                            ? null
+                            : () => ref
+                                  .read(hubProductsProvider.notifier)
+                                  .goToPage(state.page - 1),
+                        onNext: !state.hasMore
+                            ? null
+                            : () => ref
+                                  .read(hubProductsProvider.notifier)
+                                  .goToPage(state.page + 1),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              SelloFadeIn(
+                child: SelloDataTable(
+                  columns: [
+                    selloDataColumn('Product'),
+                    selloDataColumn('Category'),
+                    selloDataColumn('Unit'),
+                    selloDataColumn('Sell price', numeric: true),
+                    selloDataColumn('Cost price', numeric: true),
+                    selloDataColumn('Stock', numeric: true),
+                    selloDataColumn('Status'),
+                    selloDataColumn('Updated'),
+                    selloDataColumn('Actions'),
+                  ],
+                  rows: [
+                    for (final product in state.items)
+                      DataRow(
+                        onSelectChanged: (_) => _openDetails(product),
+                        cells: [
+                          DataCell(
+                            Row(
+                              children: [
+                                SelloEntityThumb(
+                                  imageUrl: product.imageUrl,
+                                  width: 44,
+                                  name: product.name,
+                                ),
+                                const SizedBox(width: AppSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      SelloTableText(
+                                        product.name,
+                                        tone: SelloTableTone.strong,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      SelloTableText(
+                                        _productListSubtitle(product),
+                                        tone: SelloTableTone.muted,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          DataCell(
+                            SelloTableText(
+                              product.categoryName ?? 'Uncategorized',
+                            ),
+                          ),
+                          DataCell(
+                            SelloTableText(
+                              product.unitLabel ?? '-',
+                              tone: SelloTableTone.muted,
+                            ),
+                          ),
+                          DataCell(
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: SelloTableText(
+                                product.isMultiOptionProduct
+                                    ? '—'
+                                    : SelloFormatters.currency(
+                                        product.sellingPrice,
+                                        symbol: currencySymbol,
+                                      ),
+                                tone: product.isMultiOptionProduct
+                                    ? SelloTableTone.muted
+                                    : SelloTableTone.strong,
+                                numeric: true,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: SelloTableText(
+                                product.isMultiOptionProduct
+                                    ? '—'
+                                    : SelloFormatters.currency(
+                                        product.costPrice,
+                                        symbol: currencySymbol,
+                                      ),
+                                tone: product.isMultiOptionProduct
+                                    ? SelloTableTone.muted
+                                    : SelloTableTone.normal,
+                                numeric: true,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: product.isMultiOptionProduct
+                                  ? _MultiOptionStockCell(product: product)
+                                  : SelloTableText(
+                                      SelloFormatters.quantity(
+                                        product.currentStockQuantity,
+                                      ),
+                                      numeric: true,
+                                    ),
+                            ),
+                          ),
+                          DataCell(
+                            _ProductStatusBadge(active: product.isActive),
+                          ),
+                          DataCell(
+                            SelloTableText(
+                              SelloFormatters.date(product.updatedAt),
+                              tone: SelloTableTone.muted,
+                            ),
+                          ),
+                          DataCell(
+                            _RowActionGroup(
+                              onView: () => _openDetails(product),
+                              onEdit: () => _openEditor(product: product),
+                              onToggleArchive: () => _toggleArchive(product),
+                              onDeletePermanently: product.isActive
+                                  ? null
+                                  : () => _deletePermanently(product),
+                              isActive: product.isActive,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                  footer: _TablePaginationFooter(
                     page: state.page,
                     pageSize: state.pageSize,
                     itemCount: state.items.length,
@@ -305,163 +475,16 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
                     onPrevious: state.page == 0
                         ? null
                         : () => ref
-                            .read(hubProductsProvider.notifier)
-                            .goToPage(state.page - 1),
+                              .read(hubProductsProvider.notifier)
+                              .goToPage(state.page - 1),
                     onNext: !state.hasMore
                         ? null
                         : () => ref
-                            .read(hubProductsProvider.notifier)
-                            .goToPage(state.page + 1),
+                              .read(hubProductsProvider.notifier)
+                              .goToPage(state.page + 1),
                   ),
                 ),
-              ],
-            ),
-            )
-          else
-            SelloFadeIn(
-              child: SelloDataTable(
-              columns: [
-                selloDataColumn('Product'),
-                selloDataColumn('Category'),
-                selloDataColumn('Unit'),
-                selloDataColumn('Sell price', numeric: true),
-                selloDataColumn('Cost price', numeric: true),
-                selloDataColumn('Stock', numeric: true),
-                selloDataColumn('Status'),
-                selloDataColumn('Updated'),
-                selloDataColumn('Actions'),
-              ],
-              rows: [
-                for (final product in state.items)
-                  DataRow(
-                    onSelectChanged: (_) => _openDetails(product),
-                    cells: [
-                      DataCell(
-                        Row(
-                          children: [
-                            SelloEntityThumb(
-                              imageUrl: product.imageUrl,
-                              width: 44,
-                              name: product.name,
-                            ),
-                            const SizedBox(width: AppSpacing.md),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SelloTableText(
-                                    product.name,
-                                    tone: SelloTableTone.strong,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  SelloTableText(
-                                    _productListSubtitle(product),
-                                    tone: SelloTableTone.muted,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      DataCell(
-                        SelloTableText(
-                          product.categoryName ?? 'Uncategorized',
-                        ),
-                      ),
-                      DataCell(
-                        SelloTableText(
-                          product.unitLabel ?? '-',
-                          tone: SelloTableTone.muted,
-                        ),
-                      ),
-                      DataCell(
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: SelloTableText(
-                            product.isMultiOptionProduct
-                                ? '—'
-                                : SelloFormatters.currency(
-                                    product.sellingPrice,
-                                    symbol: currencySymbol,
-                                  ),
-                            tone: product.isMultiOptionProduct
-                                ? SelloTableTone.muted
-                                : SelloTableTone.strong,
-                            numeric: true,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: SelloTableText(
-                            product.isMultiOptionProduct
-                                ? '—'
-                                : SelloFormatters.currency(
-                                    product.costPrice,
-                                    symbol: currencySymbol,
-                                  ),
-                            tone: product.isMultiOptionProduct
-                                ? SelloTableTone.muted
-                                : SelloTableTone.normal,
-                            numeric: true,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: product.isMultiOptionProduct
-                              ? _MultiOptionStockCell(product: product)
-                              : SelloTableText(
-                                  SelloFormatters.quantity(
-                                    product.currentStockQuantity,
-                                  ),
-                                  numeric: true,
-                                ),
-                        ),
-                      ),
-                      DataCell(_ProductStatusBadge(active: product.isActive)),
-                      DataCell(
-                        SelloTableText(
-                          SelloFormatters.date(product.updatedAt),
-                          tone: SelloTableTone.muted,
-                        ),
-                      ),
-                      DataCell(
-                        _RowActionGroup(
-                          onView: () => _openDetails(product),
-                          onEdit: () => _openEditor(product: product),
-                          onToggleArchive: () => _toggleArchive(product),
-                          onDeletePermanently: product.isActive
-                              ? null
-                              : () => _deletePermanently(product),
-                          isActive: product.isActive,
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-              footer: _TablePaginationFooter(
-                page: state.page,
-                pageSize: state.pageSize,
-                itemCount: state.items.length,
-                hasMore: state.hasMore,
-                onPrevious: state.page == 0
-                    ? null
-                    : () => ref
-                        .read(hubProductsProvider.notifier)
-                        .goToPage(state.page - 1),
-                onNext: !state.hasMore
-                    ? null
-                    : () => ref
-                        .read(hubProductsProvider.notifier)
-                        .goToPage(state.page + 1),
               ),
-            ),
-            ),
           ],
         ],
       ),
@@ -469,8 +492,7 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
   }
 
   String _productListSubtitle(ProductSummary product) {
-    final fieldConfig =
-        ref.watch(productFieldConfigProvider).valueOrNull;
+    final fieldConfig = ref.watch(productFieldConfigProvider).valueOrNull;
     final listFields = fieldConfig?.forList ?? const <CompanyProductField>[];
     // Prefer attribute/spec fields for the subtitle so we don't duplicate
     // brand/unit columns already visible in the table.
@@ -523,17 +545,14 @@ class _ProductsToolbar extends StatelessWidget {
         hint: 'Status',
         onChanged: onStatusChanged,
         items: const [
-          DropdownMenuItem(
-            value: ProductStatusFilter.all,
-            child: Text('All'),
-          ),
+          DropdownMenuItem(value: ProductStatusFilter.all, child: Text('All')),
           DropdownMenuItem(
             value: ProductStatusFilter.active,
             child: Text('Active'),
           ),
           DropdownMenuItem(
-            value: ProductStatusFilter.archived,
-            child: Text('Archived'),
+            value: ProductStatusFilter.inactive,
+            child: Text('Inactive'),
           ),
         ],
       ),
@@ -628,7 +647,7 @@ class _CatalogSummaryRow extends StatelessWidget {
           tone: AppColors.success,
         ),
         SelloStatCard(
-          label: 'Archived',
+          label: 'Inactive',
           value: '$archivedCount',
           hint: 'Hidden from sales',
           icon: Icons.archive_outlined,
@@ -668,8 +687,8 @@ class _ArchivedProductsBanner extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              'Archived products are hidden from sales but remain available '
-              'for reports and history.',
+              'Inactive products are hidden from new sales. Past orders '
+              'keep the product name, price, and options.',
               style: context.texts.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
                 height: 1.4,
@@ -720,7 +739,7 @@ class _RowActionGroup extends StatelessWidget {
             onPressed: onEdit,
           ),
           _ActionIconButton(
-            tooltip: isActive ? 'Archive' : 'Restore',
+            tooltip: isActive ? 'Deactivate' : 'Reactivate',
             icon: isActive ? Icons.archive_outlined : Icons.unarchive_outlined,
             onPressed: onToggleArchive,
           ),
@@ -769,9 +788,7 @@ class _ActionIconButtonState extends State<_ActionIconButton> {
         onExit: (_) => setState(() => _hovered = false),
         child: Material(
           color: _hovered
-              ? (widget.danger
-                  ? AppColors.errorContainer
-                  : AppColors.veil)
+              ? (widget.danger ? AppColors.errorContainer : AppColors.veil)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
@@ -819,8 +836,8 @@ class _TablePaginationFooter extends StatelessWidget {
     final rangeLabel = itemCount == 0
         ? 'No products'
         : hasMore
-            ? 'Showing $start–$end products'
-            : 'Showing $start–$end products';
+        ? 'Showing $start–$end products'
+        : 'Showing $start–$end products';
 
     final currentPage = page + 1;
 
@@ -873,11 +890,7 @@ class _TablePaginationFooter extends StatelessWidget {
 }
 
 class _PageChip extends StatelessWidget {
-  const _PageChip({
-    required this.label,
-    required this.selected,
-    this.onTap,
-  });
+  const _PageChip({required this.label, required this.selected, this.onTap});
 
   final String label;
   final bool selected;
@@ -992,8 +1005,8 @@ class _ProductListCard extends StatelessWidget {
                 label: 'Stock',
                 value: product.isMultiOptionProduct
                     ? '${SelloFormatters.quantity(product.currentStockQuantity)}'
-                        '${product.unitLabel?.trim().isNotEmpty == true ? ' ${product.unitLabel!.trim()}' : ''}'
-                        ' · ${product.activeOptionCount} options'
+                          '${product.unitLabel?.trim().isNotEmpty == true ? ' ${product.unitLabel!.trim()}' : ''}'
+                          ' · ${product.activeOptionCount} options'
                     : SelloFormatters.quantity(product.currentStockQuantity),
               ),
               SelloMetaPill(
@@ -1017,7 +1030,7 @@ class _ProductListCard extends StatelessWidget {
                       ? Icons.archive_outlined
                       : Icons.unarchive_outlined,
                 ),
-                label: Text(product.isActive ? 'Archive' : 'Restore'),
+                label: Text(product.isActive ? 'Deactivate' : 'Reactivate'),
               ),
               if (onDeletePermanently != null)
                 TextButton.icon(
@@ -1212,7 +1225,7 @@ class _ProductStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SelloStatusBadge(
-      label: active ? 'Active' : 'Archived',
+      label: active ? 'Active' : 'Inactive',
       tone: active ? SelloStatusTone.success : SelloStatusTone.neutral,
     );
   }
@@ -1225,13 +1238,17 @@ class _EditorResult {
   final bool created;
 }
 
-class _ProductEditorDialog extends ConsumerStatefulWidget {
-  const _ProductEditorDialog({
+class ProductEditorDialog extends ConsumerStatefulWidget {
+  const ProductEditorDialog({
+    super.key,
     this.product,
     required this.categories,
     required this.repository,
     this.defaultReorderLevel = 10,
     this.defaultIsActive = true,
+    this.skuLookup,
+    this.optionNameLookup,
+    this.photoPanelBuilder,
   });
 
   final ProductSummary? product;
@@ -1240,12 +1257,22 @@ class _ProductEditorDialog extends ConsumerStatefulWidget {
   final int defaultReorderLevel;
   final bool defaultIsActive;
 
+  /// Finds live item codes starting with a prefix. Defaults to the repository
+  /// lookup for the signed-in company.
+  final Future<Set<String>> Function(String prefix)? skuLookup;
+
+  /// Saved option names for the current company. Defaults to the repository.
+  final Future<List<String>> Function()? optionNameLookup;
+
+  /// Replaces the photo gallery (which needs live storage services) in tests.
+  final WidgetBuilder? photoPanelBuilder;
+
   @override
-  ConsumerState<_ProductEditorDialog> createState() =>
+  ConsumerState<ProductEditorDialog> createState() =>
       _ProductEditorDialogState();
 }
 
-class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
+class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _sku;
@@ -1274,6 +1301,13 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
   bool _showOptions = false;
   String? _optionsError;
   final List<ProductOptionEditorRow> _optionRows = [];
+  int _tab = 0;
+  final _variantsSectionKey = GlobalKey();
+  bool _skuManuallyEdited = false;
+  Timer? _parentCodeTimer;
+  Timer? _variantCodeTimer;
+  final Map<String, Set<String>> _skuCache = {};
+  List<String> _optionNameSuggestions = const [];
 
   static const _unitOptions = <String>[
     'piece',
@@ -1318,25 +1352,31 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       text: product == null ? '' : product.currentStockQuantity.toString(),
     );
     _reorderLevel = TextEditingController(
-      text: product?.reorderLevel?.toString() ??
+      text:
+          product?.reorderLevel?.toString() ??
           widget.defaultReorderLevel.toString(),
     );
     _description = TextEditingController(text: product?.description ?? '');
     _attributes = Map<String, String>.from(product?.attributes ?? const {});
-    _selectedCategory = widget.categories
+    _selectedCategory =
+        widget.categories
             .map((category) => category.name)
             .contains(product?.categoryName)
         ? product?.categoryName
         : null;
-    _customCategory.text =
-        _selectedCategory == null ? (product?.categoryName ?? '') : '';
+    _customCategory.text = _selectedCategory == null
+        ? (product?.categoryName ?? '')
+        : '';
     final existingUnit = product?.unitLabel?.trim();
-    _selectedUnit =
-        (existingUnit != null && existingUnit.isNotEmpty) ? existingUnit : 'piece';
+    _selectedUnit = (existingUnit != null && existingUnit.isNotEmpty)
+        ? existingUnit
+        : 'piece';
     _isActive = product?.isActive ?? widget.defaultIsActive;
+    _skuManuallyEdited = product != null;
     _preferredSupplierId = product?.preferredSupplierId;
     _suppliersLoading = true;
     Future.microtask(_loadSuppliers);
+    Future.microtask(_loadOptionNameSuggestions);
     if (product != null) {
       _galleryLoading = true;
       _loadGallery(product.id);
@@ -1351,8 +1391,9 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     final product = widget.product;
     if (product == null) return;
     try {
-      final variants =
-          await widget.repository.fetchVariantsForProduct(product.id);
+      final variants = await widget.repository.fetchVariantsForProduct(
+        product.id,
+      );
       if (!mounted) return;
       for (final row in _optionRows) {
         row.dispose();
@@ -1394,7 +1435,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
           ..addAll(
             ProductOptionEditorRow.evolveFromSimple(
               existingVariantId: widget.product?.defaultVariantId,
-              sku: _sku.text.trim(),
+              sku: _isCreate ? '' : _sku.text.trim(),
               barcode: _barcode.text.trim(),
               sellingPrice: _sellingPrice.text.trim(),
               costPrice: _costPrice.text.trim(),
@@ -1413,6 +1454,168 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       }
     });
   }
+
+  Future<void> _setHasVariants(bool enabled) async {
+    if (enabled == _showOptions) return;
+    if (enabled) {
+      _beginManagingOptions();
+      _scheduleVariantCodeRefresh();
+      return;
+    }
+    await _switchToSingleProduct();
+    if (mounted && !_showOptions) setState(() => _tab = 0);
+  }
+
+  Future<Set<String>> _takenSkus(String prefix) async {
+    final key = ItemCodeGenerator.normalize(prefix);
+    if (key.isEmpty) return <String>{};
+    final cached = _skuCache[key];
+    if (cached != null) return cached;
+    final companyId = ref.read(currentSessionProvider)?.company.id;
+    if (companyId == null && widget.skuLookup == null) return <String>{};
+    try {
+      final lookup = widget.skuLookup;
+      final found = lookup != null
+          ? {for (final sku in await lookup(key)) sku.trim().toUpperCase()}
+          : await widget.repository.fetchExistingSkusWithPrefix(
+              companyId: companyId!,
+              prefix: key,
+            );
+      _skuCache[key] = found;
+      return found;
+    } catch (_) {
+      // The database still enforces uniqueness; a failed lookup only means
+      // the first suggestion may need a manual tweak.
+      return <String>{};
+    }
+  }
+
+  void _onNameChanged(String _) {
+    if (!_isCreate || _skuManuallyEdited) return;
+    _parentCodeTimer?.cancel();
+    _parentCodeTimer = Timer(
+      const Duration(milliseconds: 350),
+      _applyParentCode,
+    );
+  }
+
+  void _onParentCodeEdited(String value) {
+    _skuFieldError = null;
+    _skuManuallyEdited = value.trim().isNotEmpty;
+    if (!_skuManuallyEdited) {
+      _onNameChanged(_name.text);
+    }
+    _scheduleVariantCodeRefresh();
+  }
+
+  Future<void> _applyParentCode({bool refreshVariants = true}) async {
+    if (!_isCreate || _skuManuallyEdited) return;
+    final base = ItemCodeGenerator.parentFromName(_name.text);
+    if (base.isEmpty) {
+      if (_sku.text.isNotEmpty && mounted) {
+        setState(() => _sku.text = '');
+      }
+      return;
+    }
+    final taken = await _takenSkus(base);
+    if (!mounted || _skuManuallyEdited) return;
+    if (ItemCodeGenerator.parentFromName(_name.text) != base) return;
+    final code = ItemCodeGenerator.makeUnique(base, taken);
+    if (_sku.text != code || _skuFieldError != null) {
+      setState(() {
+        _sku.text = code;
+        _skuFieldError = null;
+      });
+    }
+    if (refreshVariants) _scheduleVariantCodeRefresh();
+  }
+
+  void _onOptionNameChanged(ProductOptionEditorRow row) {
+    if (row.skuManuallyEdited) return;
+    _applyVariantCode(row);
+  }
+
+  void _onOptionCodeEdited(ProductOptionEditorRow row) {
+    if (!row.skuManuallyEdited) _applyVariantCode(row);
+  }
+
+  void _scheduleVariantCodeRefresh() {
+    _variantCodeTimer?.cancel();
+    _variantCodeTimer = Timer(
+      const Duration(milliseconds: 350),
+      _refreshVariantCodes,
+    );
+  }
+
+  Future<void> _refreshVariantCodes() async {
+    if (!_showOptions) return;
+    final rows = _optionRows.where((r) => !r.skuManuallyEdited).toList();
+    for (final row in rows) {
+      row.sku.text = '';
+    }
+    for (final row in rows) {
+      if (!mounted || !_optionRows.contains(row)) continue;
+      await _applyVariantCode(row);
+    }
+  }
+
+  Future<void> _applyVariantCode(ProductOptionEditorRow row) async {
+    if (row.skuManuallyEdited) return;
+    final parent = _sku.text.trim();
+    final label = row.label.text;
+    final base = ItemCodeGenerator.variantFromOption(
+      parentCode: parent,
+      optionLabel: label,
+    );
+    if (base.isEmpty) {
+      if (row.sku.text.isNotEmpty && mounted) {
+        setState(() => row.sku.text = '');
+      }
+      return;
+    }
+    final stored = await _takenSkus(parent);
+    if (!mounted || row.skuManuallyEdited || !_optionRows.contains(row)) return;
+    if (ItemCodeGenerator.variantFromOption(
+          parentCode: _sku.text.trim(),
+          optionLabel: row.label.text,
+        ) !=
+        base) {
+      return;
+    }
+    final taken = {
+      ...stored,
+      for (final other in _optionRows)
+        if (!identical(other, row) && other.sku.text.trim().isNotEmpty)
+          other.sku.text.trim(),
+    };
+    final code = ItemCodeGenerator.makeUnique(base, taken, letterSuffix: true);
+    if (row.sku.text != code) {
+      setState(() => row.sku.text = code);
+    }
+  }
+
+  Future<void> _flushAutoCodes() async {
+    _parentCodeTimer?.cancel();
+    _variantCodeTimer?.cancel();
+    if (_isCreate && !_skuManuallyEdited) {
+      await _applyParentCode(refreshVariants: false);
+    }
+    if (_showOptions) {
+      for (final row in List.of(_optionRows)) {
+        if (!row.skuManuallyEdited) await _applyVariantCode(row);
+      }
+    }
+  }
+
+  bool get _parentBasicsInvalid =>
+      _name.text.trim().isEmpty || _sku.text.trim().isEmpty;
+
+  bool get _variantsInvalid =>
+      _showOptions && _optionRows.any(optionRowHasErrors);
+
+  int get _readyVariantCount => readyVariantCount(_optionRows);
+
+  bool get _needsMoreVariants => _showOptions && _readyVariantCount < 2;
 
   bool get _hasSavedMultiOptions {
     final product = widget.product;
@@ -1514,8 +1717,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       final confirmed = await showSelloDialog(
         context: context,
         title: 'Remove this option?',
-        message:
-            'The information entered for this option will be discarded.',
+        message: 'The information entered for this option will be discarded.',
         confirmLabel: 'Remove option',
         cancelLabel: 'Cancel',
         destructive: true,
@@ -1523,11 +1725,14 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       if (confirmed != true || !mounted) return;
     }
 
+    ProductOptionEditorRow? removed;
     setState(() {
       _optionsError = null;
-      final removed = removeDraftOptionAt(rows: _optionRows, index: index);
-      removed?.dispose();
+      removed = removeDraftOptionAt(rows: _optionRows, index: index);
     });
+    if (removed != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => removed!.dispose());
+    }
   }
 
   Future<void> _loadSuppliers() async {
@@ -1541,16 +1746,14 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
           .read(supplierRepositoryProvider)
           .fetchActiveSuppliers(companyId: session.company.id, limit: 100);
       if (!mounted) return;
-      final options = [
-        for (final s in items) (id: s.id, name: s.name),
-      ];
+      final options = [for (final s in items) (id: s.id, name: s.name)];
       // Keep current preferred visible even if archived.
       final currentId = _preferredSupplierId;
       final currentName = widget.product?.preferredSupplierName;
       if (currentId != null &&
           currentName != null &&
           !options.any((s) => s.id == currentId)) {
-        options.insert(0, (id: currentId, name: '$currentName (archived)'));
+        options.insert(0, (id: currentId, name: '$currentName (inactive)'));
       }
       setState(() {
         _suppliers = options;
@@ -1562,10 +1765,24 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     }
   }
 
+  Future<void> _loadOptionNameSuggestions() async {
+    final lookup = widget.optionNameLookup;
+    final companyId = ref.read(currentSessionProvider)?.company.id;
+    if (lookup == null && companyId == null) return;
+    try {
+      final names = lookup != null
+          ? await lookup()
+          : await widget.repository.fetchVariantOptionLabels(
+              companyId: companyId!,
+            );
+      if (!mounted) return;
+      setState(() => _optionNameSuggestions = names);
+    } catch (_) {}
+  }
+
   Future<void> _loadGallery(String productId) async {
     try {
-      final images =
-          await widget.repository.media.fetchForProduct(productId);
+      final images = await widget.repository.media.fetchForProduct(productId);
       if (!mounted) return;
       setState(() {
         _gallery = [
@@ -1607,6 +1824,8 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
 
   @override
   void dispose() {
+    _parentCodeTimer?.cancel();
+    _variantCodeTimer?.cancel();
     _name.dispose();
     _sku.dispose();
     _barcode.dispose();
@@ -1625,6 +1844,13 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
 
   String? _requiredMessage(CompanyProductField? field, String? value) {
     if (field == null || !field.enabled || !field.required) return null;
+    if (!parentFieldRequirementApplies(
+      fieldKey: field.fieldKey,
+      hasVariants: _showOptions,
+      definitionKey: field.definition.key,
+    )) {
+      return null;
+    }
     if (value == null || value.trim().isEmpty) {
       return '${field.label} is required.';
     }
@@ -1633,23 +1859,36 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
 
   Future<void> _submit(ProductFieldConfig fieldConfig) async {
     if (_saving || _galleryProcessing) return;
+    await _flushAutoCodes();
+    if (!mounted) return;
     setState(() {
       _submitted = true;
       _skuFieldError = null;
       _barcodeFieldError = null;
       _optionsError = null;
     });
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      _revealTabWithErrors();
+      return;
+    }
 
     final selectedCategory = _selectedCategory == '__new__'
         ? _customCategory.text.trim()
         : (_selectedCategory ?? _customCategory.text.trim());
     if (selectedCategory.isEmpty) {
+      setState(() => _tab = 0);
       SelloSnackbars.warning(context, 'Choose or create a category.');
       return;
     }
 
     for (final field in fieldConfig.enabled) {
+      if (!parentFieldRequirementApplies(
+        fieldKey: field.fieldKey,
+        hasVariants: _showOptions,
+        definitionKey: field.definition.key,
+      )) {
+        continue;
+      }
       final value = switch (field.fieldKey) {
         'barcode' => _barcode.text,
         'brand' => _brand.text,
@@ -1660,6 +1899,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       };
       final message = _requiredMessage(field, value);
       if (message != null) {
+        setState(() => _tab = 0);
         SelloSnackbars.warning(context, message);
         return;
       }
@@ -1668,21 +1908,31 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     List<ProductVariantDraft>? variantDrafts;
     late final num sellingPrice;
     late final num costPrice;
-    if (_showOptions && _optionRows.length > 1) {
+    if (_showOptions) {
+      final structureError =
+          tooFewVariantsError(_optionRows) ??
+          duplicateOptionCodeError(_optionRows);
+      if (structureError != null) {
+        setState(() {
+          _optionsError = structureError;
+          _tab = 1;
+        });
+        return;
+      }
       final activeCount = _optionRows.where((row) => row.isActive).length;
       final lastActiveError = validateLastActiveOption(
         activeCountAfterChange: activeCount,
       );
       if (lastActiveError != null) {
-        setState(() => _optionsError = lastActiveError);
+        setState(() {
+          _optionsError = lastActiveError;
+          _tab = 1;
+        });
         return;
       }
       variantDrafts = [
         for (var i = 0; i < _optionRows.length; i++)
-          _optionRows[i].toDraft(
-            sortOrder: i,
-            includeCost: _canViewCost,
-          ),
+          _optionRows[i].toDraft(sortOrder: i, includeCost: _canViewCost),
       ];
       final primary = _optionRows.firstWhere(
         (row) => row.isActive,
@@ -1702,7 +1952,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       name: _name.text.trim(),
       sku: _sku.text.trim(),
       categoryName: selectedCategory,
-      barcode: fieldConfig.isEnabled('barcode')
+      barcode: fieldConfig.isEnabled('barcode') && !_showOptions
           ? _barcode.text.trim()
           : (widget.product?.barcode ?? ''),
       brand: fieldConfig.isEnabled('brand')
@@ -1713,7 +1963,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
           : (widget.product?.unitLabel ?? 'piece'),
       sellingPrice: sellingPrice,
       costPrice: costPrice,
-      currentStockQuantity: (_showOptions && _optionRows.length > 1)
+      currentStockQuantity: _showOptions
           ? 0
           : num.parse(
               _stockQty.text.trim().isEmpty ? '0' : _stockQty.text.trim(),
@@ -1724,15 +1974,18 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       description: _description.text.trim(),
       isActive: _isActive,
       preferredSupplierId: _preferredSupplierId,
-      attributes: Map<String, String>.from(_attributes),
+      attributes: {
+        for (final entry in _attributes.entries)
+          if (!(_showOptions && isVariantLevelFieldKey(entry.key)))
+            entry.key: entry.value,
+      },
       variants: variantDrafts,
     );
 
     setState(() => _saving = true);
-    final error = await ref.read(hubProductsProvider.notifier).saveProduct(
-          input: input,
-          gallery: _gallery,
-        );
+    final error = await ref
+        .read(hubProductsProvider.notifier)
+        .saveProduct(input: input, gallery: _gallery);
     if (!mounted) return;
 
     if (error != null) {
@@ -1762,18 +2015,59 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
     Navigator.of(context).pop(_EditorResult(created: _isCreate));
   }
 
+  void _revealTabWithErrors() {
+    if (!_showOptions) return;
+    final target = _parentBasicsInvalid ? 0 : (_variantsInvalid ? 1 : _tab);
+    if (target != _tab) setState(() => _tab = target);
+  }
+
+  void _guideToVariantsTab() {
+    setState(() {
+      _tab = 1;
+      if (_optionRows.length < 2) {
+        _optionRows.add(
+          ProductOptionEditorRow(
+            sellingPrice: _optionRows.isEmpty
+                ? _sellingPrice.text.trim()
+                : _optionRows.first.sellingPrice.text,
+            costPrice: _optionRows.isEmpty
+                ? _costPrice.text.trim()
+                : _optionRows.first.costPrice.text,
+          ),
+        );
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _variantsSectionKey.currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 180),
+        alignment: 0.08,
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _onPrimary(ProductFieldConfig fieldConfig) {
+    if (_needsMoreVariants) {
+      _guideToVariantsTab();
+      return;
+    }
+    _submit(fieldConfig);
+  }
+
   @override
   Widget build(BuildContext context) {
     final fieldConfigAsync = ref.watch(productFieldConfigProvider);
-    final fieldConfig = fieldConfigAsync.valueOrNull ??
-        ProductFieldConfig(fields: []);
+    final fieldConfig =
+        fieldConfigAsync.valueOrNull ?? ProductFieldConfig(fields: []);
     // While config loads, keep default column fields visible (matches seed defaults).
     final configReady = fieldConfigAsync.hasValue;
     final showBarcode = !configReady || fieldConfig.isEnabled('barcode');
     final showBrand = !configReady || fieldConfig.isEnabled('brand');
     final showUnit = !configReady || fieldConfig.isEnabled('unit_label');
-    final showReorder =
-        !configReady || fieldConfig.isEnabled('reorder_level');
+    final showReorder = !configReady || fieldConfig.isEnabled('reorder_level');
 
     final categoryItems = <DropdownMenuItem<String?>>[
       for (final category in widget.categories)
@@ -1798,18 +2092,19 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             ),
             child: const CircularProgressIndicator(strokeWidth: 2),
           )
-        : SelloProductMediaGallery(
-            items: _gallery,
-            onChanged: (items) {
-              // Keep submit payload in sync without rebuilding the whole form
-              // (rebuilding freezes typing while images optimize on web).
-              _gallery = items;
-            },
-            onProcessingChanged: (busy) {
-              if (_galleryProcessing == busy) return;
-              setState(() => _galleryProcessing = busy);
-            },
-          );
+        : widget.photoPanelBuilder?.call(context) ??
+              SelloProductMediaGallery(
+                items: _gallery,
+                onChanged: (items) {
+                  // Keep submit payload in sync without rebuilding the whole form
+                  // (rebuilding freezes typing while images optimize on web).
+                  _gallery = items;
+                },
+                onProcessingChanged: (busy) {
+                  if (_galleryProcessing == busy) return;
+                  setState(() => _galleryProcessing = busy);
+                },
+              );
 
     return SelloFormDialog(
       formKey: _formKey,
@@ -1823,77 +2118,147 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ResponsiveBuilder(
-            mobile: (_) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                imagePanel,
-                const SizedBox(height: 28),
-                _buildDetailsColumn(
-                  categoryItems: categoryItems,
-                  showBarcode: showBarcode,
-                  showBrand: showBrand,
-                  showUnit: showUnit,
-                  showReorder: showReorder,
+          ProductVariantsToggleCard(
+            value: _showOptions,
+            onChanged: _hasSavedMultiOptions ? null : _setHasVariants,
+            lockedNote: _hasSavedMultiOptions
+                ? 'This product already has saved variants. Deactivate unused '
+                      'variants instead of turning variants off.'
+                : null,
+          ),
+          const SizedBox(height: 20),
+          if (_showOptions) ...[
+            ProductEditorTabs(
+              index: _tab,
+              onChanged: (value) => setState(() => _tab = value),
+              tabs: [
+                ProductEditorTab(
+                  label: 'Parent Details',
+                  hasError:
+                      _submitted &&
+                      (_parentBasicsInvalid || _skuFieldError != null),
+                ),
+                ProductEditorTab(
+                  label: 'Variants (${_optionRows.length})',
+                  hasError:
+                      _submitted && (_variantsInvalid || _optionsError != null),
                 ),
               ],
             ),
-            tablet: (_) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(width: 300, child: imagePanel),
-                const SizedBox(width: 28),
-                Expanded(
-                  child: _buildDetailsColumn(
-                    categoryItems: categoryItems,
-                    showBarcode: showBarcode,
-                    showBrand: showBrand,
-                    showUnit: showUnit,
-                    showReorder: showReorder,
-                  ),
-                ),
-              ],
-            ),
-            desktop: (_) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(width: 320, child: imagePanel),
-                const SizedBox(width: 32),
-                Expanded(
-                  child: _buildDetailsColumn(
-                    categoryItems: categoryItems,
-                    showBarcode: showBarcode,
-                    showBrand: showBrand,
-                    showUnit: showUnit,
-                    showReorder: showReorder,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 20),
+          ],
+          Visibility(
+            visible: !_showOptions || _tab == 0,
+            maintainState: true,
+            child: _buildParentDetails(
+              imagePanel: imagePanel,
+              categoryItems: categoryItems,
+              showBarcode: showBarcode,
+              showBrand: showBrand,
+              showUnit: showUnit,
+              showReorder: showReorder,
             ),
           ),
-          SelloDialogSection(
-              title: 'Additional Information',
-              bottomSpacing: 8,
-              children: [
-                SelloTextField(
-                  controller: _description,
-                  label: 'Description',
-                  hint: 'Notes for staff or customers…',
-                  maxLines: 5,
-                ),
-              ],
+          if (_showOptions)
+            Visibility(
+              key: _variantsSectionKey,
+              visible: _tab == 1,
+              maintainState: true,
+              child: ProductOptionsEditorSection(
+                rows: _optionRows,
+                showCost: _canViewCost,
+                errorText: _optionsError,
+                onChanged: () => setState(() {}),
+                onAddOption: _beginManagingOptions,
+                onToggleActive: _toggleOptionActive,
+                onRemoveOption: _removeOption,
+                onOptionNameChanged: _onOptionNameChanged,
+                onItemCodeEdited: _onOptionCodeEdited,
+                optionNameSuggestions: [
+                  ..._optionNameSuggestions,
+                  for (final row in _optionRows)
+                    if (row.label.text.trim().isNotEmpty) row.label.text.trim(),
+                ],
+              ),
             ),
         ],
       ),
       footer: SelloDialogFooter(
         cancelLabel: 'Cancel',
-        primaryLabel: _isCreate ? 'Create Product' : 'Save Changes',
+        primaryLabel: variantAwarePrimaryLabel(
+          isCreate: _isCreate,
+          hasVariants: _showOptions,
+          readyCount: _readyVariantCount,
+        ),
         primaryEnabled: !_galleryProcessing && !_saving,
-        primaryLoading: _saving,
+        primaryLoading: _saving && !_needsMoreVariants,
         onPrimary: (_galleryProcessing || _saving)
             ? null
-            : () => _submit(fieldConfig),
+            : () => _onPrimary(fieldConfig),
       ),
+    );
+  }
+
+  Widget _buildParentDetails({
+    required Widget imagePanel,
+    required List<DropdownMenuItem<String?>> categoryItems,
+    required bool showBarcode,
+    required bool showBrand,
+    required bool showUnit,
+    required bool showReorder,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final sideBySide = ResponsiveLayout.canFitRow(
+              width: constraints.maxWidth,
+              itemCount: 2,
+              minItemWidth: 280,
+              gap: 28,
+            );
+            final imageWidth = constraints.maxWidth >= 760 ? 320.0 : 280.0;
+            final details = _buildDetailsColumn(
+              categoryItems: categoryItems,
+              showBarcode: showBarcode,
+              showBrand: showBrand,
+              showUnit: showUnit,
+              showReorder: showReorder,
+            );
+            if (!sideBySide) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  imagePanel,
+                  const SizedBox(height: 28),
+                  details,
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: imageWidth, child: imagePanel),
+                SizedBox(width: constraints.maxWidth >= 760 ? 32 : 28),
+                Expanded(child: details),
+              ],
+            );
+          },
+        ),
+        SelloDialogSection(
+          title: 'Additional Information',
+          bottomSpacing: 8,
+          children: [
+            SelloTextField(
+              controller: _description,
+              label: 'Description',
+              hint: 'Notes for staff or customers…',
+              maxLines: 5,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1906,14 +2271,23 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
   }) {
     final needsCustomCategory =
         _selectedCategory == '__new__' || widget.categories.isEmpty;
-    final fieldConfig = ref.watch(productFieldConfigProvider).valueOrNull ??
+    final fieldConfig =
+        ref.watch(productFieldConfigProvider).valueOrNull ??
         ProductFieldConfig(fields: []);
     final attributeFields = fieldConfig.enabled
         .where((f) => f.definition.storage == ProductFieldStorage.attribute)
-        // Sellable size belongs on the option name in multi-option mode —
-        // hide the competing Product Details Size attribute.
-        .where((f) => !_showOptions || f.fieldKey != 'size')
         .toList(growable: false);
+    final parentAttributeFields = [
+      for (final field in attributeFields)
+        if (!(_showOptions && isVariantLevelProductField(field))) field,
+    ];
+    final disabledParentFields = [
+      for (final field in attributeFields)
+        if (_showOptions &&
+            isVariantLevelFieldKey(field.fieldKey) &&
+            field.fieldKey == 'size')
+          field,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1925,16 +2299,18 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
               controller: _name,
               label: 'Product name',
               required: true,
+              onChanged: _onNameChanged,
               validator: (value) => value == null || value.trim().isEmpty
                   ? 'Enter a product name.'
                   : null,
             ),
-            if (showBarcode)
+            if (showBarcode && !_showOptions)
               SelloFormRow(
                 left: SelloTextField(
                   controller: _sku,
                   label: 'Item code',
                   required: true,
+                  onChanged: _onParentCodeEdited,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Enter an item code.';
@@ -1959,8 +2335,12 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             else
               SelloTextField(
                 controller: _sku,
-                label: 'Item code',
+                label: _showOptions ? 'Parent item code' : 'Item code',
                 required: true,
+                onChanged: _onParentCodeEdited,
+                helperText: _showOptions
+                    ? 'Groups all variants. Each variant has its own code.'
+                    : null,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Enter an item code.';
@@ -1970,18 +2350,64 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
               ),
           ],
         ),
-        if (attributeFields.isNotEmpty)
+        if (parentAttributeFields.isNotEmpty)
           SelloDialogSection(
             title: 'Product Details',
             children: [
               ProductDynamicFields(
-                fields: attributeFields,
+                fields: parentAttributeFields,
                 values: _attributes,
                 includeColumnBacked: false,
                 includeInventory: false,
                 includeAttributes: true,
                 onChanged: (next) => setState(() => _attributes = next),
               ),
+            ],
+          ),
+        if (_showOptions)
+          SelloDialogSection(
+            title: 'Pricing & Size',
+            children: [
+              const HandledInVariantsNote(),
+              if (disabledParentFields.isNotEmpty)
+                ProductDynamicFields(
+                  fields: disabledParentFields,
+                  values: _attributes,
+                  includeColumnBacked: false,
+                  includeInventory: false,
+                  includeAttributes: true,
+                  disabledFieldKeys: const {'size'},
+                  onChanged: (next) => setState(() => _attributes = next),
+                ),
+              if (disabledParentFields.isNotEmpty) const SizedBox(height: 12),
+              if (_canViewCost)
+                SelloFormRow(
+                  left: SelloTextField(
+                    controller: _costPrice,
+                    label: 'Cost price',
+                    enabled: false,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  ),
+                  right: SelloTextField(
+                    controller: _sellingPrice,
+                    label: 'Selling price',
+                    enabled: false,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  ),
+                )
+              else
+                SelloTextField(
+                  controller: _sellingPrice,
+                  label: 'Selling price',
+                  enabled: false,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
             ],
           ),
         SelloDialogSection(
@@ -1992,8 +2418,8 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
                 flexes: showBrand && showUnit
                     ? const [48, 26, 26]
                     : showBrand
-                        ? const [60, 40]
-                        : const [60, 40],
+                    ? const [60, 40]
+                    : const [60, 40],
                 children: [
                   SelloDropdown<String?>(
                     value: _selectedCategory,
@@ -2047,8 +2473,7 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
                     ? 'Create new category'
                     : 'Select category',
                 items: categoryItems,
-                onChanged: (value) =>
-                    setState(() => _selectedCategory = value),
+                onChanged: (value) => setState(() => _selectedCategory = value),
               ),
             if (needsCustomCategory)
               SelloTextField(
@@ -2071,9 +2496,9 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             SelloDropdown<String?>(
               value: _preferredSupplierId,
               label: 'Preferred supplier',
-                  hint: _suppliersLoading
-                      ? 'Loading suppliers…'
-                      : 'Primary purchasing partner',
+              hint: _suppliersLoading
+                  ? 'Loading suppliers…'
+                  : 'Primary purchasing partner',
               items: [
                 const DropdownMenuItem<String?>(
                   value: null,
@@ -2102,24 +2527,26 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
             ),
           ],
         ),
-        SelloDialogSection(
-          title: 'Pricing',
-          children: [
-            if (!_showOptions) ...[
+        if (!_showOptions)
+          SelloDialogSection(
+            title: 'Pricing',
+            children: [
               if (_canViewCost)
                 SelloFormRow(
                   left: SelloTextField(
-                    controller: _sellingPrice,
-                    label: 'Selling price',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    controller: _costPrice,
+                    label: 'Cost price',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     validator: _validateNumber,
                   ),
                   right: SelloTextField(
-                    controller: _costPrice,
-                    label: 'Cost price',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    controller: _sellingPrice,
+                    label: 'Selling price',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     validator: _validateNumber,
                   ),
                 )
@@ -2127,73 +2554,28 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
                 SelloTextField(
                   controller: _sellingPrice,
                   label: 'Selling price',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: _validateNumber,
                 ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: SelloButton(
-                  label: 'Add another option',
-                  icon: Icons.add_rounded,
-                  variant: SelloButtonVariant.ghost,
-                  size: SelloButtonSize.small,
-                  onPressed: _beginManagingOptions,
-                ),
-              ),
-            ] else
-              const Text(
-                'Multi-option product — selling price, cost and opening stock '
-                'are set on each option below.',
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12.5,
-                  height: 1.35,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-          ],
-        ),
-        if (_showOptions) ...[
-          const SizedBox(height: 4),
-          ProductOptionsEditorSection(
-            rows: _optionRows,
-            showCost: _canViewCost,
-            errorText: _optionsError,
-            onChanged: () => setState(() {}),
-            onAddOption: _beginManagingOptions,
-            onToggleActive: _toggleOptionActive,
-            onRemoveOption: _removeOption,
-            onSwitchToSingle: _switchToSingleProduct,
-            allowSwitchToSingle: !_hasSavedMultiOptions,
+            ],
           ),
-        ],
-        SelloDialogSection(
-          title: 'Inventory',
-          children: [
-            if (_showOptions) ...[
-              Text(
-                showReorder
-                    ? 'Opening stock is set per option above. Reorder level still applies across options.'
-                    : 'Opening stock is set per option above.',
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12.5,
-                  height: 1.35,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              if (showReorder) ...[
-                const SizedBox(height: 12),
+        if (!_showOptions || showReorder)
+          SelloDialogSection(
+            title: 'Inventory',
+            children: [
+              if (_showOptions)
                 SelloTextField(
                   controller: _reorderLevel,
                   label: 'Reorder level',
                   required:
                       fieldConfig.byKey('reorder_level')?.required == true,
                   tooltip: 'Alert when stock falls to this amount.',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  helperText: 'Opening stock is set on each variant.',
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: (value) {
                     final required = _requiredMessage(
                       fieldConfig.byKey('reorder_level'),
@@ -2202,53 +2584,55 @@ class _ProductEditorDialogState extends ConsumerState<_ProductEditorDialog> {
                     if (required != null) return required;
                     return _validateOptionalNumber(value);
                   },
-                ),
-              ],
-            ] else if (showReorder)
-              SelloFormRow(
-                left: SelloTextField(
+                )
+              else if (showReorder)
+                SelloFormRow(
+                  left: SelloTextField(
+                    controller: _stockQty,
+                    label: 'Opening stock',
+                    enabled: _isCreate,
+                    helperText: _isCreate
+                        ? null
+                        : 'Adjust stock from Inventory to keep the ledger accurate.',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: _isCreate ? _validateNumber : null,
+                  ),
+                  right: SelloTextField(
+                    controller: _reorderLevel,
+                    label: 'Reorder level',
+                    required:
+                        fieldConfig.byKey('reorder_level')?.required == true,
+                    tooltip: 'Alert when stock falls to this amount.',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: (value) {
+                      final required = _requiredMessage(
+                        fieldConfig.byKey('reorder_level'),
+                        value,
+                      );
+                      if (required != null) return required;
+                      return _validateOptionalNumber(value);
+                    },
+                  ),
+                )
+              else
+                SelloTextField(
                   controller: _stockQty,
                   label: 'Opening stock',
                   enabled: _isCreate,
                   helperText: _isCreate
                       ? null
                       : 'Adjust stock from Inventory to keep the ledger accurate.',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   validator: _isCreate ? _validateNumber : null,
                 ),
-                right: SelloTextField(
-                  controller: _reorderLevel,
-                  label: 'Reorder level',
-                  required:
-                      fieldConfig.byKey('reorder_level')?.required == true,
-                  tooltip: 'Alert when stock falls to this amount.',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  validator: (value) {
-                    final required = _requiredMessage(
-                      fieldConfig.byKey('reorder_level'),
-                      value,
-                    );
-                    if (required != null) return required;
-                    return _validateOptionalNumber(value);
-                  },
-                ),
-              )
-            else
-              SelloTextField(
-                controller: _stockQty,
-                label: 'Opening stock',
-                enabled: _isCreate,
-                helperText: _isCreate
-                    ? null
-                    : 'Adjust stock from Inventory to keep the ledger accurate.',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                validator: _isCreate ? _validateNumber : null,
-              ),
-          ],
-        ),
+            ],
+          ),
         SelloDialogSection(
           title: 'Status',
           bottomSpacing: 8,

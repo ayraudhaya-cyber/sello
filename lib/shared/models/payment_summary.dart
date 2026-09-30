@@ -227,6 +227,46 @@ class ReceivePaymentResult {
   bool get isPendingReview => status.isPendingReview;
 }
 
+/// One collection already linked to a specific order.
+class OrderCollectionEntry {
+  const OrderCollectionEntry({
+    required this.paymentId,
+    required this.paymentNumber,
+    required this.amount,
+    required this.method,
+    required this.status,
+    required this.receivedAt,
+  });
+
+  final String paymentId;
+  final String paymentNumber;
+  final num amount;
+  final PaymentMethod method;
+  final PaymentRecordStatus status;
+  final DateTime receivedAt;
+
+  bool get countsTowardPaid => status == PaymentRecordStatus.completed;
+}
+
+class OrderCollectionBalance {
+  const OrderCollectionBalance({
+    required this.entries,
+    required this.amountPaid,
+    this.amountPending = 0,
+  });
+
+  final List<OrderCollectionEntry> entries;
+
+  /// Sum of completed allocations on this order.
+  final num amountPaid;
+
+  /// Collections waiting for approval. They are reserved against this order.
+  final num amountPending;
+
+  num outstandingFor(num total) =>
+      (total - amountPaid - amountPending).clamp(0, double.infinity);
+}
+
 /// Outstanding order row for the receive-payment picker.
 class ReceivableOrder {
   const ReceivableOrder({

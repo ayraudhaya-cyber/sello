@@ -182,7 +182,7 @@ class _SignupForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SelloBrandMark(size: 36),
+          const SelloBrandMark(size: 36, onLightSurface: true),
           const SizedBox(height: AppSpacing.lg),
           Text('Create your account', style: context.texts.headlineLarge),
           const SizedBox(height: AppSpacing.xs),
@@ -337,7 +337,7 @@ class _EmailConfirmationSuccess extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SelloBrandMark(size: 36),
+        const SelloBrandMark(size: 36, onLightSurface: true),
         const SizedBox(height: AppSpacing.xl),
         Container(
           width: 64,

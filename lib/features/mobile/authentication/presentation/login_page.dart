@@ -310,7 +310,7 @@ class _LoginForm extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SelloBrandMark(size: 40),
+                const SelloBrandMark(size: 40, onLightSurface: true),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
                   title,

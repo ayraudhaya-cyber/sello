@@ -118,6 +118,11 @@ void main() {
             'destination_kind': 'web',
             'destination_url': 'https://app.sello.example',
           },
+          'windows': {
+            'destination_kind': 'installer',
+            'destination_url':
+                'https://cashro.pro/sello-updates/owner-manager/sello-owner-manager.exe',
+          },
         },
       });
 
@@ -134,6 +139,14 @@ void main() {
       expect(
         manifest.channelFor(AppReleasePlatform.web).hasDestination,
         isTrue,
+      );
+      expect(
+        manifest.channelFor(AppReleasePlatform.windows).destinationKind,
+        ReleaseDestinationKind.installer,
+      );
+      expect(
+        manifest.channelFor(AppReleasePlatform.windows).destinationUrl,
+        'https://cashro.pro/sello-updates/owner-manager/sello-owner-manager.exe',
       );
     });
 

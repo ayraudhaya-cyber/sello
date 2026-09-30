@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/animations/app_durations.dart';
-import 'package:sello/core/responsive/app_breakpoints.dart';
+import 'package:sello/core/responsive/responsive_layout.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/shared/widgets/layout/sello_equal_height_row.dart';
 
 enum SelloCardElevation { flat, soft, raised }
 
@@ -289,6 +290,8 @@ class SelloStatCard extends StatelessWidget {
           SizedBox(height: compact ? (quiet ? 6 : 8) : 18),
           Text(
             label.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 10.5,
@@ -298,13 +301,22 @@ class SelloStatCard extends StatelessWidget {
             ),
           ),
           SizedBox(height: compact ? 2 : 8),
-          Text(
-            value,
-            style: emphasized
-                ? AppTypography.metric.copyWith(fontSize: 26)
-                : quiet
-                    ? AppTypography.metric.copyWith(fontSize: 22)
-                    : AppTypography.metric,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                softWrap: false,
+                style: emphasized
+                    ? AppTypography.metric.copyWith(fontSize: 26)
+                    : quiet
+                        ? AppTypography.metric.copyWith(fontSize: 22)
+                        : AppTypography.metric,
+              ),
+            ),
           ),
           if (hint != null) ...[
             const SizedBox(height: 2),
@@ -417,15 +429,15 @@ class _KpiSparkPainter extends CustomPainter {
 
 /// Responsive grid of [SelloStatCard]s — one row when possible, equal widths.
 ///
-/// Column count tracks the number of cards (up to [maxColumns]) so 3 cards
-/// fill the row instead of leaving empty space, and 5 cards stay on one line
-/// on desktop.
+/// Column count follows **available width** and [minItemWidth] (not the window
+/// breakpoint), so Hub content next to a sidebar does not squeeze currency.
 class SelloStatCardGrid extends StatelessWidget {
   const SelloStatCardGrid({
     super.key,
     required this.children,
     this.gap = AppSpacing.md,
     this.maxColumns = 5,
+    this.minItemWidth = ResponsiveLayout.statCardMinWidth,
   });
 
   final List<Widget> children;
@@ -434,17 +446,8 @@ class SelloStatCardGrid extends StatelessWidget {
   /// Maximum columns on large screens (e.g. 6 for Reports, 5 for domain lists).
   final int maxColumns;
 
-  int _columnsForWidth(double width, int childCount) {
-    final cap = maxColumns.clamp(1, 12);
-    final wanted = childCount.clamp(1, cap);
-    if (width < AppBreakpoints.mobile) {
-      return width < 400 ? 1 : 2.clamp(1, wanted);
-    }
-    if (width < AppBreakpoints.tablet) {
-      return 3.clamp(1, wanted);
-    }
-    return wanted;
-  }
+  /// Drop a column before cards get narrower than this.
+  final double minItemWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -453,18 +456,34 @@ class SelloStatCardGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = _columnsForWidth(width, children.length);
+        final columns = ResponsiveLayout.columnsFor(
+          width: width,
+          itemCount: children.length,
+          minItemWidth: minItemWidth,
+          maxColumns: maxColumns,
+          gap: gap,
+        );
         final itemWidth = (width - gap * (columns - 1)) / columns;
+        final rows = <List<Widget>>[];
+        for (var i = 0; i < children.length; i += columns) {
+          final end = i + columns > children.length
+              ? children.length
+              : i + columns;
+          rows.add(children.sublist(i, end));
+        }
 
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final child in children)
-              SizedBox(
-                width: itemWidth,
-                child: child,
+            for (var r = 0; r < rows.length; r++) ...[
+              if (r > 0) SizedBox(height: gap),
+              SelloEqualHeightRow(
+                gap: gap,
+                expandChildren: false,
+                childWidth: itemWidth,
+                children: rows[r],
               ),
+            ],
           ],
         );
       },
@@ -517,21 +536,36 @@ class SelloDashboardCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(title, style: titleStyle),
-              if (countBadge != null) ...[
-                const SizedBox(width: 8),
-                Text(
-                  countBadge!,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textTertiary,
-                  ),
+              Flexible(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: titleStyle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (countBadge != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        countBadge!,
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
+              if (action != null) ...[
+                const SizedBox(width: 8),
+                action!,
               ],
-              const Spacer(),
-              ?action,
             ],
           ),
           if (subtitle != null) ...[

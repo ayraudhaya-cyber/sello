@@ -105,6 +105,20 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                       color: AppColors.textSecondary,
                     ),
                   ),
+                  if (doc.issuerIdentity.hasTagline) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      doc.issuerIdentity.tagline!,
+                      textAlign: TextAlign.left,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        height: 1.45,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 28),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -393,6 +407,18 @@ class _OrderDocumentCard extends StatelessWidget {
               color: AppColors.textTertiary,
             ),
           ),
+          if (doc.collectionStatusTag != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelloStatusBadge(
+                label: doc.collectionStatusTag!,
+                tone: doc.collectionReview.showsPaymentDetails
+                    ? SelloStatusTone.success
+                    : SelloStatusTone.warning,
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           const Divider(height: 1, color: AppColors.outlinePanel),
           const SizedBox(height: 16),
@@ -403,6 +429,22 @@ class _OrderDocumentCard extends StatelessWidget {
             _MetaRow(label: 'Address', value: doc.customerAddress!),
           if (doc.salesRepName != null)
             _MetaRow(label: 'Sales Rep', value: doc.salesRepName!),
+          if (doc.collectionReview.showsPaymentDetails) ...[
+            if (doc.collectionPaymentNumber != null)
+              _MetaRow(label: 'Payment', value: doc.collectionPaymentNumber!),
+            if (doc.collectionMethodLabel != null)
+              _MetaRow(label: 'Method', value: doc.collectionMethodLabel!),
+            if (doc.collectionPaymentAmount != null)
+              _MetaRow(
+                label: 'Amount received',
+                value: doc.money(doc.collectionPaymentAmount!),
+              ),
+            if (doc.collectionReceivedAt != null)
+              _MetaRow(
+                label: 'Recorded on',
+                value: SelloFormatters.date(doc.collectionReceivedAt!),
+              ),
+          ],
           if (doc.outstandingBalance != null)
             _MetaRow(
               label: 'Outstanding balance',

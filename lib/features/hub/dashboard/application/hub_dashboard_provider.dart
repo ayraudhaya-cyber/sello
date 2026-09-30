@@ -127,10 +127,9 @@ final hubDashboardProvider = FutureProvider.autoDispose
 
 Future<int> _countActiveCustomers(Ref ref) async {
   try {
-    final page = await ref
+    return await ref
         .read(customerRepositoryProvider)
-        .fetchCustomers(isActive: true, pageSize: 1000);
-    return page.items.length;
+        .countActiveCustomers();
   } catch (_) {
     return 0;
   }

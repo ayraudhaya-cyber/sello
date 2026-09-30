@@ -32,6 +32,9 @@ class SelloEntityThumb extends StatelessWidget {
     final radius = BorderRadius.circular(width <= 48 ? 10 : 12);
 
     if (imageUrl != null && imageUrl!.isNotEmpty) {
+      final cacheWidth = (width * MediaQuery.devicePixelRatioOf(context))
+          .ceil()
+          .clamp(64, 480);
       return Container(
         width: width,
         height: h,
@@ -46,6 +49,8 @@ class SelloEntityThumb extends StatelessWidget {
           height: h,
           fit: BoxFit.cover,
           filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
+          cacheWidth: cacheWidth,
           errorBuilder: (_, _, _) => _monogram(context, radius, h),
         ),
       );

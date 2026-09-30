@@ -297,7 +297,11 @@ class _CatalogProductCard extends ConsumerWidget {
                       Image.network(
                         product.imageUrl!,
                         fit: BoxFit.cover,
-                        filterQuality: FilterQuality.high,
+                        filterQuality: FilterQuality.medium,
+                        gaplessPlayback: true,
+                        cacheWidth: (320 *
+                                MediaQuery.devicePixelRatioOf(context))
+                            .round(),
                         errorBuilder: (_, _, _) =>
                             _Monogram(name: product.name),
                       )

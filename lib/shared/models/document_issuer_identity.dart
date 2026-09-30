@@ -14,6 +14,7 @@ class DocumentIssuerIdentity extends Equatable {
     this.phone,
     this.email,
     this.terms,
+    this.tagline,
   });
 
   final bool showLogo;
@@ -33,12 +34,17 @@ class DocumentIssuerIdentity extends Equatable {
   /// Optional terms / footer from company_settings.document_terms.
   final String? terms;
 
+  /// Optional closing line from company_settings.document_tagline.
+  final String? tagline;
+
   bool get hasContactBlock =>
       (address != null && address!.isNotEmpty) ||
       (phone != null && phone!.isNotEmpty) ||
       (email != null && email!.isNotEmpty);
 
   bool get hasTerms => terms != null && terms!.isNotEmpty;
+
+  bool get hasTagline => tagline != null && tagline!.isNotEmpty;
 
   static String? resolveLogoUrl(String? documentLogoUrl) {
     return _usable(documentLogoUrl);
@@ -52,6 +58,7 @@ class DocumentIssuerIdentity extends Equatable {
     String? phone,
     String? email,
     String? terms,
+    String? tagline,
   }) {
     final name = companyName.trim().isEmpty ? 'Business' : companyName.trim();
     final logo = resolveLogoUrl(documentLogoUrl);
@@ -59,6 +66,7 @@ class DocumentIssuerIdentity extends Equatable {
     final resolvedPhone = _trimOrNull(phone);
     final resolvedEmail = _trimOrNull(email);
     final resolvedTerms = _trimOrNull(terms);
+    final resolvedTagline = _trimOrNull(tagline);
     if (logo != null) {
       return DocumentIssuerIdentity(
         showLogo: true,
@@ -69,6 +77,7 @@ class DocumentIssuerIdentity extends Equatable {
         phone: resolvedPhone,
         email: resolvedEmail,
         terms: resolvedTerms,
+        tagline: resolvedTagline,
       );
     }
     return DocumentIssuerIdentity(
@@ -80,6 +89,7 @@ class DocumentIssuerIdentity extends Equatable {
       phone: resolvedPhone,
       email: resolvedEmail,
       terms: resolvedTerms,
+      tagline: resolvedTagline,
     );
   }
 
@@ -108,5 +118,6 @@ class DocumentIssuerIdentity extends Equatable {
         phone,
         email,
         terms,
+        tagline,
       ];
 }

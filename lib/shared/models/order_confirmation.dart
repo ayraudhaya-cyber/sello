@@ -97,12 +97,16 @@ class OrderConfirmationAction extends Equatable {
 
 /// Return value for Hub / Sales order writes.
 class OrderMutationResult {
-  const OrderMutationResult.ok({this.confirmation}) : error = null;
+  const OrderMutationResult.ok({this.confirmation, this.orderId})
+      : error = null;
 
-  const OrderMutationResult.fail(this.error) : confirmation = null;
+  const OrderMutationResult.fail(this.error)
+      : confirmation = null,
+        orderId = null;
 
   final String? error;
   final OrderConfirmationOutcome? confirmation;
+  final String? orderId;
 
   bool get isOk => error == null;
 }

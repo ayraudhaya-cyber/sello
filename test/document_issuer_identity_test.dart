@@ -150,15 +150,22 @@ void main() {
         'document_phone': '+94112345678',
         'document_email': 'hello@example.com',
         'document_terms': 'Thank you for your business.',
+        'document_tagline': 'Fresh every morning',
       }));
       expect(settings.documentAddress, '12 Flower Rd');
       expect(settings.documentPhone, '+94112345678');
       expect(settings.documentEmail, 'hello@example.com');
       expect(settings.documentTerms, 'Thank you for your business.');
+      expect(settings.documentTagline, 'Fresh every morning');
 
       final cleared = settings.copyWith(clearDocumentTerms: true);
       expect(cleared.documentTerms, isNull);
       expect(cleared.documentAddress, '12 Flower Rd');
+      expect(cleared.documentTagline, 'Fresh every morning');
+
+      final clearedTagline = settings.copyWith(clearDocumentTagline: true);
+      expect(clearedTagline.documentTagline, isNull);
+      expect(clearedTagline.documentTerms, 'Thank you for your business.');
     });
   });
 
@@ -175,6 +182,7 @@ void main() {
         'document_phone': '+94771234567',
         'document_email': 'hello@namson.lk',
         'document_terms': 'Payment due within 14 days.',
+        'document_tagline': '  Fresh every morning  ',
         'customer_name': 'Buyer',
         'lines': [],
       });
@@ -183,12 +191,15 @@ void main() {
       expect(doc.documentPhone, '+94771234567');
       expect(doc.documentEmail, 'hello@namson.lk');
       expect(doc.documentTerms, 'Payment due within 14 days.');
+      expect(doc.documentTagline, 'Fresh every morning');
       expect(doc.issuerIdentity.hasContactBlock, isTrue);
       expect(doc.issuerIdentity.address, '12 Flower Rd, Colombo');
       expect(doc.issuerIdentity.phone, '+94771234567');
       expect(doc.issuerIdentity.email, 'hello@namson.lk');
       expect(doc.issuerIdentity.hasTerms, isTrue);
       expect(doc.issuerIdentity.terms, 'Payment due within 14 days.');
+      expect(doc.issuerIdentity.hasTagline, isTrue);
+      expect(doc.issuerIdentity.tagline, 'Fresh every morning');
     });
 
     test('reads document_logo_url regardless of Custom Branding entitlement', () {

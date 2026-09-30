@@ -7,7 +7,7 @@ import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
 
-enum CustomerStatusFilter { all, active, archived }
+enum CustomerStatusFilter { all, active, inactive }
 
 enum CustomerTypeFilter { all, retail, wholesale }
 
@@ -109,7 +109,7 @@ class HubCustomersNotifier extends Notifier<HubCustomersState> {
         isActive: switch (state.statusFilter) {
           CustomerStatusFilter.all => null,
           CustomerStatusFilter.active => true,
-          CustomerStatusFilter.archived => false,
+          CustomerStatusFilter.inactive => false,
         },
         customerType: switch (state.typeFilter) {
           CustomerTypeFilter.all => null,
@@ -217,7 +217,7 @@ class HubCustomersNotifier extends Notifier<HubCustomersState> {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'No active session found.';
     if (customer.isActive) {
-      return 'Archive the customer before permanently deleting them.';
+      return 'Deactivate the customer before permanently deleting them.';
     }
 
     state = state.copyWith(isSaving: true, clearError: true);

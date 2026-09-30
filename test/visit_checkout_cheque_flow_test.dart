@@ -5,14 +5,34 @@ import 'package:sello/shared/models/visit_payment_arrangement.dart';
 
 void main() {
   group('VisitPaymentArrangement cheque flows', () {
-    test('Cheque received opens Record cheque and creates a cheque record', () {
+    test('Cheque received offers Record cheque but does not create one until saved', () {
       const arrangement = VisitPaymentArrangement.chequeReceived;
       expect(VisitCheckoutPaymentRules.shouldOpenRecordCheque(arrangement), isTrue);
       expect(
-        VisitCheckoutPaymentRules.shouldCreateChequeRecord(arrangement),
+        VisitCheckoutPaymentRules.shouldCreateChequeRecord(
+          arrangement: arrangement,
+          recordChequeSubmitted: false,
+        ),
+        isFalse,
+      );
+      expect(
+        VisitCheckoutPaymentRules.shouldCreateChequeRecord(
+          arrangement: arrangement,
+          recordChequeSubmitted: true,
+        ),
         isTrue,
       );
       expect(arrangement.allowsOptionalExpectedDate, isFalse);
+    });
+
+    test('Skipping Record cheque does not create a ledger row', () {
+      expect(
+        VisitCheckoutPaymentRules.shouldCreateChequeRecord(
+          arrangement: VisitPaymentArrangement.chequeReceived,
+          recordChequeSubmitted: false,
+        ),
+        isFalse,
+      );
     });
 
     test('Cheque later does not open Record cheque or create a cheque', () {
@@ -22,7 +42,10 @@ void main() {
         isFalse,
       );
       expect(
-        VisitCheckoutPaymentRules.shouldCreateChequeRecord(arrangement),
+        VisitCheckoutPaymentRules.shouldCreateChequeRecord(
+          arrangement: arrangement,
+          recordChequeSubmitted: true,
+        ),
         isFalse,
       );
       expect(arrangement.allowsOptionalExpectedDate, isTrue);
@@ -49,7 +72,10 @@ void main() {
           reason: arrangement.label,
         );
         expect(
-          VisitCheckoutPaymentRules.shouldCreateChequeRecord(arrangement),
+          VisitCheckoutPaymentRules.shouldCreateChequeRecord(
+            arrangement: arrangement,
+            recordChequeSubmitted: true,
+          ),
           isFalse,
           reason: arrangement.label,
         );
@@ -92,6 +118,38 @@ void main() {
           VisitPaymentArrangement.chequeReceived,
         ),
         VisitOutcome.paymentCollected,
+      );
+    });
+  });
+
+  group('Visit cheque preferred order', () {
+    test('cheque received passes the newly created order into the cheque flow', () {
+      expect(
+        VisitCheckoutPaymentRules.preferredOrderIdForCheque(
+          arrangement: VisitPaymentArrangement.chequeReceived,
+          createdOrderId: 'ord-today',
+        ),
+        'ord-today',
+      );
+    });
+
+    test('cheque later does not pin an order', () {
+      expect(
+        VisitCheckoutPaymentRules.preferredOrderIdForCheque(
+          arrangement: VisitPaymentArrangement.chequeCollectionScheduled,
+          createdOrderId: 'ord-today',
+        ),
+        isNull,
+      );
+    });
+
+    test('cheque received without a created order has no preferred id', () {
+      expect(
+        VisitCheckoutPaymentRules.preferredOrderIdForCheque(
+          arrangement: VisitPaymentArrangement.chequeReceived,
+          createdOrderId: null,
+        ),
+        isNull,
       );
     });
   });

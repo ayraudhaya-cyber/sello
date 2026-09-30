@@ -38,9 +38,6 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
     final branch = session?.branchName ?? 'Head Office';
     final date = DateFormat('EEE, d MMM yyyy').format(DateTime.now());
     final gap = AppSpacing.gap;
-    final stackHero = context.screenWidth < 1180;
-    final stackPairs = context.screenWidth < 860;
-    final kpiCols = context.responsiveValue(mobile: 2, tablet: 3, desktop: 5);
     final hour = DateTime.now().hour;
     final greeting = hour < 12
         ? 'Good morning'
@@ -74,51 +71,37 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
           SizedBox(height: gap),
           const HubNeedsAttentionCard(),
           SizedBox(height: gap),
-          _KpiGrid(columns: kpiCols, gap: gap, range: _range),
+          _KpiGrid(gap: gap, range: _range),
           SizedBox(height: gap),
-          if (stackHero)
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                performance,
-                SizedBox(height: gap),
-                actions,
-              ],
-            )
-          else
-            SelloEqualHeightRow(
-              flexes: const [68, 32],
-              children: [
-                performance,
-                actions,
-              ],
-            ),
+          SelloEqualHeightRow.natural(
+            gap: gap,
+            flexes: const [68, 32],
+            minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+            children: [
+              performance,
+              actions,
+            ],
+          ),
           SizedBox(height: gap),
-          if (stackPairs) ...[
-            _ActivityCard(range: _range),
-            SizedBox(height: gap),
-            const _InventoryHealthCard(),
-          ]           else
-            SelloEqualHeightRow(
-              key: ValueKey('dash-activity-$_range'),
-              children: [
-                _ActivityCard(range: _range),
-                const _InventoryHealthCard(),
-              ],
-            ),
+          SelloEqualHeightRow.natural(
+            key: ValueKey('dash-activity-$_range'),
+            gap: gap,
+            minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+            children: [
+              _ActivityCard(range: _range),
+              const _InventoryHealthCard(),
+            ],
+          ),
           SizedBox(height: gap),
-          if (stackPairs) ...[
-            _TopCustomersCard(range: _range),
-            SizedBox(height: gap),
-            _BestSellersCard(range: _range),
-          ] else
-            SelloEqualHeightRow(
-              key: ValueKey('dash-lists-$_range'),
-              children: [
-                _TopCustomersCard(range: _range),
-                _BestSellersCard(range: _range),
-              ],
-            ),
+          SelloEqualHeightRow.natural(
+            key: ValueKey('dash-lists-$_range'),
+            gap: gap,
+            minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+            children: [
+              _TopCustomersCard(range: _range),
+              _BestSellersCard(range: _range),
+            ],
+          ),
           SizedBox(height: gap),
           const _InsightsSection(),
         ],
@@ -357,12 +340,10 @@ class _MetaChipState extends State<_MetaChip> {
 
 class _KpiGrid extends ConsumerWidget {
   const _KpiGrid({
-    required this.columns,
     required this.gap,
     required this.range,
   });
 
-  final int columns;
   final double gap;
   final String range;
 
@@ -432,36 +413,26 @@ class _KpiGrid extends ConsumerWidget {
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cols = columns.clamp(1, 5);
-        final itemWidth = (constraints.maxWidth - gap * (cols - 1)) / cols;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final item in items)
-              SizedBox(
-                width: itemWidth,
-                child: SelloStatCard(
-                  label: item.label,
-                  value: item.value,
-                  icon: item.icon,
-                  tone: item.tone,
-                  trendLabel: item.trend,
-                  trendPositive: item.up,
-                  sparkPoints:
-                      item.spark.isEmpty ? null : item.spark,
-                  // Keep chart-less KPIs aligned with sparkline cards on this page.
-                  reserveSparklineSlot: true,
-                  onTap: item.route == null
-                      ? null
-                      : () => context.go(item.route!),
-                ),
-              ),
-          ],
-        );
-      },
+    return SelloStatCardGrid(
+      gap: gap,
+      maxColumns: 5,
+      children: [
+        for (final item in items)
+          SelloStatCard(
+            label: item.label,
+            value: item.value,
+            icon: item.icon,
+            tone: item.tone,
+            trendLabel: item.trend,
+            trendPositive: item.up,
+            sparkPoints: item.spark.isEmpty ? null : item.spark,
+            // Keep chart-less KPIs aligned with sparkline cards on this page.
+            reserveSparklineSlot: true,
+            onTap: item.route == null
+                ? null
+                : () => context.go(item.route!),
+          ),
+      ],
     );
   }
 }
@@ -542,67 +513,92 @@ class _PerformanceCard extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Equal-height / bounded parents: fill and grow the chart.
-          // Unbounded (stacked / first measure pass): fixed chart height.
-          final expandChart = constraints.hasBoundedHeight &&
-              constraints.maxHeight < double.infinity;
-
-          final column = Column(
+          final chartH = ResponsiveLayout.chartHeight(constraints.maxWidth);
+          final stackHeader = !constraints.maxWidth.isFinite ||
+              constraints.maxWidth < 560;
+          final rangeControl = SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: _Segmented(
+              values: const ['today', 'week', 'month', 'year'],
+              labels: const ['Today', 'Week', 'Month', 'Year'],
+              selected: range,
+              onChanged: onRange,
+            ),
+          );
+          final headline = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'BUSINESS PERFORMANCE',
-                          style: AppTypography.heroEyebrow,
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 12,
-                          runSpacing: 8,
-                          children: [
-                            Text(
-                              figure.$1,
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 34,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.03 * 34,
-                                height: 1,
-                                color: AppColors.textPrimary,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures()
-                                ],
-                              ),
-                            ),
-                            Text(
-                              figure.$2,
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+              Text(
+                'BUSINESS PERFORMANCE',
+                style: AppTypography.heroEyebrow,
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    figure.$1,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.03 * 34,
+                      height: 1,
+                      color: AppColors.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  _Segmented(
-                    values: const ['today', 'week', 'month', 'year'],
-                    labels: const ['Today', 'Week', 'Month', 'Year'],
-                    selected: range,
-                    onChanged: onRange,
-                  ),
-                ],
+                ),
               ),
+              const SizedBox(height: 6),
+              Text(
+                figure.$2,
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          );
+          final chartAxis = Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final label in ['Start', '', '', '', 'Now'])
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textFaint,
+                  ),
+                ),
+            ],
+          );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (stackHeader) ...[
+                headline,
+                const SizedBox(height: 12),
+                rangeControl,
+              ] else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: headline),
+                    const SizedBox(width: 12),
+                    rangeControl,
+                  ],
+                ),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -629,38 +625,18 @@ class _PerformanceCard extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              if (expandChart)
-                Expanded(
-                  child: hasChart
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _AnimatedPerformanceChart(
-                                color: figure.$3,
-                                seed: Object.hash(metric, range, spark.length),
-                                points: spark,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                for (final label in ['Start', '', '', '', 'Now'])
-                                  Text(
-                                    label,
-                                    style: TextStyle(
-                                      fontFamily: AppTypography.fontFamily,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.textFaint,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : const HubDashboardEmptyState.tall(
+              SizedBox(
+                height: chartH,
+                width: double.infinity,
+                child: hasChart
+                    ? _AnimatedPerformanceChart(
+                        color: figure.$3,
+                        seed: Object.hash(metric, range, spark.length),
+                        points: spark,
+                      )
+                    : const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: HubDashboardEmptyState.tall(
                           icon: Icons.show_chart_rounded,
                           title: 'No sales yet',
                           message:
@@ -668,50 +644,14 @@ class _PerformanceCard extends ConsumerWidget {
                           tone: AppColors.primary,
                           soft: AppColors.primaryContainer,
                         ),
-                )
-              else if (hasChart) ...[
-                SizedBox(
-                  height: 180,
-                  width: double.infinity,
-                  child: _AnimatedPerformanceChart(
-                    color: figure.$3,
-                    seed: Object.hash(metric, range, spark.length),
-                    points: spark,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    for (final label in ['Start', '', '', '', 'Now'])
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textFaint,
-                        ),
                       ),
-                  ],
-                ),
-              ] else
-                const SizedBox(
-                  height: 180,
-                  width: double.infinity,
-                  child: HubDashboardEmptyState.tall(
-                    icon: Icons.show_chart_rounded,
-                    title: 'No sales yet',
-                    message:
-                        'Performance charts will appear as your business activity grows.',
-                    tone: AppColors.primary,
-                    soft: AppColors.primaryContainer,
-                  ),
-                ),
+              ),
+              if (hasChart) ...[
+                const SizedBox(height: 6),
+                chartAxis,
+              ],
             ],
           );
-
-          return expandChart ? SizedBox.expand(child: column) : column;
         },
       ),
     );
@@ -2340,31 +2280,21 @@ class _InsightsSection extends ConsumerWidget {
         ),
     ];
 
-    final stack = context.screenWidth < 1280;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         head,
         const SizedBox(height: 18),
-        if (stack)
-          Column(
-            children: [
-              for (var i = 0; i < cards.length; i++) ...[
-                if (i > 0) const SizedBox(height: AppSpacing.gap),
-                cards[i],
-              ],
-            ],
-          )
-        else
-          SelloEqualHeightRow(
-            flexes: cards.length == 1
-                ? const [1]
-                : cards.length == 2
-                    ? const [132, 100]
-                    : const [132, 100, 100],
-            children: cards,
-          ),
+        SelloEqualHeightRow.natural(
+          gap: AppSpacing.gap,
+          minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+          flexes: cards.length == 1
+              ? const [1]
+              : cards.length == 2
+                  ? const [132, 100]
+                  : const [132, 100, 100],
+          children: cards,
+        ),
       ],
     );
   }

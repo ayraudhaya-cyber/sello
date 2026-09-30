@@ -145,24 +145,24 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
               ),
             )
           : SelloFadeIn(
-              child: ResponsiveBuilder(
-                mobile: (_) => _buildStacked(
-                  state,
-                  section: section,
-                  showBranding: showBranding,
-                ),
-                tablet: (_) => _buildSplit(
-                  state,
-                  navWidth: 220,
-                  section: section,
-                  showBranding: showBranding,
-                ),
-                desktop: (_) => _buildSplit(
-                  state,
-                  navWidth: 240,
-                  section: section,
-                  showBranding: showBranding,
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final split = constraints.maxWidth >=
+                      ResponsiveLayout.settingsSplitMinWidth;
+                  if (split) {
+                    return _buildSplit(
+                      state,
+                      navWidth: constraints.maxWidth >= 960 ? 240 : 220,
+                      section: section,
+                      showBranding: showBranding,
+                    );
+                  }
+                  return _buildStacked(
+                    state,
+                    section: section,
+                    showBranding: showBranding,
+                  );
+                },
               ),
             ),
     );
@@ -194,31 +194,27 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
     required SettingsSectionId section,
     required bool showBranding,
   }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final navMax = (constraints.maxHeight * 0.4).clamp(160.0, 280.0);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: navMax),
-              child: SingleChildScrollView(
-                child: _buildNav(section: section, showBranding: showBranding),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Expanded(child: _buildContent(state, section)),
-          ],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildNav(
+          section: section,
+          showBranding: showBranding,
+          axis: Axis.horizontal,
+        ),
+        const SizedBox(height: 16),
+        Expanded(child: _buildContent(state, section)),
+      ],
     );
   }
 
   Widget _buildNav({
     required SettingsSectionId section,
     required bool showBranding,
+    Axis axis = Axis.vertical,
   }) {
     return SettingsSideNav(
+      axis: axis,
       sections: [
         for (final item in kSettingsSections)
           if (item.id != SettingsSectionId.branding || showBranding)
@@ -583,25 +579,17 @@ class _InventorySection extends StatelessWidget {
                     ),
                   ),
                   SelloStatusToggle(
-                    value: draft.allowNegativeStock,
-                    label: 'Allow sales when stock is not enough',
-                    helper:
-                        'Allows you to complete a sale even when you don\'t have enough stock right now. Your stock may go below zero until more stock is added.',
-                    onChanged: (value) =>
-                        onChanged((c) => c.copyWith(allowNegativeStock: value)),
-                  ),
-                  SelloStatusToggle(
                     value: draft.allowOrdersAboveAvailableStock,
-                    label: 'Allow orders when stock is not enough',
+                    label: 'Allow orders beyond available stock',
                     helper:
-                        'Allows Sales Reps to take an order even when you don\'t have enough stock right now. The order can be completed when stock becomes available.',
+                        'Let sales reps place orders even when current stock is insufficient.',
                     onChanged: (value) async {
                       if (value) {
                         final confirmed = await showSelloDialog(
                           context: context,
-                          title: 'Allow orders when stock is not enough?',
+                          title: 'Allow orders beyond available stock?',
                           message:
-                              'Sales Reps will be able to take an order even when you don\'t have enough stock right now. The order can be completed when stock becomes available.',
+                              'Sales reps will be able to place orders even when current stock is insufficient.',
                           confirmLabel: 'Allow',
                         );
                         if (confirmed != true) return;
@@ -1852,7 +1840,7 @@ class _OrdersInvoicesSection extends StatelessWidget {
       body: SettingsGroupCard(
         title: 'Orders & Invoices',
         description:
-            'Customer-facing document behaviour. Internal visibility stays separate.',
+            'Customer-facing document behaviour and who can record delivery.',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1944,6 +1932,22 @@ class _OrdersInvoicesSection extends StatelessWidget {
                       ),
                     );
                   },
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const Divider(height: 1, color: AppColors.outlinePanel),
+            const SizedBox(height: 22),
+            SettingsSubgroup(
+              title: 'Delivery',
+              child: SelloStatusToggle(
+                value: draft.salesRepsCanRecordDelivery,
+                label: 'Sales reps can record delivery',
+                helper:
+                    'When off, only Owner or Manager can record delivery and mark '
+                    'orders Completed. Sales can still submit orders.',
+                onChanged: (value) => onChanged(
+                  (c) => c.copyWith(salesRepsCanRecordDelivery: value),
                 ),
               ),
             ),

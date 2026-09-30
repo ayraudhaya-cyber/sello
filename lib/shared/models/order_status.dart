@@ -27,6 +27,15 @@ enum OrderStatus {
       this == OrderStatus.placed ||
       this == OrderStatus.partiallyDelivered;
 
+  /// Demand has been submitted; delivery may still be pending.
+  bool get isSubmitted =>
+      this == OrderStatus.placed ||
+      this == OrderStatus.partiallyDelivered ||
+      this == OrderStatus.completed;
+
+  /// Customer invoice is available once the sale is submitted.
+  bool get canShareInvoice => isSubmitted;
+
   /// Fulfillment may still receive deliveries.
   bool get canFulfill =>
       this == OrderStatus.placed || this == OrderStatus.partiallyDelivered;

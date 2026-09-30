@@ -7,6 +7,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/mobile/products/presentation/sello_product_present_sheet.dart';
+import 'package:sello/features/orders/application/repeat_last_order.dart';
 import 'package:sello/features/orders/presentation/widgets/order_catalog_option_matrix.dart';
 import 'package:sello/features/orders/presentation/widgets/order_catalog_product_views.dart';
 import 'package:sello/features/orders/presentation/widgets/product_layout_switcher.dart';
@@ -100,6 +101,7 @@ class OrderEditorDialog extends ConsumerStatefulWidget {
 
 class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   CustomerSummary? _customer;
+  OrderSummary? _repeatSource;
   final List<OrderLineDraft> _lines = [];
   PaymentMethod? _paymentMethod;
   final _notes = TextEditingController();
@@ -318,6 +320,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           _customerSearch.text = customer.name;
         }
       });
+      unawaited(_refreshRepeatSource());
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingCustomer = false);
@@ -377,6 +380,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       }
     });
     _customerFocus.unfocus();
+    unawaited(_refreshRepeatSource());
   }
 
   void _clearCustomer() {
@@ -387,6 +391,69 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       _customerResults = const [];
       _error = null;
     });
+    unawaited(_refreshRepeatSource());
+  }
+
+  Future<void> _refreshRepeatSource() async {
+    final customerId = _customer?.id;
+    if (customerId == null || customerId.isEmpty) {
+      if (mounted && _repeatSource != null) {
+        setState(() => _repeatSource = null);
+      }
+      return;
+    }
+    try {
+      final page = await ref.read(orderRepositoryProvider).fetchOrders(
+            customerId: customerId,
+            statuses: RepeatLastOrder.repeatableStatuses,
+            pageSize: 8,
+          );
+      final match = RepeatLastOrder.mostRecent(
+        customerId: customerId,
+        orders: page.items,
+        excludeOrderId: widget.existing?.summary.id,
+      );
+      if (!mounted) return;
+      setState(() => _repeatSource = match);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _repeatSource = null);
+    }
+  }
+
+  Future<void> _repeatLastOrder() async {
+    final source = _repeatSource;
+    final customerId = _customer?.id;
+    if (source == null || customerId == null) return;
+    try {
+      final detail =
+          await ref.read(orderRepositoryProvider).fetchById(source.id);
+      if (!mounted || detail == null) return;
+      if (detail.summary.customerId != customerId) return;
+      final restored = await restoreFromProductLines([
+        for (final line in detail.lines)
+          (
+            productId: line.productId,
+            variantId: line.variantId,
+            quantity: line.quantity,
+          ),
+      ]);
+      if (!mounted) return;
+      if (restored == 0) {
+        SelloSnackbars.warning(
+          context,
+          'Those products are no longer available to order.',
+        );
+      } else {
+        SelloSnackbars.success(context, 'Last order added to the basket.');
+      }
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to repeat the last order.');
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -633,6 +700,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   num get orderDiscountAmount => _orderDiscountValue;
   num get orderDiscountPercent => _orderDiscountPercentValue;
 
+  /// Amount taken off the catalog subtotal by the order discount.
+  num get discountSavings => _resolvedDiscount;
+
   void setOrderDiscounts({num? amount, num? percent}) {
     setState(() {
       if (amount != null) {
@@ -796,6 +866,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       _showCustomerResults = false;
       _error = null;
     });
+    unawaited(_refreshRepeatSource());
   }
 
   /// Build a validated result without navigating — used by visit workspace.
@@ -1157,7 +1228,10 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           onSelected: _setCategory,
         ),
         const SizedBox(height: AppSpacing.sm),
-        const _IntelligenceSuggestionsStrip(),
+        _IntelligenceSuggestionsStrip(
+          onRepeatLastOrder:
+              _repeatSource == null ? null : _repeatLastOrder,
+        ),
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
@@ -1239,34 +1313,31 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
         final isLarge = _layoutMode == ProductCatalogLayoutMode.gridOne;
         final crossAxisCount = isLarge ? 1 : 2;
-        var mainAxisExtent = isLarge ? 380.0 : 300.0;
-        for (final product in _catalog) {
-          if (!product.hasMultipleActiveVariants) continue;
-          final expanded =
-              _expandedCatalogProductIds.contains(product.id);
-          final n = product.activeVariants.length;
-          final candidate = expanded
-              ? (isLarge ? 250.0 : 210.0) + (n * 82.0)
-              : (isLarge ? 310.0 : 270.0);
-          if (candidate > mainAxisExtent) mainAxisExtent = candidate;
-        }
+        final rowCount = (_catalog.length / crossAxisCount).ceil();
 
-        return GridView.builder(
+        return ListView.separated(
           padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            mainAxisExtent: mainAxisExtent,
-          ),
-          itemCount: _catalog.length,
-          itemBuilder: (context, index) {
-            final product = _catalog[index];
-            return _buildCatalogEntry(
-              product: product,
-              symbol: symbol,
-              listLayout: false,
-              large: isLarge,
+          itemCount: rowCount,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, row) {
+            final start = row * crossAxisCount;
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var column = 0; column < crossAxisCount; column++) ...[
+                  if (column > 0) const SizedBox(width: 12),
+                  Expanded(
+                    child: start + column < _catalog.length
+                        ? _buildCatalogEntry(
+                            product: _catalog[start + column],
+                            symbol: symbol,
+                            listLayout: false,
+                            large: isLarge,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
             );
           },
         );
@@ -1898,7 +1969,9 @@ class _CategoryChips extends StatelessWidget {
 
 /// Reserved strip for future Sello Intelligence product suggestions.
 class _IntelligenceSuggestionsStrip extends StatelessWidget {
-  const _IntelligenceSuggestionsStrip();
+  const _IntelligenceSuggestionsStrip({this.onRepeatLastOrder});
+
+  final VoidCallback? onRepeatLastOrder;
 
   @override
   Widget build(BuildContext context) {
@@ -1913,8 +1986,13 @@ class _IntelligenceSuggestionsStrip extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.xs),
           const _SuggestionPill(label: 'Often ordered'),
-          const SizedBox(width: 6),
-          const _SuggestionPill(label: 'Repeat last order'),
+          if (onRepeatLastOrder != null) ...[
+            const SizedBox(width: 6),
+            _SuggestionPill(
+              label: 'Repeat last order',
+              onTap: onRepeatLastOrder,
+            ),
+          ],
           const SizedBox(width: 6),
           const _SuggestionPill(label: 'Suggested for them'),
         ],
@@ -1924,25 +2002,31 @@ class _IntelligenceSuggestionsStrip extends StatelessWidget {
 }
 
 class _SuggestionPill extends StatelessWidget {
-  const _SuggestionPill({required this.label});
+  const _SuggestionPill({required this.label, this.onTap});
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: context.brandAccentContainer.withValues(alpha: 0.55),
+    final actionable = onTap != null;
+    return Material(
+      color: context.brandAccentContainer.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$label · soon',
-        style: TextStyle(
-          fontFamily: AppTypography.fontFamily,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w600,
-          color: context.brandAccent,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            actionable ? label : '$label · soon',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.brandAccent,
+            ),
+          ),
         ),
       ),
     );
@@ -1989,63 +2073,71 @@ class _LineEditorTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.panel),
         border: Border.all(color: AppColors.outlinePanel),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SelloEntityThumb(
-            name: line.productName,
-            imageUrl: line.imageUrl,
-            width: compact ? 40 : 44,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelloEntityThumb(
+                name: line.productName,
+                imageUrl: line.imageUrl,
+                width: compact ? 40 : 44,
+              ),
+              SizedBox(width: compact ? 8 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.displayTitle,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontWeight: FontWeight.w600,
+                        fontSize: compact ? 13 : 14.5,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      meta,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12,
+                        height: 1.3,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      SelloFormatters.currency(
+                        line.lineTotal,
+                        symbol: currencySymbol,
+                      ),
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          SizedBox(width: compact ? 8 : 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  line.displayTitle,
-                  maxLines: compact ? 1 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w600,
-                    fontSize: compact ? 13 : 14.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  meta,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  SelloFormatters.currency(
-                    line.lineTotal,
-                    symbol: currencySymbol,
-                  ),
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ProductQuantityControl(
+              value: line.quantity,
+              allowZero: true,
+              showRemove: true,
+              maxQuantity: maxQuantity,
+              onIncreaseBlocked: onStockLimitReached,
+              onChanged: onQuantityChanged,
+              onRemove: onRemove,
             ),
-          ),
-          ProductQuantityControl(
-            value: line.quantity,
-            allowZero: true,
-            showRemove: true,
-            maxQuantity: maxQuantity,
-            onIncreaseBlocked: onStockLimitReached,
-            onChanged: onQuantityChanged,
-            onRemove: onRemove,
           ),
         ],
       ),

@@ -24,6 +24,8 @@ export 'package:sello/shared/widgets/inputs/sello_text_field.dart';
 export 'package:sello/shared/widgets/inputs/sello_color_field.dart';
 export 'package:sello/shared/widgets/inputs/sello_dropdown.dart';
 export 'package:sello/shared/widgets/inputs/sello_autocomplete_field.dart';
+export 'package:sello/shared/widgets/inputs/sello_bank_field.dart';
+export 'package:sello/shared/widgets/inputs/sello_customer_search_field.dart';
 export 'package:sello/shared/widgets/layout/app_page_scaffold.dart';
 export 'package:sello/shared/widgets/layout/auth_shell_layout.dart';
 export 'package:sello/shared/widgets/layout/feature_placeholder.dart';

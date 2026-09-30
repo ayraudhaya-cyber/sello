@@ -3,16 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/services/reliability/reliability_providers.dart';
 
-/// Subtle connectivity + draft-saved indicator for visit ordering.
+/// Offline notice while a visit order is being saved on the device.
 class VisitOrderStatusBanner extends ConsumerWidget {
   const VisitOrderStatusBanner({
     super.key,
     this.visitPendingSync = false,
-    this.draftSaved = false,
   });
 
   final bool visitPendingSync;
-  final bool draftSaved;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,15 +18,7 @@ class VisitOrderStatusBanner extends ConsumerWidget {
     final online = snapshot?.transportOnline ?? true;
     final offline = !online || visitPendingSync;
 
-    if (!offline && !draftSaved) return const SizedBox.shrink();
-
-    final label = offline
-        ? 'Offline · Changes saved on this device'
-        : 'Draft saved';
-
-    final icon = offline ? Icons.cloud_off_outlined : Icons.check_circle_outline;
-
-    final color = offline ? AppColors.warning : AppColors.success;
+    if (!offline) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -39,11 +29,11 @@ class VisitOrderStatusBanner extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: color),
+          Icon(Icons.cloud_off_outlined, size: 14, color: AppColors.warning),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              label,
+              'Offline · Changes saved on this device',
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 12,

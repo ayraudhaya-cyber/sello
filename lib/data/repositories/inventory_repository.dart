@@ -352,21 +352,22 @@ class InventoryRepository {
   }
 
   Future<List<InventoryItem>> _signThumbs(List<InventoryItem> pageItems) async {
-    return Future.wait([
-      for (final item in pageItems) _signThumb(item),
-    ]);
-  }
-
-  Future<InventoryItem> _signThumb(InventoryItem item) async {
-    if (item.imageStoragePath == null || item.imageStoragePath!.isEmpty) {
-      return item;
-    }
-    try {
-      final url = await _imageStorage.signProductImage(item.imageStoragePath!);
-      return item.copyWith(imageUrl: url);
-    } catch (_) {
-      return item;
-    }
+    final paths = [
+      for (final item in pageItems)
+        if (item.imageStoragePath != null && item.imageStoragePath!.isNotEmpty)
+          item.imageStoragePath!,
+    ];
+    if (paths.isEmpty) return pageItems;
+    final urls = await _imageStorage.signProductImages(paths);
+    if (urls.isEmpty) return pageItems;
+    return [
+      for (final item in pageItems)
+        if (item.imageStoragePath != null &&
+            urls[item.imageStoragePath] != null)
+          item.copyWith(imageUrl: urls[item.imageStoragePath])
+        else
+          item,
+    ];
   }
 
   Future<InventoryDashboardStats> fetchDashboardStats({

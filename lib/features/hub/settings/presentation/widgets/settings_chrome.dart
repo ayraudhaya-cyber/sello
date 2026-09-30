@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sello/core/animations/app_durations.dart';
+import 'package:sello/core/responsive/responsive_layout.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -257,15 +258,18 @@ class SettingsTwoUp extends StatelessWidget {
   final List<Widget> children;
   final double spacing;
 
-  static const _stackBelow = 640.0;
+  static const _minItemWidth = ResponsiveLayout.formFieldMinWidth;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stack =
-            !constraints.maxWidth.isFinite ||
-            constraints.maxWidth < _stackBelow;
+        final stack = !ResponsiveLayout.canFitRow(
+          width: constraints.maxWidth,
+          itemCount: children.length,
+          minItemWidth: _minItemWidth,
+          gap: spacing,
+        );
         if (stack) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -474,7 +478,7 @@ class SettingsTwoColumn extends StatelessWidget {
   final List<Widget> children;
   final double gap;
 
-  static const _stackBelow = 640.0;
+  static const _minItemWidth = ResponsiveLayout.formFieldMinWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -482,10 +486,14 @@ class SettingsTwoColumn extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stack =
-            !constraints.maxWidth.isFinite ||
-            constraints.maxWidth < _stackBelow;
-        if (stack || children.length == 1) {
+        final stack = children.length == 1 ||
+            !ResponsiveLayout.canFitRow(
+              width: constraints.maxWidth,
+              itemCount: 2,
+              minItemWidth: _minItemWidth,
+              gap: gap,
+            );
+        if (stack) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -589,42 +597,54 @@ class SettingsPreferenceRow extends StatelessWidget {
   }
 }
 
-/// Left-rail navigation for settings sections.
+/// Left-rail navigation for settings sections, or a horizontally scrolling
+/// tab strip when [axis] is [Axis.horizontal].
 class SettingsSideNav extends StatelessWidget {
   const SettingsSideNav({
     super.key,
     required this.sections,
     required this.selected,
     required this.onSelect,
+    this.axis = Axis.vertical,
   });
 
   final List<({String id, String label, IconData icon, bool comingSoon})>
   sections;
   final String selected;
   final ValueChanged<String> onSelect;
+  final Axis axis;
 
   @override
   Widget build(BuildContext context) {
+    final tiles = [
+      for (final section in sections)
+        _SettingsNavTile(
+          label: section.label,
+          icon: section.icon,
+          selected: section.id == selected,
+          comingSoon: section.comingSoon,
+          compact: axis == Axis.horizontal,
+          onTap: () => onSelect(section.id),
+        ),
+    ];
+
     return SelloCard(
       enableHoverLift: false,
       elevation: SelloCardElevation.soft,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      padding: axis == Axis.horizontal
+          ? const EdgeInsets.symmetric(vertical: 8, horizontal: 8)
+          : const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
       borderRadius: AppRadius.panelAll,
       borderColor: AppColors.outlinePanel,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final section in sections) ...[
-            _SettingsNavTile(
-              label: section.label,
-              icon: section.icon,
-              selected: section.id == selected,
-              comingSoon: section.comingSoon,
-              onTap: () => onSelect(section.id),
+      child: axis == Axis.horizontal
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: tiles),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: tiles,
             ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -636,6 +656,7 @@ class _SettingsNavTile extends StatefulWidget {
     required this.selected,
     required this.comingSoon,
     required this.onTap,
+    this.compact = false,
   });
 
   final String label;
@@ -643,6 +664,7 @@ class _SettingsNavTile extends StatefulWidget {
   final bool selected;
   final bool comingSoon;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   State<_SettingsNavTile> createState() => _SettingsNavTileState();
@@ -663,7 +685,10 @@ class _SettingsNavTileState extends State<_SettingsNavTile> {
         : (_hovered ? AppColors.surfaceMuted : Colors.transparent);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: EdgeInsets.symmetric(
+        vertical: widget.compact ? 0 : 2,
+        horizontal: widget.compact ? 2 : 0,
+      ),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
@@ -675,13 +700,18 @@ class _SettingsNavTileState extends State<_SettingsNavTile> {
             borderRadius: BorderRadius.circular(10),
             hoverColor: Colors.transparent,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.compact ? 12 : 12,
+                vertical: widget.compact ? 8 : 11,
+              ),
               child: Row(
+                mainAxisSize:
+                    widget.compact ? MainAxisSize.min : MainAxisSize.max,
                 children: [
                   Icon(widget.icon, size: 18, color: fg),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
+                  if (widget.compact)
+                    Text(
                       widget.label,
                       style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
@@ -691,9 +721,23 @@ class _SettingsNavTileState extends State<_SettingsNavTile> {
                             : FontWeight.w500,
                         color: fg,
                       ),
+                    )
+                  else
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 13.5,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: fg,
+                        ),
+                      ),
                     ),
-                  ),
-                  if (widget.comingSoon)
+                  if (widget.comingSoon) ...[
+                    const SizedBox(width: 8),
                     Text(
                       'Soon',
                       style: TextStyle(
@@ -703,6 +747,7 @@ class _SettingsNavTileState extends State<_SettingsNavTile> {
                         color: AppColors.textFaint,
                       ),
                     ),
+                  ],
                 ],
               ),
             ),

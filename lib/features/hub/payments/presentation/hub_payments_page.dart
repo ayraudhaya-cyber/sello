@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
@@ -10,6 +11,7 @@ import 'package:sello/features/hub/payments/application/hub_cheques_provider.dar
 import 'package:sello/features/hub/payments/application/hub_payments_provider.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
+import 'package:sello/features/payments/application/cheque_lifecycle.dart';
 import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
 import 'package:sello/features/payments/presentation/cheque_details_dialog.dart';
 import 'package:sello/features/payments/presentation/payment_details_dialog.dart';
@@ -45,6 +47,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
   _PaymentsWorkspaceTab _tab = _PaymentsWorkspaceTab.payments;
   String? _pendingChequeId;
   bool _handledDeepLink = false;
+  final _selectedDepositIds = <String>{};
 
   @override
   void didChangeDependencies() {
@@ -148,8 +151,8 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
       SelloSnackbars.success(
         context,
         result.status == ChequeStatus.awaitingCollection
-            ? 'Cheque recorded — awaiting collection.'
-            : 'Cheque collected.',
+            ? 'Saved. We do not have this cheque yet.'
+            : 'Cheque received.',
       );
     }
   }
@@ -263,12 +266,12 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                     .collectCheque(input);
                 if (result == null) {
                   return ref.read(hubChequesProvider).errorMessage ??
-                      'Unable to collect cheque.';
+                      'Could not mark this cheque as received.';
                 }
                 if (context.mounted) {
                   final label = result.isPendingApproval
-                      ? 'Cheque collected — pending approval.'
-                      : 'Cheque collected.';
+                      ? 'Cheque received. Waiting for owner approval.'
+                      : 'Cheque received.';
                   SelloSnackbars.success(context, label);
                 }
                 return null;
@@ -282,7 +285,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                 if (error == null && context.mounted) {
                   SelloSnackbars.success(
                     context,
-                    'Collection approved.',
+                    'Payment approved.',
                   );
                 }
                 return error;
@@ -294,7 +297,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                     .read(hubChequesProvider.notifier)
                     .depositCheque(cheque.id);
                 if (error == null && context.mounted) {
-                  SelloSnackbars.success(context, 'Cheque deposited.');
+                  SelloSnackbars.success(context, 'Cheque taken to the bank.');
                 }
                 return error;
               }
@@ -305,7 +308,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                     .read(hubChequesProvider.notifier)
                     .clearCheque(cheque.id);
                 if (error == null && context.mounted) {
-                  SelloSnackbars.success(context, 'Cheque cleared.');
+                  SelloSnackbars.success(context, 'Bank paid this cheque.');
                 }
                 return error;
               }
@@ -316,7 +319,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                     .read(hubChequesProvider.notifier)
                     .bounceCheque(cheque.id, reason: reason);
                 if (error == null && context.mounted) {
-                  SelloSnackbars.success(context, 'Cheque bounced.');
+                  SelloSnackbars.success(context, 'Bank returned this cheque.');
                 }
                 return error;
               }
@@ -335,6 +338,157 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
               }
             : null,
       ),
+    );
+  }
+
+  ChequeForwardAction? _nextChequeAction(ChequeSummary cheque) {
+    return chequeNextForwardAction(
+      cheque: cheque,
+      canCollect: _canCollectCheques(),
+      canManageClearance: _canManageClearance(),
+    );
+  }
+
+  Future<void> _collectChequeDirect(ChequeSummary cheque) async {
+    var allocations = const <PaymentAllocationInput>[];
+    if (!chequeCollectPreservesExistingAllocation(cheque)) {
+      try {
+        final orders = await ref
+            .read(paymentRepositoryProvider)
+            .fetchReceivableOrders(cheque.customerId);
+        allocations = fifoChequeAllocations(
+          amount: cheque.amount,
+          orders: orders,
+        );
+      } on AppFailure catch (failure) {
+        if (!mounted) return;
+        SelloSnackbars.error(context, failure.message);
+        return;
+      }
+    }
+
+    final result = await ref.read(hubChequesProvider.notifier).collectCheque(
+          CollectChequeInput(
+            chequeId: cheque.id,
+            collectionDate: DateTime.now(),
+            allocations: allocations,
+            photoPath: cheque.photoPath,
+            notes: cheque.notes,
+          ),
+        );
+    if (!mounted) return;
+    if (result == null) {
+      final message = ref.read(hubChequesProvider).errorMessage;
+      SelloSnackbars.error(context, message ?? 'Could not mark this cheque as received.');
+      return;
+    }
+    SelloSnackbars.success(
+      context,
+      result.isPendingApproval
+          ? 'Cheque received. Waiting for owner approval.'
+          : 'Cheque received.',
+    );
+  }
+
+  Future<void> _approveChequeDirect(ChequeSummary cheque) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => SelloFormDialog(
+        title: 'Approve this cheque',
+        subtitle:
+            'This will reduce what the customer still owes. Do this only once.',
+        maxWidth: 440,
+        body: const SizedBox.shrink(),
+        footer: SelloDialogFooter(
+          cancelLabel: 'Cancel',
+          cancelVariant: SelloButtonVariant.outline,
+          onCancel: () => Navigator.of(context).pop(false),
+          primaryLabel: 'Approve',
+          onPrimary: () => Navigator.of(context).pop(true),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final error = await ref
+        .read(hubChequesProvider.notifier)
+        .approveChequeCollection(cheque.id);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+      return;
+    }
+    SelloSnackbars.success(context, 'Payment approved.');
+  }
+
+  Future<void> _runListForward(ChequeSummary cheque) async {
+    final next = _nextChequeAction(cheque);
+    if (next == null) {
+      await _openChequeDetails(cheque);
+      return;
+    }
+    switch (next) {
+      case ChequeForwardAction.collect:
+        await _collectChequeDirect(cheque);
+      case ChequeForwardAction.approve:
+        await _approveChequeDirect(cheque);
+      case ChequeForwardAction.deposit:
+        final error = await ref
+            .read(hubChequesProvider.notifier)
+            .depositCheque(cheque.id);
+        if (!mounted) return;
+        if (error != null) {
+          SelloSnackbars.error(context, error);
+          return;
+        }
+        SelloSnackbars.success(context, 'Cheque taken to the bank.');
+      case ChequeForwardAction.clear:
+        final error =
+            await ref.read(hubChequesProvider.notifier).clearCheque(cheque.id);
+        if (!mounted) return;
+        if (error != null) {
+          SelloSnackbars.error(context, error);
+          return;
+        }
+        SelloSnackbars.success(context, 'Bank paid this cheque.');
+    }
+  }
+
+  void _toggleDepositSelection(ChequeSummary cheque) {
+    if (!chequeEligibleForBatchDeposit(cheque) || !_canManageClearance()) {
+      return;
+    }
+    setState(() {
+      if (!_selectedDepositIds.add(cheque.id)) {
+        _selectedDepositIds.remove(cheque.id);
+      }
+    });
+  }
+
+  Future<void> _depositSelected() async {
+    final ids = ref
+        .read(hubChequesProvider)
+        .items
+        .where(
+          (cheque) =>
+              _selectedDepositIds.contains(cheque.id) &&
+              chequeEligibleForBatchDeposit(cheque),
+        )
+        .map((cheque) => cheque.id)
+        .toList(growable: false);
+    if (ids.isEmpty) return;
+    final error =
+        await ref.read(hubChequesProvider.notifier).depositCheques(ids);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+      return;
+    }
+    setState(_selectedDepositIds.clear);
+    SelloSnackbars.success(
+      context,
+      ids.length == 1
+          ? 'Cheque taken to the bank.'
+          : '${ids.length} cheques taken to the bank.',
     );
   }
 
@@ -676,6 +830,16 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             : () => ref.read(hubChequesProvider.notifier).refresh(),
         onRecord: state.isSaving ? null : _recordCheque,
         onAddExisting: state.isSaving ? null : _addExistingCheque,
+        selectedDepositCount: state.items
+            .where(
+              (cheque) =>
+                  _selectedDepositIds.contains(cheque.id) &&
+                  chequeEligibleForBatchDeposit(cheque),
+            )
+            .length,
+        onDepositSelected: !_canManageClearance() || state.isSaving
+            ? null
+            : _depositSelected,
       ),
       const SizedBox(height: AppSpacing.mdPlus),
       if (state.isLoading && state.items.isEmpty) ...[
@@ -702,8 +866,8 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             child: SelloEmptyState(
               title: 'No cheques yet',
               message:
-                  'Record a cheque received in hand or a promised collection. '
-                  'Balances update when collected (or after approval when required).',
+                  'Add a cheque you already have, or one the customer promised. '
+                  'What they owe updates when you receive it (or after approval).',
               icon: Icons.receipt_long_rounded,
               actionLabel: 'Record cheque',
               onAction: _recordCheque,
@@ -721,6 +885,16 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                       children: [
                         Row(
                           children: [
+                            if (_canManageClearance() &&
+                                chequeEligibleForBatchDeposit(cheque)) ...[
+                              Checkbox(
+                                value: _selectedDepositIds.contains(cheque.id),
+                                visualDensity: VisualDensity.compact,
+                                onChanged: (_) =>
+                                    _toggleDepositSelection(cheque),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Expanded(
                               child: Text(
                                 cheque.chequeNumberLabel.isEmpty
@@ -755,6 +929,18 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
+                        if (_nextChequeAction(cheque) != null) ...[
+                          const SizedBox(height: 12),
+                          SelloButton(
+                            label: chequeForwardActionLabel(
+                              _nextChequeAction(cheque)!,
+                            ),
+                            expanded: true,
+                            onPressed: state.isSaving
+                                ? null
+                                : () => _runListForward(cheque),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -780,21 +966,33 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         else
           SelloFadeIn(
             child: SelloDataTable(
+              flexColumnIndex: 1,
               columns: [
+                selloSelectDataColumn(),
                 selloDataColumn('Cheque'),
                 selloDataColumn('Customer'),
                 selloDataColumn('Bank'),
                 selloDataColumn('Amount', numeric: true),
                 selloDataColumn('Status'),
                 selloDataColumn('Cheque date'),
-                selloDataColumn('Collection'),
+                selloDataColumn('Received'),
                 selloDataColumn('Actions'),
               ],
               rows: [
                 for (final cheque in state.items)
                   DataRow(
-                    onSelectChanged: (_) => _openChequeDetails(cheque),
                     cells: [
+                      DataCell(
+                        chequeEligibleForBatchDeposit(cheque) &&
+                                _canManageClearance()
+                            ? Checkbox(
+                                value: _selectedDepositIds.contains(cheque.id),
+                                visualDensity: VisualDensity.compact,
+                                onChanged: (_) =>
+                                    _toggleDepositSelection(cheque),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
                       DataCell(
                         SelloTableText(
                           cheque.chequeNumberLabel.isEmpty
@@ -802,14 +1000,19 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                               : cheque.chequeNumberLabel,
                           tone: SelloTableTone.strong,
                         ),
+                        onTap: () => _openChequeDetails(cheque),
                       ),
                       DataCell(
                         SelloTableText(
                           cheque.customerName ?? '—',
                           tone: SelloTableTone.strong,
                         ),
+                        onTap: () => _openChequeDetails(cheque),
                       ),
-                      DataCell(SelloTableText(cheque.bankName)),
+                      DataCell(
+                        SelloTableText(cheque.bankName),
+                        onTap: () => _openChequeDetails(cheque),
+                      ),
                       DataCell(
                         SelloTableText(
                           SelloFormatters.currency(
@@ -819,6 +1022,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                           tone: SelloTableTone.strong,
                           numeric: true,
                         ),
+                        onTap: () => _openChequeDetails(cheque),
                       ),
                       DataCell(_chequeStatusBadge(cheque)),
                       DataCell(
@@ -838,12 +1042,22 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                         ),
                       ),
                       DataCell(
-                        SelloButton(
-                          label: 'View',
-                          size: SelloButtonSize.small,
-                          variant: SelloButtonVariant.ghost,
-                          onPressed: () => _openChequeDetails(cheque),
-                        ),
+                        _nextChequeAction(cheque) == null
+                            ? SelloButton(
+                                label: 'View',
+                                size: SelloButtonSize.small,
+                                variant: SelloButtonVariant.ghost,
+                                onPressed: () => _openChequeDetails(cheque),
+                              )
+                            : SelloButton(
+                                label: chequeForwardActionLabel(
+                                  _nextChequeAction(cheque)!,
+                                ),
+                                size: SelloButtonSize.small,
+                                onPressed: state.isSaving
+                                    ? null
+                                    : () => _runListForward(cheque),
+                              ),
                       ),
                     ],
                   ),
@@ -1098,6 +1312,8 @@ class _ChequesToolbar extends StatelessWidget {
     required this.onRefresh,
     required this.onRecord,
     required this.onAddExisting,
+    this.selectedDepositCount = 0,
+    this.onDepositSelected,
   });
 
   final TextEditingController searchController;
@@ -1110,49 +1326,21 @@ class _ChequesToolbar extends StatelessWidget {
   final VoidCallback? onRefresh;
   final VoidCallback? onRecord;
   final VoidCallback? onAddExisting;
+  final int selectedDepositCount;
+  final VoidCallback? onDepositSelected;
 
   @override
   Widget build(BuildContext context) {
     final status = SizedBox(
-      width: context.isMobile ? double.infinity : 168,
+      width: context.isMobile ? double.infinity : 196,
       child: SelloDropdown<ChequeStatusFilter>(
         value: state.statusFilter,
         compact: true,
         hint: 'Status',
         onChanged: onStatusChanged,
-        items: const [
-          DropdownMenuItem(
-            value: ChequeStatusFilter.all,
-            child: Text('All'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.awaitingCollection,
-            child: Text('Awaiting'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.pendingApproval,
-            child: Text('Pending approval'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.collected,
-            child: Text('Collected'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.deposited,
-            child: Text('Deposited'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.cleared,
-            child: Text('Cleared'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.bounced,
-            child: Text('Bounced'),
-          ),
-          DropdownMenuItem(
-            value: ChequeStatusFilter.cancelled,
-            child: Text('Cancelled'),
-          ),
+        items: [
+          for (final filter in ChequeStatusFilter.values)
+            DropdownMenuItem(value: filter, child: Text(filter.label)),
         ],
       ),
     );
@@ -1206,6 +1394,14 @@ class _ChequesToolbar extends StatelessWidget {
       onPressed: onAddExisting,
     );
 
+    final depositSelected = selectedDepositCount <= 0
+        ? null
+        : SelloButton(
+            label: 'Take to bank ($selectedDepositCount)',
+            icon: Icons.account_balance_outlined,
+            onPressed: onDepositSelected,
+          );
+
     final search = SelloSearchBar(
       controller: searchController,
       hint: 'Search customer, cheque no, bank or holder…',
@@ -1223,7 +1419,12 @@ class _ChequesToolbar extends StatelessWidget {
       child: SelloToolbarBody(
         search: search,
         filters: [status, bank, dueToday],
-        actions: [refresh, existing, record],
+        actions: [
+          refresh,
+          ?depositSelected,
+          existing,
+          record,
+        ],
       ),
     );
   }
@@ -1297,51 +1498,51 @@ class _ChequesSummaryRow extends StatelessWidget {
     return SelloStatCardGrid(
       children: [
         SelloStatCard(
-          label: 'Awaiting',
+          label: 'Waiting',
           value: '${stats.awaitingCollection}',
-          hint: 'Not yet collected',
+          hint: 'Not received yet',
           icon: Icons.schedule_rounded,
           tone: AppColors.warning,
         ),
         SelloStatCard(
           label: 'Due today',
           value: '${stats.dueToday}',
-          hint: 'Collection due',
+          hint: 'Receive today',
           icon: Icons.today_rounded,
           tone: AppColors.finance,
         ),
         SelloStatCard(
-          label: 'Pending approval',
+          label: 'Needs approval',
           value: '${stats.pendingApproval}',
-          hint: 'Awaiting Hub review',
+          hint: 'Owner must check',
           icon: Icons.hourglass_top_rounded,
           tone: AppColors.warning,
         ),
         SelloStatCard(
-          label: 'Collected',
+          label: 'In hand',
           value: '${stats.collected}',
-          hint: 'Pending clearance',
+          hint: 'Take to your bank',
           icon: Icons.inbox_outlined,
           tone: context.brandAccent,
         ),
         SelloStatCard(
-          label: 'Deposited',
+          label: 'At the bank',
           value: '${stats.deposited}',
-          hint: 'At the bank',
+          hint: 'Waiting on the bank',
           icon: Icons.account_balance_outlined,
           tone: AppColors.info,
         ),
         SelloStatCard(
-          label: 'Cleared',
+          label: 'Bank paid',
           value: '${stats.cleared}',
-          hint: 'Cleared by bank',
+          hint: 'Money received',
           icon: Icons.verified_outlined,
           tone: AppColors.success,
         ),
         SelloStatCard(
-          label: 'Bounced',
+          label: 'Bank returned',
           value: '${stats.bounced}',
-          hint: 'Returned unpaid',
+          hint: 'Cheque did not pay',
           icon: Icons.undo_rounded,
           tone: AppColors.error,
         ),

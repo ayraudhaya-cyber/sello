@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/hub/visits/application/hub_visits_provider.dart';
+import 'package:sello/features/hub/visits/presentation/visit_location_section.dart';
 import 'package:sello/shared/models/customer_visit.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -267,20 +268,8 @@ class _VisitCard extends StatelessWidget {
               ),
             ),
           ],
-          if (visit.hasStartGps || visit.hasEndGps) ...[
-            const SizedBox(height: 6),
-            Text(
-              [
-                if (visit.hasStartGps) 'Start GPS captured',
-                if (visit.hasEndGps) 'End GPS captured',
-              ].join(' · '),
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 11.5,
-                color: AppColors.textFaint,
-              ),
-            ),
-          ],
+          const SizedBox(height: 10),
+          VisitLocationSection(visit: visit),
         ],
       ),
     );

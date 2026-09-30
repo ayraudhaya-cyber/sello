@@ -19,6 +19,7 @@ abstract final class UpdatePresentationPolicy {
       AppReleasePlatform.web => UpdatePresentationStyle.whatsNew,
       AppReleasePlatform.android ||
       AppReleasePlatform.ios ||
+      AppReleasePlatform.windows ||
       AppReleasePlatform.other =>
         UpdatePresentationStyle.updateModal,
     };

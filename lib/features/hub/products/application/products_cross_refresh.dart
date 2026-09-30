@@ -3,10 +3,10 @@ import 'package:sello/features/hub/products/application/hub_products_provider.da
 
 /// Quietly reloads Hub Products after inventory/order stock mutations.
 ///
-/// Products keeps an in-memory catalog snapshot for the shell session; without
-/// this, Inventory adjusts and completed sales leave list/details stock stale
-/// until the user hits Refresh.
+/// Skips the reload when Products has not been opened this session. Once it
+/// has, stock changes stay in sync without a manual refresh.
 Future<void> refreshHubProductsQuietly(Ref ref) async {
+  if (!ref.exists(hubProductsProvider)) return;
   try {
     await ref
         .read(hubProductsProvider.notifier)

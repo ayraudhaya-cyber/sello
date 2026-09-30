@@ -72,6 +72,7 @@ class OwnerSetupService {
         documentPhone: current.documentPhone,
         documentEmail: current.documentEmail,
         documentTerms: current.documentTerms,
+        documentTagline: current.documentTagline,
       );
     }
   }

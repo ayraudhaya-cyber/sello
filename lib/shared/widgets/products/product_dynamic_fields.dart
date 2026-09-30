@@ -21,6 +21,7 @@ class ProductDynamicFields extends StatelessWidget {
     this.includeColumnBacked = true,
     this.includeInventory = true,
     this.includeAttributes = true,
+    this.disabledFieldKeys = const {},
   });
 
   final List<CompanyProductField> fields;
@@ -30,6 +31,9 @@ class ProductDynamicFields extends StatelessWidget {
   final bool includeColumnBacked;
   final bool includeInventory;
   final bool includeAttributes;
+
+  /// Keys rendered as disabled inputs (no required marker, no validator).
+  final Set<String> disabledFieldKeys;
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +45,7 @@ class ProductDynamicFields extends StatelessWidget {
         ProductFieldStorage.inventory => includeInventory,
         ProductFieldStorage.attribute => includeAttributes,
       };
-    }).toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
     if (visible.isEmpty) return const SizedBox.shrink();
 
@@ -55,6 +58,9 @@ class ProductDynamicFields extends StatelessWidget {
             field: visible[i],
             value: values[visible[i].fieldKey] ?? '',
             readOnly: readOnly,
+            enabled:
+                !disabledFieldKeys.contains(visible[i].fieldKey) &&
+                !disabledFieldKeys.contains(visible[i].definition.key),
             onChanged: (next) {
               final updated = Map<String, String>.from(values);
               if (next.trim().isEmpty) {
@@ -77,15 +83,17 @@ class _FieldControl extends StatelessWidget {
     required this.value,
     required this.onChanged,
     required this.readOnly,
+    this.enabled = true,
   });
 
   final CompanyProductField field;
   final String value;
   final ValueChanged<String> onChanged;
   final bool readOnly;
+  final bool enabled;
 
   String? _requiredValidator(String? input) {
-    if (!field.required) return null;
+    if (!enabled || !field.required) return null;
     if (input == null || input.trim().isEmpty) {
       return 'Enter ${field.label.toLowerCase()}.';
     }
@@ -101,9 +109,8 @@ class _FieldControl extends StatelessWidget {
     if (readOnly) {
       final display = switch (def.fieldType) {
         ProductFieldType.country => CountryCatalog.display(value),
-        ProductFieldType.boolean => value == 'true'
-            ? 'Yes'
-            : (value == 'false' ? 'No' : '—'),
+        ProductFieldType.boolean =>
+          value == 'true' ? 'Yes' : (value == 'false' ? 'No' : '—'),
         _ => value.trim().isEmpty ? '—' : value,
       };
       return Column(
@@ -128,53 +135,59 @@ class _FieldControl extends StatelessWidget {
       );
     }
 
+    final require = enabled && field.required;
+
     return switch (def.fieldType) {
       ProductFieldType.country => SelloCountryField(
-          value: value,
-          label: label,
-          required: field.required,
-          options: CountryCatalog.asSelectOptions(),
-          validator: (_) => _requiredValidator(value),
-          onChanged: onChanged,
-        ),
+        value: value,
+        label: label,
+        required: require,
+        options: CountryCatalog.asSelectOptions(),
+        validator: enabled ? (_) => _requiredValidator(value) : null,
+        onChanged: enabled ? onChanged : (_) {},
+      ),
       ProductFieldType.select => SelloDropdown<String>(
-          value: value.isEmpty ? null : value,
-          label: label,
-          required: field.required,
-          items: [
-            for (final option in options)
-              DropdownMenuItem(value: option, child: Text(option)),
-          ],
-          onChanged: (next) => onChanged(next ?? ''),
-        ),
+        value: value.isEmpty ? null : value,
+        label: label,
+        required: require,
+        enabled: enabled,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(value: option, child: Text(option)),
+        ],
+        onChanged: enabled ? (next) => onChanged(next ?? '') : (_) {},
+      ),
       ProductFieldType.date => _DateFieldControl(
-          label: label,
-          value: value,
-          required: field.required,
-          onChanged: onChanged,
-        ),
+        label: label,
+        value: value,
+        required: require,
+        onChanged: onChanged,
+      ),
       ProductFieldType.colour => _ColourFieldControl(
-          label: label,
-          value: value,
-          required: field.required,
-          onChanged: onChanged,
-        ),
+        label: label,
+        value: value,
+        required: require,
+        onChanged: onChanged,
+      ),
       ProductFieldType.boolean => _BooleanFieldControl(
-          label: label,
-          value: value,
-          required: field.required,
-          onChanged: onChanged,
-        ),
+        label: label,
+        value: value,
+        required: require,
+        onChanged: onChanged,
+      ),
       ProductFieldType.barcode ||
       ProductFieldType.currency ||
       ProductFieldType.number ||
       ProductFieldType.multiline ||
-      ProductFieldType.text =>
-        _buildTextLike(label, options),
+      ProductFieldType.text => _buildTextLike(label, options, require: require),
     };
   }
 
-  Widget _buildTextLike(String label, List<String> options) {
+  Widget _buildTextLike(
+    String label,
+    List<String> options, {
+    required bool require,
+  }) {
     final def = field.definition;
     final suggestions = ProductDetailSuggestions.forKey(
       field.fieldKey,
@@ -188,9 +201,10 @@ class _FieldControl extends StatelessWidget {
       return SelloAutocompleteField(
         value: value,
         label: label,
-        required: field.required,
+        required: require,
+        enabled: enabled,
         suggestions: suggestions,
-        validator: _requiredValidator,
+        validator: enabled ? _requiredValidator : null,
         onChanged: onChanged,
       );
     }
@@ -198,7 +212,8 @@ class _FieldControl extends StatelessWidget {
     return _TextFieldControl(
       label: label,
       value: value,
-      required: field.required,
+      required: require,
+      enabled: enabled,
       maxLines: def.fieldType == ProductFieldType.multiline ? 4 : 1,
       keyboardType: switch (def.fieldType) {
         ProductFieldType.number || ProductFieldType.currency =>
@@ -206,7 +221,7 @@ class _FieldControl extends StatelessWidget {
         ProductFieldType.barcode => TextInputType.visiblePassword,
         _ => TextInputType.text,
       },
-      validator: _requiredValidator,
+      validator: enabled ? _requiredValidator : null,
       onChanged: onChanged,
     );
   }
@@ -218,6 +233,7 @@ class _TextFieldControl extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.required = false,
+    this.enabled = true,
     this.maxLines = 1,
     this.keyboardType,
     this.validator,
@@ -227,6 +243,7 @@ class _TextFieldControl extends StatefulWidget {
   final String value;
   final ValueChanged<String> onChanged;
   final bool required;
+  final bool enabled;
   final int maxLines;
   final TextInputType? keyboardType;
   final FormFieldValidator<String>? validator;
@@ -264,6 +281,7 @@ class _TextFieldControlState extends State<_TextFieldControl> {
       controller: _controller,
       label: widget.label,
       required: widget.required,
+      enabled: widget.enabled,
       maxLines: widget.maxLines,
       keyboardType: widget.keyboardType,
       validator: widget.validator,
@@ -314,10 +332,7 @@ class _DateFieldControl extends StatelessWidget {
           borderRadius: AppRadius.inputAll,
           child: InputDecorator(
             decoration: InputDecoration(
-              label: SelloFieldLabel.decorationLabel(
-                label,
-                required: required,
-              ),
+              label: SelloFieldLabel.decorationLabel(label, required: required),
               errorText: state.errorText,
               suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
             ),

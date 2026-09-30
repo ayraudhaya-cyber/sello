@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sello/core/theme/app_theme.dart';
+import 'package:sello/data/repositories/customer_repository.dart';
 import 'package:sello/features/visits/presentation/visit_customer_context_header.dart';
 import 'package:sello/features/visits/presentation/visit_customer_details_sheet.dart';
 import 'package:sello/features/visits/presentation/visit_draft_restore_banner.dart';
@@ -247,6 +248,27 @@ void main() {
       expect(
         find.text('Offline · Changes saved on this device'),
         findsOneWidget,
+      );
+    });
+  });
+
+  group('Visit allow-on-account write', () {
+    test('sets credit_allowed and updated_by for customers RLS', () {
+      expect(
+        customerAllowOnAccountPatch(employeeId: 'emp-1'),
+        {
+          'credit_allowed': true,
+          'updated_by': 'emp-1',
+        },
+      );
+    });
+
+    test('hides raw customers RLS errors', () {
+      expect(
+        mapCustomerSaveError(
+          'new row violates row-level security policy for table "customers"',
+        ),
+        'Unable to save this customer.',
       );
     });
   });

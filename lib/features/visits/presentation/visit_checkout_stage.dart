@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/visits/presentation/signature_pad.dart';
@@ -13,9 +14,12 @@ class VisitCheckoutStage extends StatelessWidget {
     required this.shopName,
     required this.itemQuantity,
     required this.total,
+    this.savings = 0,
     required this.currencySymbol,
     required this.discountAmount,
     required this.discountPercent,
+    this.discountAmountFocus,
+    this.discountPercentFocus,
     required this.arrangement,
     required this.onArrangementChanged,
     required this.onPickChequeDate,
@@ -33,9 +37,12 @@ class VisitCheckoutStage extends StatelessWidget {
   final String shopName;
   final num itemQuantity;
   final num total;
+  final num savings;
   final String currencySymbol;
   final TextEditingController discountAmount;
   final TextEditingController discountPercent;
+  final FocusNode? discountAmountFocus;
+  final FocusNode? discountPercentFocus;
   final VisitPaymentArrangement arrangement;
   final ValueChanged<VisitPaymentArrangement> onArrangementChanged;
   final VoidCallback onPickChequeDate;
@@ -85,14 +92,31 @@ class VisitCheckoutStage extends StatelessWidget {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          '$itemsLabel · ${SelloFormatters.currency(total, symbol: currencySymbol)}',
-                          style: const TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                            color: AppColors.textSecondary,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$itemsLabel · ${SelloFormatters.currency(total, symbol: currencySymbol)}',
+                              style: const TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            if (savings > 0) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Saving ${SelloFormatters.currency(savings, symbol: currencySymbol)}',
+                                style: const TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       Text(
@@ -119,19 +143,27 @@ class VisitCheckoutStage extends StatelessWidget {
               SelloFormRow(
                 left: SelloTextField(
                   controller: discountAmount,
+                  focusNode: discountAmountFocus,
                   label: 'Discount amount',
                   hint: '0',
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
                 ),
                 right: SelloTextField(
                   controller: discountPercent,
+                  focusNode: discountPercentFocus,
                   label: 'Discount %',
                   hint: '0',
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
@@ -159,6 +191,18 @@ class VisitCheckoutStage extends StatelessWidget {
                     ),
                 ],
               ),
+              if (arrangement == VisitPaymentArrangement.chequeReceived) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'The order will be saved as unpaid. Recording the cheque is optional — you can skip and enter it later.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    height: 1.35,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
               if (arrangement.allowsOptionalExpectedDate) ...[
                 const SizedBox(height: 12),
                 Align(

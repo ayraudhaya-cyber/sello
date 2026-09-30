@@ -41,7 +41,10 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
     return SalesDaySnapshots.emptyDynamic();
   }
 
+  int _refreshGeneration = 0;
+
   Future<void> refresh() async {
+    final generation = ++_refreshGeneration;
     final session = ref.read(currentSessionProvider);
     if (session == null) {
       state = SalesDaySnapshots.emptyDynamic();
@@ -193,6 +196,7 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
         } catch (_) {}
       }());
       await Future.wait(statsFutures);
+      if (generation != _refreshGeneration) return;
 
       final followUpsDue =
           scheduled.where((v) => v.status == VisitStatus.missed).length;

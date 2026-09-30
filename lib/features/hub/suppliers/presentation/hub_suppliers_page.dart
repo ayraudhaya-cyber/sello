@@ -141,6 +141,20 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
 
   Future<void> _toggleArchive(SupplierSummary supplier) async {
     final archived = supplier.isActive;
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: archived ? 'Deactivate supplier?' : 'Reactivate supplier?',
+      message: archived
+          ? '"${supplier.name}" will be hidden from new sourcing. '
+              'Products that already use this supplier keep the link. '
+              'You can reactivate them from the Inactive filter.'
+          : '"${supplier.name}" will be available for sourcing again.',
+      confirmLabel: archived ? 'Deactivate' : 'Reactivate',
+      cancelLabel: 'Cancel',
+      destructive: archived,
+    );
+    if (confirmed != true || !mounted) return;
+
     final error = await ref
         .read(hubSuppliersProvider.notifier)
         .setArchived(supplier, archived: archived);
@@ -150,7 +164,7 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
     } else {
       SelloSnackbars.success(
         context,
-        archived ? 'Supplier archived.' : 'Supplier restored.',
+        archived ? 'Supplier deactivated.' : 'Supplier reactivated.',
       );
     }
   }
@@ -161,8 +175,9 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
       builder: (context) => AlertDialog(
         title: const Text('Delete supplier permanently?'),
         content: Text(
-          '${supplier.name} will be removed from the directory. '
-          'Historical procurement records will keep their references.',
+          '${supplier.name} will be removed permanently. '
+          'This is only for a supplier that is not linked to any product. '
+          'This cannot be undone.',
         ),
         actions: [
           SelloButton(
@@ -262,21 +277,22 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
             else if (state.isEmpty)
               SelloCard(
                 child: SelloEmptyState(
-                  title: state.statusFilter == SupplierStatusFilter.archived
-                      ? 'No archived suppliers'
+                  title: state.statusFilter == SupplierStatusFilter.inactive
+                      ? 'No inactive suppliers'
                       : 'Add your first supplier',
-                  message: state.statusFilter == SupplierStatusFilter.archived
-                      ? 'Archived suppliers remain for historical purchase '
-                            'orders and payments.'
+                  message: state.statusFilter == SupplierStatusFilter.inactive
+                      ? 'Inactive suppliers stay out of new sourcing. '
+                            'Existing product links remain. Reactivate one '
+                            'here when you need them again.'
                       : 'Capture vendor contact, payment terms, and opening '
                             'payable balance. Purchase orders and GRN will build '
                             'on this directory.',
                   icon: Icons.local_shipping_outlined,
                   actionLabel:
-                      state.statusFilter == SupplierStatusFilter.archived
+                      state.statusFilter == SupplierStatusFilter.inactive
                       ? null
                       : 'Add supplier',
-                  onAction: state.statusFilter == SupplierStatusFilter.archived
+                  onAction: state.statusFilter == SupplierStatusFilter.inactive
                       ? null
                       : () => _openEditor(),
                 ),
@@ -324,7 +340,7 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
                               ),
                             ),
                             SelloStatusBadge(
-                              label: supplier.isActive ? 'Active' : 'Archived',
+                              label: supplier.isActive ? 'Active' : 'Inactive',
                               tone: supplier.isActive
                                   ? SelloStatusTone.success
                                   : SelloStatusTone.neutral,
@@ -423,7 +439,7 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
                           ),
                           DataCell(
                             SelloStatusBadge(
-                              label: supplier.isActive ? 'Active' : 'Archived',
+                              label: supplier.isActive ? 'Active' : 'Inactive',
                               tone: supplier.isActive
                                   ? SelloStatusTone.success
                                   : SelloStatusTone.neutral,
@@ -497,8 +513,8 @@ class _Toolbar extends StatelessWidget {
             child: Text('Active'),
           ),
           DropdownMenuItem(
-            value: SupplierStatusFilter.archived,
-            child: Text('Archived'),
+            value: SupplierStatusFilter.inactive,
+            child: Text('Inactive'),
           ),
         ],
       ),
@@ -858,7 +874,8 @@ class _SupplierEditorDialogState extends State<_SupplierEditorDialog> {
                     ),
                   ),
                   subtitle: const Text(
-                    'Inactive suppliers are archived from the default list.',
+                    'Inactive suppliers are hidden from new sourcing. '
+                    'Existing product links stay in place.',
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
                       fontSize: 12,

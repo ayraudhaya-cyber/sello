@@ -4,6 +4,7 @@ import 'package:sello/shared/models/product_upsert_input.dart';
 import 'package:sello/shared/models/product_variant.dart';
 import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/utils/formatters.dart';
+import 'package:sello/shared/utils/option_name_suggestions.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
 /// Mutable editor state for one sellable option row.
@@ -19,16 +20,23 @@ class ProductOptionEditorRow {
     String sellingPrice = '',
     String costPrice = '',
     String openingStock = '',
-  })  : label = TextEditingController(text: label),
-        sku = TextEditingController(text: sku),
-        barcode = TextEditingController(text: barcode),
-        sellingPrice = TextEditingController(text: sellingPrice),
-        costPrice = TextEditingController(text: costPrice),
-        openingStock = TextEditingController(text: openingStock);
+    bool? skuManuallyEdited,
+  }) : skuManuallyEdited = skuManuallyEdited ?? sku.trim().isNotEmpty,
+       label = TextEditingController(text: label),
+       sku = TextEditingController(text: sku),
+       barcode = TextEditingController(text: barcode),
+       sellingPrice = TextEditingController(text: sellingPrice),
+       costPrice = TextEditingController(text: costPrice),
+       openingStock = TextEditingController(text: openingStock);
 
   String? id;
   bool isDefault;
   bool isActive;
+
+  /// True once the user typed (or a saved option supplied) this item code.
+  /// While false the code is a suggestion that may follow the option name
+  /// and the parent code; once true it is never overwritten.
+  bool skuManuallyEdited;
 
   /// Live inventory qty for an existing option (display only — never overwritten
   /// by the Opening stock field).
@@ -45,9 +53,10 @@ class ProductOptionEditorRow {
 
   bool get hasEnteredDetails {
     return label.text.trim().isNotEmpty ||
-        sku.text.trim().isNotEmpty ||
+        (skuManuallyEdited && sku.text.trim().isNotEmpty) ||
         barcode.text.trim().isNotEmpty ||
-        (isNew && openingStock.text.trim().isNotEmpty &&
+        (isNew &&
+            openingStock.text.trim().isNotEmpty &&
             openingStock.text.trim() != '0');
   }
 
@@ -144,8 +153,10 @@ class ProductOptionsEditorSection extends StatelessWidget {
     required this.onAddOption,
     required this.onToggleActive,
     this.onRemoveOption,
-    this.onSwitchToSingle,
-    this.allowSwitchToSingle = true,
+    this.onOptionNameChanged,
+    this.onItemCodeEdited,
+    this.lockedNote,
+    this.optionNameSuggestions = const [],
   });
 
   final List<ProductOptionEditorRow> rows;
@@ -155,8 +166,16 @@ class ProductOptionsEditorSection extends StatelessWidget {
   final VoidCallback onAddOption;
   final void Function(int index, bool active) onToggleActive;
   final void Function(int index)? onRemoveOption;
-  final VoidCallback? onSwitchToSingle;
-  final bool allowSwitchToSingle;
+
+  /// Fired when the option name changes (item-code suggestions follow it).
+  final void Function(ProductOptionEditorRow row)? onOptionNameChanged;
+
+  /// Fired when the user edits an item code by hand (or clears it).
+  final void Function(ProductOptionEditorRow row)? onItemCodeEdited;
+
+  /// Shown when the product cannot go back to a single-product setup.
+  final String? lockedNote;
+  final List<String> optionNameSuggestions;
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +197,7 @@ class ProductOptionsEditorSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Sellable options',
+                      'Variants',
                       style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
                         fontWeight: FontWeight.w700,
@@ -188,7 +207,7 @@ class ProductOptionsEditorSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Each option is a separate sellable unit with its own '
+                      'Each variant is a separate sellable unit with its own '
                       'item code, price and stock.',
                       style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
@@ -200,37 +219,21 @@ class ProductOptionsEditorSection extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onSwitchToSingle != null && allowSwitchToSingle) ...[
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: onSwitchToSingle,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  child: const Text(
-                    'Switch to single product',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
-                      decorationColor: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
+              const SizedBox(width: 12),
+              SelloButton(
+                label: 'Add another option',
+                icon: Icons.add_rounded,
+                variant: SelloButtonVariant.secondary,
+                size: SelloButtonSize.small,
+                onPressed: onAddOption,
+              ),
             ],
           ),
-          if (!allowSwitchToSingle) ...[
+          if (lockedNote != null) ...[
             const SizedBox(height: 8),
-            const Text(
-              'This product already has saved options. Deactivate unused '
-              'options instead of converting back to a single product.',
-              style: TextStyle(
+            Text(
+              lockedNote!,
+              style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 12.5,
                 height: 1.35,
@@ -260,7 +263,12 @@ class ProductOptionsEditorSection extends StatelessWidget {
               canRemove: canRemoveDraftOption(rows: rows, index: i),
               onChanged: onChanged,
               onToggleActive: (active) => onToggleActive(i, active),
-              onRemove: onRemoveOption == null ? null : () => onRemoveOption!(i),
+              onRemove: onRemoveOption == null
+                  ? null
+                  : () => onRemoveOption!(i),
+              onNameChanged: onOptionNameChanged,
+              onCodeEdited: onItemCodeEdited,
+              optionNameSuggestions: optionNameSuggestions,
             ),
           ],
           const SizedBox(height: 12),
@@ -289,6 +297,9 @@ class _OptionCard extends StatelessWidget {
     required this.onChanged,
     required this.onToggleActive,
     this.onRemove,
+    this.onNameChanged,
+    this.onCodeEdited,
+    this.optionNameSuggestions = const [],
   });
 
   final int index;
@@ -298,6 +309,9 @@ class _OptionCard extends StatelessWidget {
   final VoidCallback onChanged;
   final ValueChanged<bool> onToggleActive;
   final VoidCallback? onRemove;
+  final void Function(ProductOptionEditorRow row)? onNameChanged;
+  final void Function(ProductOptionEditorRow row)? onCodeEdited;
+  final List<String> optionNameSuggestions;
 
   @override
   Widget build(BuildContext context) {
@@ -346,35 +360,51 @@ class _OptionCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                 ],
-                SelloStatusToggle(
-                  value: row.isActive,
-                  onChanged: onToggleActive,
-                  label: 'Active',
-                  helper: 'Inactive options stay in history but cannot be sold.',
+                SizedBox(
+                  width: 136,
+                  child: SelloStatusToggle(
+                    value: row.isActive,
+                    onChanged: onToggleActive,
+                    label: 'Active',
+                    helper:
+                        'Inactive options stay in history but cannot be sold.',
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            SelloTextField(
-              controller: row.label,
-              label: 'Option name',
-              required: true,
-              hint: 'e.g. 12 inches, Black, Large',
-              onChanged: (_) => onChanged(),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Enter an option name.';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
             SelloFormRow(
-              left: SelloTextField(
+              left: SelloAutocompleteField(
+                key: ObjectKey(row),
+                value: row.label.text,
+                label: 'Option name',
+                required: true,
+                hint: 'e.g. 12 inches, Black, Large',
+                suggestions: optionNameSuggestions,
+                suggestWhenEmpty: false,
+                suggestionFilter: (query, saved) =>
+                    filterOptionNameSuggestions(query: query, saved: saved),
+                onChanged: (value) {
+                  if (row.label.text != value) row.label.text = value;
+                  onNameChanged?.call(row);
+                  onChanged();
+                },
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Enter an option name.';
+                  }
+                  return null;
+                },
+              ),
+              right: SelloTextField(
                 controller: row.sku,
                 label: 'Item code',
                 required: true,
-                onChanged: (_) => onChanged(),
+                onChanged: (value) {
+                  row.skuManuallyEdited = value.trim().isNotEmpty;
+                  onCodeEdited?.call(row);
+                  onChanged();
+                },
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Enter an item code.';
@@ -382,31 +412,28 @@ class _OptionCard extends StatelessWidget {
                   return null;
                 },
               ),
-              right: SelloTextField(
-                controller: row.barcode,
-                label: 'Barcode',
-                onChanged: (_) => onChanged(),
-              ),
             ),
             const SizedBox(height: 12),
             if (showCost)
               SelloFormRow(
                 left: SelloTextField(
+                  controller: row.costPrice,
+                  label: 'Cost price',
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged: (_) => onChanged(),
+                  validator: _validateOptionalPrice,
+                ),
+                right: SelloTextField(
                   controller: row.sellingPrice,
                   label: 'Selling price',
                   required: true,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   onChanged: (_) => onChanged(),
                   validator: _validatePrice,
-                ),
-                right: SelloTextField(
-                  controller: row.costPrice,
-                  label: 'Cost price',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => onChanged(),
-                  validator: _validateOptionalPrice,
                 ),
               )
             else
@@ -414,33 +441,44 @@ class _OptionCard extends StatelessWidget {
                 controller: row.sellingPrice,
                 label: 'Selling price',
                 required: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onChanged: (_) => onChanged(),
                 validator: _validatePrice,
               ),
             const SizedBox(height: 12),
-            if (row.isNew)
-              SelloTextField(
-                controller: row.openingStock,
-                label: 'Opening stock',
-                hint: '0',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+            SelloFormRow(
+              left: SelloTextField(
+                controller: row.barcode,
+                label: 'Barcode',
                 onChanged: (_) => onChanged(),
-                validator: _validateOptionalStock,
-              )
-            else
-              Text(
-                'Current stock: '
-                '${SelloFormatters.quantity(row.currentStockQuantity ?? 0)}'
-                ' · Adjust in Inventory',
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12.5,
-                  color: AppColors.textTertiary,
-                ),
               ),
+              right: row.isNew
+                  ? SelloTextField(
+                      controller: row.openingStock,
+                      label: 'Opening stock',
+                      hint: '0',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) => onChanged(),
+                      validator: _validateOptionalStock,
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: Text(
+                        'Current stock: '
+                        '${SelloFormatters.quantity(row.currentStockQuantity ?? 0)}'
+                        ' · Adjust in Inventory',
+                        style: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 12.5,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
+            ),
           ],
         ),
       ),

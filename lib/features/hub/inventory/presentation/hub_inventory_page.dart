@@ -235,20 +235,11 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   DataRow _parentRow(InventoryProductGroup group, {required bool expanded}) {
     final item = group.primary;
     return DataRow(
+      onSelectChanged: (_) => _toggleExpanded(group.productId),
       cells: [
         DataCell(
           Row(
             children: [
-              IconButton(
-                tooltip: expanded ? 'Hide options' : 'Show options',
-                onPressed: () => _toggleExpanded(group.productId),
-                icon: Icon(
-                  expanded
-                      ? Icons.expand_more_rounded
-                      : Icons.chevron_right_rounded,
-                  color: AppColors.textSecondary,
-                ),
-              ),
               SelloEntityThumb(
                 name: item.name,
                 imageUrl: item.imageUrl,
@@ -312,11 +303,23 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(
-          SelloButton(
-            label: expanded ? 'Hide' : 'Options',
-            size: SelloButtonSize.small,
-            variant: SelloButtonVariant.ghost,
-            onPressed: () => _toggleExpanded(group.productId),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelloButton(
+                label: expanded ? 'Hide' : 'Options',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.ghost,
+                onPressed: () => _toggleExpanded(group.productId),
+              ),
+              Icon(
+                expanded
+                    ? Icons.expand_more_rounded
+                    : Icons.chevron_right_rounded,
+                color: AppColors.textSecondary,
+              ),
+            ],
           ),
         ),
       ],
@@ -333,7 +336,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
       cells: [
         DataCell(
           Padding(
-            padding: const EdgeInsets.only(left: 56),
+            padding: const EdgeInsets.only(left: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -475,10 +478,6 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   .read(hubInventoryProvider.notifier)
                   .setStatusFilter(filter),
             ),
-            if (state.recentMovements.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.md),
-              _RecentMovementsStrip(movements: state.recentMovements),
-            ],
             const SizedBox(height: AppSpacing.lg),
             if (state.errorMessage != null && state.items.isEmpty)
               SizedBox(
@@ -549,13 +548,6 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                           onTap: () => _toggleExpanded(group.productId),
                           child: Row(
                             children: [
-                              Icon(
-                                _expandedProductIds.contains(group.productId)
-                                    ? Icons.expand_more_rounded
-                                    : Icons.chevron_right_rounded,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(width: 8),
                               SelloEntityThumb(
                                 name: group.primary.name,
                                 imageUrl: group.primary.imageUrl,
@@ -586,6 +578,13 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                                 ),
                               ),
                               _statusBadgeForStatus(group.stockStatus),
+                              const SizedBox(width: 4),
+                              Icon(
+                                _expandedProductIds.contains(group.productId)
+                                    ? Icons.expand_more_rounded
+                                    : Icons.chevron_right_rounded,
+                                color: AppColors.textSecondary,
+                              ),
                             ],
                           ),
                         ),
@@ -688,6 +687,10 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   ),
                 ),
               ),
+            if (state.recentMovements.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.lg),
+              _RecentMovementsStrip(movements: state.recentMovements),
+            ],
           ],
         ],
       ),
@@ -772,7 +775,7 @@ class _Toolbar extends StatelessWidget {
           ),
           DropdownMenuItem(
             value: StockStatusFilter.archived,
-            child: Text('Archived'),
+            child: Text('Inactive'),
           ),
         ],
       ),

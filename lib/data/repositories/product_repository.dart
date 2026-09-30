@@ -1,4 +1,5 @@
 import 'package:sello/core/error/app_failure.dart';
+import 'package:sello/shared/lifecycle/business_entity_lifecycle.dart';
 import 'package:sello/data/repositories/product_media_repository.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
@@ -9,6 +10,7 @@ import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
 import 'package:sello/shared/models/product_variant.dart';
+import 'package:sello/shared/utils/option_name_suggestions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Product id -> unit cost through the `product_unit_costs` accessor.
@@ -77,10 +79,7 @@ Future<Map<String, num>> fetchVariantUnitCosts(
 }
 
 class ProductPageResult {
-  const ProductPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const ProductPageResult({required this.items, required this.hasMore});
 
   final List<ProductSummary> items;
   final bool hasMore;
@@ -92,10 +91,10 @@ class ProductRepository {
     MediaStorageService? imageStorage,
     ProductMediaRepository? mediaRepository,
     BusinessEventBus? events,
-  })  : _client = client ?? SupabaseService.client,
-        _imageStorage = imageStorage ?? MediaStorageService(),
-        _mediaRepository = mediaRepository ?? ProductMediaRepository(),
-        _events = events ?? BusinessEventBus();
+  }) : _client = client ?? SupabaseService.client,
+       _imageStorage = imageStorage ?? MediaStorageService(),
+       _mediaRepository = mediaRepository ?? ProductMediaRepository(),
+       _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final MediaStorageService _imageStorage;
@@ -166,7 +165,9 @@ class ProductRepository {
           .order('name');
 
       return (rows as List)
-          .map((row) => ProductCategory.fromJson(Map<String, dynamic>.from(row)))
+          .map(
+            (row) => ProductCategory.fromJson(Map<String, dynamic>.from(row)),
+          )
           .toList();
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
@@ -207,16 +208,17 @@ class ProductRepository {
           .range(page * pageSize, (page * pageSize) + pageSize - 1);
 
       final list = response as List;
-      final items = await Future.wait([
+      final raw = [
         for (final row in list)
-          _mapProductRow(
+          ProductSummary.fromQueryRow(
             Map<String, dynamic>.from(row as Map),
             branchId: branchId,
           ),
-      ]);
+      ];
+      final items = await _decorateProducts(raw);
 
       return ProductPageResult(
-        items: await attachUnitCosts(items),
+        items: items,
         hasMore: items.length == pageSize,
       );
     } on PostgrestException catch (error) {
@@ -232,19 +234,43 @@ class ProductRepository {
     }
   }
 
-  Future<ProductSummary> _mapProductRow(
-    Map<String, dynamic> row, {
-    String? branchId,
-  }) async {
-    final item = ProductSummary.fromQueryRow(row, branchId: branchId);
-    final path = item.imageStoragePath;
-    if (path == null || path.isEmpty) return item;
-    try {
-      final imageUrl = await _imageStorage.signProductImage(path);
-      return item.copyWith(imageUrl: imageUrl);
-    } catch (_) {
-      return item;
-    }
+  /// Signs thumbnails and resolves unit cost together.
+  Future<List<ProductSummary>> _decorateProducts(
+    List<ProductSummary> raw,
+  ) async {
+    if (raw.isEmpty) return raw;
+    final results = await Future.wait([
+      _withSignedImages(raw),
+      attachUnitCosts(raw),
+    ]);
+    final costById = {
+      for (final item in results[1]) item.id: item.costPrice,
+    };
+    return [
+      for (final item in results[0])
+        item.copyWith(costPrice: costById[item.id] ?? item.costPrice),
+    ];
+  }
+
+  Future<List<ProductSummary>> _withSignedImages(
+    List<ProductSummary> items,
+  ) async {
+    final paths = [
+      for (final item in items)
+        if (item.imageStoragePath != null && item.imageStoragePath!.isNotEmpty)
+          item.imageStoragePath!,
+    ];
+    if (paths.isEmpty) return items;
+    final urls = await _imageStorage.signProductImages(paths);
+    if (urls.isEmpty) return items;
+    return [
+      for (final item in items)
+        if (item.imageStoragePath != null &&
+            urls[item.imageStoragePath] != null)
+          item.copyWith(imageUrl: urls[item.imageStoragePath])
+        else
+          item,
+    ];
   }
 
   /// Resolves cost for [items] through `product_unit_costs`.
@@ -252,7 +278,9 @@ class ProductRepository {
   /// Cost is not selectable from `products`; roles that may not view it simply
   /// get no rows back, which leaves [ProductSummary.costPrice] at zero — the
   /// same value the masked `cost_price` field used to produce for them.
-  Future<List<ProductSummary>> attachUnitCosts(List<ProductSummary> items) async {
+  Future<List<ProductSummary>> attachUnitCosts(
+    List<ProductSummary> items,
+  ) async {
     if (items.isEmpty) return items;
 
     final costs = await fetchUnitCosts([for (final item in items) item.id]);
@@ -295,25 +323,14 @@ class ProductRepository {
 
       final response = await query;
       final list = response as List;
-      final items = <ProductSummary>[];
-      for (final row in list) {
-        final item = ProductSummary.fromQueryRow(
-          Map<String, dynamic>.from(row),
-          branchId: branchId,
-        );
-        if (item.imageStoragePath != null && item.imageStoragePath!.isNotEmpty) {
-          try {
-            final imageUrl =
-                await _imageStorage.signProductImage(item.imageStoragePath!);
-            items.add(item.copyWith(imageUrl: imageUrl));
-          } catch (_) {
-            items.add(item);
-          }
-        } else {
-          items.add(item);
-        }
-      }
-      return await attachUnitCosts(items);
+      final raw = [
+        for (final row in list)
+          ProductSummary.fromQueryRow(
+            Map<String, dynamic>.from(row as Map),
+            branchId: branchId,
+          ),
+      ];
+      return await _decorateProducts(raw);
     } on PostgrestException catch (error) {
       throw AuthFailure(
         error.message.trim().isEmpty
@@ -369,15 +386,15 @@ class ProductRepository {
       if (productId == null) {
         final inserted = await _client
             .from('products')
-            .insert({
-              ...productPayload,
-              'created_by': employeeId,
-            })
+            .insert({...productPayload, 'created_by': employeeId})
             .select('id')
             .single();
         productId = inserted['id'] as String;
       } else {
-        await _client.from('products').update(productPayload).eq('id', productId);
+        await _client
+            .from('products')
+            .update(productPayload)
+            .eq('id', productId);
       }
 
       // New products get their default variant from an AFTER INSERT trigger.
@@ -402,19 +419,16 @@ class ProductRepository {
 
       if (isNew) {
         // Seed inventory at zero; opening qty goes through the ledger.
-        await _client.from('inventory').upsert(
-          {
-            'company_id': companyId,
-            'branch_id': branchId,
-            'product_id': productId,
-            'variant_id': variantId,
-            'quantity': 0,
-            'reorder_level': input.reorderLevel,
-            'created_by': employeeId,
-            'updated_by': employeeId,
-          },
-          onConflict: 'company_id,branch_id,variant_id',
-        );
+        await _client.from('inventory').upsert({
+          'company_id': companyId,
+          'branch_id': branchId,
+          'product_id': productId,
+          'variant_id': variantId,
+          'quantity': 0,
+          'reorder_level': input.reorderLevel,
+          'created_by': employeeId,
+          'updated_by': employeeId,
+        }, onConflict: 'company_id,branch_id,variant_id');
 
         // Simple create: parent opening stock lands on the default variant.
         // Multi-option create: per-option opening stock is applied in
@@ -457,10 +471,13 @@ class ProductRepository {
             'updated_by': employeeId,
           });
         } else {
-          await _client.from('inventory').update({
-            'reorder_level': input.reorderLevel,
-            'updated_by': employeeId,
-          }).eq('id', existing['id'] as String);
+          await _client
+              .from('inventory')
+              .update({
+                'reorder_level': input.reorderLevel,
+                'updated_by': employeeId,
+              })
+              .eq('id', existing['id'] as String);
         }
       }
 
@@ -555,6 +572,20 @@ class ProductRepository {
     return productId;
   }
 
+  Future<bool> _referenced(String table, String column, String id) async {
+    try {
+      final rows = await _client
+          .from(table)
+          .select('id')
+          .eq(column, id)
+          .limit(1);
+      return (rows as List).isNotEmpty;
+    } catch (_) {
+      // Unknown schema or a failed lookup must not allow a destructive delete.
+      return true;
+    }
+  }
+
   Future<void> archiveProduct({
     required String productId,
     required String employeeId,
@@ -575,10 +606,10 @@ class ProductRepository {
         );
       }
 
-      await _client.from('products').update({
-        'is_active': !archived,
-        'updated_by': employeeId,
-      }).eq('id', productId);
+      await _client
+          .from('products')
+          .update({'is_active': !archived, 'updated_by': employeeId})
+          .eq('id', productId);
 
       if (archived) {
         final row = await _client
@@ -632,19 +663,28 @@ class ProductRepository {
           'This product has already been permanently deleted.',
         );
       }
-      if (existing['is_active'] == true) {
-        throw const ValidationFailure(
-          'Archive the product before permanently deleting it.',
-        );
+      final used =
+          await _referenced('order_items', 'product_id', productId) ||
+          await _referenced('stock_movements', 'product_id', productId);
+      final decision = BusinessEntityLifecycle.permanentDelete(
+        isActive: existing['is_active'] == true,
+        hasHistoricalUse: used,
+        noun: 'product',
+      );
+      if (!decision.allowed) {
+        throw ValidationFailure(decision.message!);
       }
 
       await _mediaRepository.purgeProductImages(productId);
 
-      await _client.from('products').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-        'is_active': false,
-        'updated_by': employeeId,
-      }).eq('id', productId);
+      await _client
+          .from('products')
+          .update({
+            'deleted_at': DateTime.now().toUtc().toIso8601String(),
+            'is_active': false,
+            'updated_by': employeeId,
+          })
+          .eq('id', productId);
     } on ValidationFailure {
       rethrow;
     } on PostgrestException catch (error) {
@@ -674,10 +714,9 @@ class ProductRepository {
           .eq('product_id', productId)
           .isFilter('deleted_at', null);
       final variants = ProductVariant.listFromEmbed(rows);
-      final costs = await fetchVariantUnitCosts(
-        _client,
-        [for (final v in variants) v.id],
-      );
+      final costs = await fetchVariantUnitCosts(_client, [
+        for (final v in variants) v.id,
+      ]);
       return [
         for (final variant in variants)
           ProductVariant(
@@ -697,6 +736,69 @@ class ProductRepository {
             availableStockQuantity: variant.availableStockQuantity,
           ),
       ];
+    } on PostgrestException catch (error) {
+      throw ProvisioningFailure(error.message);
+    } catch (error) {
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Live item codes (products and sellable options) starting with [prefix],
+  /// upper-cased. Used to suggest codes that do not collide.
+  Future<Set<String>> fetchExistingSkusWithPrefix({
+    required String companyId,
+    required String prefix,
+    int limit = 500,
+  }) async {
+    final cleaned = prefix.replaceAll(RegExp(r'[%_\\,()]'), '');
+    if (cleaned.isEmpty) return <String>{};
+    try {
+      final results = await Future.wait([
+        _client
+            .from('products')
+            .select('sku')
+            .eq('company_id', companyId)
+            .isFilter('deleted_at', null)
+            .ilike('sku', '$cleaned%')
+            .limit(limit),
+        _client
+            .from('product_variants')
+            .select('sku')
+            .eq('company_id', companyId)
+            .isFilter('deleted_at', null)
+            .ilike('sku', '$cleaned%')
+            .limit(limit),
+      ]);
+      return {
+        for (final rows in results)
+          for (final row in rows as List)
+            ((row as Map)['sku'] as String? ?? '').trim().toUpperCase(),
+      }..remove('');
+    } on PostgrestException catch (error) {
+      throw ProvisioningFailure(error.message);
+    } catch (error) {
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Distinct live option names for the company, most recently used first.
+  Future<List<String>> fetchVariantOptionLabels({
+    required String companyId,
+    int limit = 400,
+  }) async {
+    try {
+      final rows = await _client
+          .from('product_variants')
+          .select('label, updated_at')
+          .eq('company_id', companyId)
+          .isFilter('deleted_at', null)
+          .not('label', 'is', null)
+          .order('updated_at', ascending: false)
+          .limit(limit);
+      return uniqueOptionLabels([
+        for (final row in rows as List)
+          ((row as Map)['label'] as String? ?? ''),
+      ]);
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
     } catch (error) {
@@ -741,14 +843,17 @@ class ProductRepository {
     final variantId = defaultVariant['id'] as String;
 
     if (variants.length == 1) {
-      await _client.from('product_variants').update({
-        'sku': input.sku.trim(),
-        'barcode': _nullIfBlank(input.barcode),
-        'selling_price': input.sellingPrice,
-        'unit_cost': input.costPrice,
-        'is_active': input.isActive,
-        'updated_by': employeeId,
-      }).eq('id', variantId);
+      await _client
+          .from('product_variants')
+          .update({
+            'sku': input.sku.trim(),
+            'barcode': _nullIfBlank(input.barcode),
+            'selling_price': input.sellingPrice,
+            'unit_cost': input.costPrice,
+            'is_active': input.isActive,
+            'updated_by': employeeId,
+          })
+          .eq('id', variantId);
     }
 
     return variantId;
@@ -802,7 +907,8 @@ class ProductRepository {
     final openingForBoundDefault = <String, num>{};
     for (var i = 0; i < drafts.length; i++) {
       final draft = drafts[i];
-      final shouldBindDefault = !defaultBound &&
+      final shouldBindDefault =
+          !defaultBound &&
           liveDefaultId != null &&
           draft.id == null &&
           (draft.isDefault || i == 0);
@@ -941,19 +1047,16 @@ class ProductRepository {
     required String employeeId,
     required num reorderLevel,
   }) async {
-    await _client.from('inventory').upsert(
-      {
-        'company_id': companyId,
-        'branch_id': branchId,
-        'product_id': productId,
-        'variant_id': variantId,
-        'quantity': 0,
-        'reorder_level': reorderLevel,
-        'created_by': employeeId,
-        'updated_by': employeeId,
-      },
-      onConflict: 'company_id,branch_id,variant_id',
-    );
+    await _client.from('inventory').upsert({
+      'company_id': companyId,
+      'branch_id': branchId,
+      'product_id': productId,
+      'variant_id': variantId,
+      'quantity': 0,
+      'reorder_level': reorderLevel,
+      'created_by': employeeId,
+      'updated_by': employeeId,
+    }, onConflict: 'company_id,branch_id,variant_id');
   }
 
   Future<String?> _ensureCategory({
@@ -1007,7 +1110,8 @@ class ProductRepository {
 
   String _mapProductError(String message, {String? code}) {
     final upper = message.toUpperCase();
-    final isDuplicate = code == '23505' ||
+    final isDuplicate =
+        code == '23505' ||
         upper.contains('23505') ||
         upper.contains('DUPLICATE KEY') ||
         upper.contains('UNIQUE CONSTRAINT');

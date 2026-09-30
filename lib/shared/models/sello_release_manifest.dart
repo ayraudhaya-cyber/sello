@@ -16,6 +16,7 @@ enum UpdateCheckStatus {
 /// Destinations for a later install/download step — not used for install yet.
 enum ReleaseDestinationKind {
   apk,
+  installer,
   appStore,
   testFlight,
   web,
@@ -24,6 +25,7 @@ enum ReleaseDestinationKind {
   static ReleaseDestinationKind fromJson(String? raw) {
     return switch (raw?.trim().toLowerCase()) {
       'apk' => ReleaseDestinationKind.apk,
+      'installer' || 'exe' => ReleaseDestinationKind.installer,
       'app_store' || 'appstore' => ReleaseDestinationKind.appStore,
       'testflight' || 'test_flight' => ReleaseDestinationKind.testFlight,
       'web' => ReleaseDestinationKind.web,
@@ -36,6 +38,7 @@ enum AppReleasePlatform {
   android,
   ios,
   web,
+  windows,
   other;
 
   String get jsonKey => name;
@@ -45,6 +48,7 @@ enum AppReleasePlatform {
       'android' => AppReleasePlatform.android,
       'ios' => AppReleasePlatform.ios,
       'web' => AppReleasePlatform.web,
+      'windows' => AppReleasePlatform.windows,
       _ => AppReleasePlatform.other,
     };
   }

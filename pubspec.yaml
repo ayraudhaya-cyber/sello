@@ -1,7 +1,7 @@
 name: sello
 description: B2B Sales Order Management for wholesalers and distributors.
 publish_to: "none"
-version: 1.0.8+9
+version: 1.0.10+11
 
 environment:
   sdk: ^3.12.2
@@ -31,6 +31,7 @@ dependencies:
   web: ^1.1.1
   url_launcher: ^6.3.1
   package_info_plus: ^10.2.1
+  pdf: ^3.11.3
 
 dev_dependencies:
   flutter_test:

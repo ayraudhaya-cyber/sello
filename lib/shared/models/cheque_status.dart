@@ -16,11 +16,11 @@ enum ChequeStatus {
       };
 
   String get shortLabel => switch (this) {
-        ChequeStatus.awaitingCollection => 'Awaiting collection',
-        ChequeStatus.collected => 'Collected',
-        ChequeStatus.deposited => 'Deposited',
-        ChequeStatus.cleared => 'Cleared',
-        ChequeStatus.bounced => 'Bounced',
+        ChequeStatus.awaitingCollection => 'Waiting to receive',
+        ChequeStatus.collected => 'In hand',
+        ChequeStatus.deposited => 'At the bank',
+        ChequeStatus.cleared => 'Bank paid',
+        ChequeStatus.bounced => 'Bank returned',
         ChequeStatus.cancelled => 'Cancelled',
       };
 

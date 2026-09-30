@@ -45,14 +45,24 @@ class OrderCatalogStockChip extends StatelessWidget {
     }
 
     final label = switch (state) {
-      OrderCatalogStockChipState.out => 'Out of stock',
+      OrderCatalogStockChipState.out => '0',
       OrderCatalogStockChipState.low ||
       OrderCatalogStockChipState.normal =>
-        '${SelloFormatters.quantity(available!)} available',
+        SelloFormatters.quantity(available!),
       OrderCatalogStockChipState.unknown => '',
     };
 
     if (label.isEmpty) return const SizedBox.shrink();
+
+    final semantics = switch (state) {
+      OrderCatalogStockChipState.out => 'Out of stock',
+      OrderCatalogStockChipState.low ||
+      OrderCatalogStockChipState.normal =>
+        offlineHint
+            ? '$label available, last known'
+            : '$label available',
+      OrderCatalogStockChipState.unknown => '',
+    };
 
     final (Color bg, Color fg) = switch (state) {
       OrderCatalogStockChipState.out => (
@@ -73,28 +83,29 @@ class OrderCatalogStockChip extends StatelessWidget {
         ),
     };
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(
-          color: fg.withValues(alpha: 0.18),
+    return Semantics(
+      label: semantics,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+          border: Border.all(
+            color: fg.withValues(alpha: 0.18),
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        child: Text(
-          offlineHint && state != OrderCatalogStockChipState.out
-              ? '$label · last known'
-              : label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 10.5,
-            fontWeight: FontWeight.w600,
-            color: fg,
-            height: 1.1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: fg,
+              height: 1.1,
+            ),
           ),
         ),
       ),

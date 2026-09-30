@@ -8,11 +8,31 @@ import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/order_upsert_input.dart';
 
+/// Status query for the Sales Orders chips.
+///
+/// The "In progress" chip keeps [OrderStatus.draft] as its filter key and
+/// still loads draft, placed, and partially delivered orders.
+List<OrderStatus>? salesOrderListStatuses({
+  required bool showAllStatuses,
+  required OrderStatus statusFilter,
+}) {
+  if (showAllStatuses) return null;
+  return switch (statusFilter) {
+    OrderStatus.draft => const [
+      OrderStatus.draft,
+      OrderStatus.placed,
+      OrderStatus.partiallyDelivered,
+    ],
+    _ => [statusFilter],
+  };
+}
+
 /// Field sales orders — same repository as Hub, scoped to the signed-in rep.
 class SelloOrdersState {
   const SelloOrdersState({
     this.items = const [],
     this.search = '',
+    /// [OrderStatus.draft] is the key for the "In progress" chip.
     this.statusFilter = OrderStatus.draft,
     this.page = 0,
     this.pageSize = 40,
@@ -21,7 +41,7 @@ class SelloOrdersState {
     this.isSaving = false,
     this.errorMessage,
     this.initialized = false,
-    this.showAllStatuses = false,
+    this.showAllStatuses = true,
   });
 
   final List<OrderSummary> items;
@@ -105,16 +125,10 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
     try {
       final result = await _repo.fetchOrders(
         search: state.search,
-        statuses: state.showAllStatuses
-            ? null
-            : switch (state.statusFilter) {
-                OrderStatus.draft => const [
-                    OrderStatus.draft,
-                    OrderStatus.placed,
-                    OrderStatus.partiallyDelivered,
-                  ],
-                _ => [state.statusFilter],
-              },
+        statuses: salesOrderListStatuses(
+          showAllStatuses: state.showAllStatuses,
+          statusFilter: state.statusFilter,
+        ),
         employeeId: session?.employee.id,
         page: page,
         pageSize: state.pageSize,
@@ -183,7 +197,10 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
         await loadOrders(showLoading: false);
       }
       state = state.copyWith(isSaving: false, clearError: true);
-      return OrderMutationResult.ok(confirmation: saved.confirmation);
+      return OrderMutationResult.ok(
+        confirmation: saved.confirmation,
+        orderId: saved.orderId,
+      );
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return OrderMutationResult.fail(failure.message);
@@ -193,10 +210,10 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
   Future<OrderMutationResult> placeExisting(OrderSummary order) async {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
-      await _repo.placeOrder(order.id);
+      final confirmation = await _repo.placeOrder(order.id);
       await loadOrders(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
-      return const OrderMutationResult.ok();
+      return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return OrderMutationResult.fail(failure.message);
@@ -236,6 +253,22 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return OrderMutationResult.fail(failure.message);
+    }
+  }
+
+  Future<String?> fulfillOrderItems({
+    required String orderId,
+    required List<({String orderItemId, num quantity})> lines,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.fulfillOrderItems(orderId: orderId, lines: lines);
+      await loadOrders(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
     }
   }
 

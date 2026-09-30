@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/orders/presentation/widgets/order_catalog_product_views.dart';
 import 'package:sello/features/orders/presentation/widgets/order_catalog_stock_chip.dart';
-import 'package:sello/features/orders/presentation/widgets/product_quantity_control.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_variant.dart';
 import 'package:sello/shared/utils/formatters.dart';
-import 'package:sello/shared/widgets/widgets.dart';
 
 /// Compact multi-option catalog card — parent identity + expandable option rows.
 class OrderCatalogMultiOptionCard extends StatelessWidget {
@@ -57,7 +55,6 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
   }
 
   Widget _buildGrid(BuildContext context, bool selected) {
-    final imageHeight = large ? 180.0 : 140.0;
     return Material(
       color: selected
           ? AppColors.surfaceSelected.withValues(alpha: 0.55)
@@ -75,41 +72,24 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            GestureDetector(
+            OrderCatalogMediaFrame(
+              name: product.name,
+              imageUrl: product.imageUrl,
               onTap: onOpenPhotos,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppRadius.control - 1),
-                ),
-                child: SizedBox(
-                  height: imageHeight,
-                  width: double.infinity,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SelloEntityThumb(
-                            name: product.name,
-                            imageUrl: product.imageUrl,
-                            width: constraints.maxWidth,
-                            height: imageHeight,
-                          );
-                        },
-                      ),
-                      Positioned(
-                        left: 8,
-                        top: 8,
-                        child: OrderCatalogStockChip(
-                          available: product.availableStockQuantity,
-                          reorderLevel: reorderLevel ?? product.reorderLevel,
-                          offlineHint: offlineStockHint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              badge: OrderCatalogStockChip(
+                available: product.availableStockQuantity,
+                reorderLevel: reorderLevel ?? product.reorderLevel,
+                offlineHint: offlineStockHint,
               ),
+              onRemove: selected
+                  ? () {
+                      for (final option in _options) {
+                        if (quantityForVariant(option) > 0) {
+                          onVariantQuantityChanged(option, 0);
+                        }
+                      }
+                    }
+                  : null,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -118,12 +98,10 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
                 children: [
                   Text(
                     product.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
                       fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                      fontSize: large ? 16 : 13,
                       height: 1.25,
                     ),
                   ),
@@ -144,28 +122,24 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
                     onTap: onToggleExpanded,
                     label: expanded ? 'Hide options' : 'Choose options',
                   ),
-                  if (expanded) ...[
-                    const SizedBox(height: 8),
-                    for (final option in _options) ...[
-                      _OptionRow(
-                        option: option,
-                        currencySymbol: currencySymbol,
-                        quantity: quantityForVariant(option),
-                        maxQuantity: maxQuantityForVariant(option),
-                        reorderLevel: reorderLevel ?? product.reorderLevel,
-                        offlineStockHint: offlineStockHint,
-                        onAdd: () => onAddVariant(option),
-                        onQuantityChanged: (qty) =>
-                            onVariantQuantityChanged(option, qty),
-                        onStockLimitReached: () =>
-                            onStockLimitReached?.call(option),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                  ],
                 ],
               ),
             ),
+            if (expanded)
+              for (final option in _options)
+                _OptionRow(
+                  option: option,
+                  currencySymbol: currencySymbol,
+                  quantity: quantityForVariant(option),
+                  maxQuantity: maxQuantityForVariant(option),
+                  reorderLevel: reorderLevel ?? product.reorderLevel,
+                  offlineStockHint: offlineStockHint,
+                  onAdd: () => onAddVariant(option),
+                  onQuantityChanged: (qty) =>
+                      onVariantQuantityChanged(option, qty),
+                  onStockLimitReached: () =>
+                      onStockLimitReached?.call(option),
+                ),
           ],
         ),
       ),
@@ -173,8 +147,6 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
   }
 
   Widget _buildList(BuildContext context, bool selected) {
-    const thumbWidth = 56.0;
-    final thumbHeight = thumbWidth / MediaConstants.aspectRatio;
     return Material(
       color: selected
           ? AppColors.surfaceSelected.withValues(alpha: 0.45)
@@ -195,33 +167,48 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: onOpenPhotos,
-                    child: SizedBox(
-                      width: thumbWidth,
-                      height: thumbHeight,
-                      child: SelloEntityThumb(
-                        name: product.name,
-                        imageUrl: product.imageUrl,
-                        width: thumbWidth,
-                        height: thumbHeight,
-                      ),
+                  SizedBox(
+                    width: 88,
+                    child: OrderCatalogMediaFrame(
+                      name: product.name,
+                      imageUrl: product.imageUrl,
+                      width: 88,
+                      fillHeight: true,
+                      topRadius: false,
+                      onTap: onOpenPhotos,
+                    badge: OrderCatalogStockChip(
+                      available: product.availableStockQuantity,
+                      reorderLevel: reorderLevel ?? product.reorderLevel,
+                      offlineHint: offlineStockHint,
+                    ),
+                    onRemove: selected
+                        ? () {
+                            for (final option in _options) {
+                              if (quantityForVariant(option) > 0) {
+                                onVariantQuantityChanged(option, 0);
+                              }
+                            }
+                          }
+                        : null,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           product.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                          textHeightBehavior: const TextHeightBehavior(
+                            applyHeightToFirstAscent: false,
+                          ),
                           style: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontWeight: FontWeight.w600,
                             fontSize: 13.5,
+                            height: 1.25,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -232,23 +219,27 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
                           style: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             fontSize: 12,
+                            height: 1.3,
                             color: AppColors.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  _ExpandControl(
-                    expanded: expanded,
-                    onTap: onToggleExpanded,
-                    label: expanded ? 'Hide' : 'Options',
-                    compact: true,
-                  ),
                 ],
               ),
-              if (expanded) ...[
-                const SizedBox(height: 10),
-                for (final option in _options) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _ExpandControl(
+                  expanded: expanded,
+                  onTap: onToggleExpanded,
+                  label: expanded ? 'Hide options' : 'Choose options',
+                  compact: true,
+                ),
+              ),
+              if (expanded)
+                for (final option in _options)
                   _OptionRow(
                     option: option,
                     currencySymbol: currencySymbol,
@@ -262,9 +253,6 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
                     onStockLimitReached: () =>
                         onStockLimitReached?.call(option),
                   ),
-                  const SizedBox(height: 6),
-                ],
-              ],
             ],
           ),
         ),
@@ -297,7 +285,6 @@ class _ExpandControl extends StatelessWidget {
           horizontal: compact ? 4 : 0,
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               expanded
@@ -307,13 +294,17 @@ class _ExpandControl extends StatelessWidget {
               color: context.brandAccent,
             ),
             const SizedBox(width: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontWeight: FontWeight.w600,
-                fontSize: compact ? 12.5 : 13,
-                color: context.brandAccent,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w600,
+                  fontSize: compact ? 12.5 : 13,
+                  color: context.brandAccent,
+                ),
               ),
             ),
           ],
@@ -357,70 +348,63 @@ class _OptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = quantity > 0;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.outlineSubtle),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${SelloFormatters.currency(option.sellingPrice, symbol: currencySymbol)}'
-                  '${option.sku.trim().isNotEmpty ? ' · ${option.sku}' : ''}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                OrderCatalogStockChip(
+    final sku = option.sku.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 1, thickness: 1, color: AppColors.outlinePanel),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OrderCatalogStockChip(
                   available: option.availableStockQuantity,
                   reorderLevel: reorderLevel,
                   offlineHint: offlineStockHint,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _label,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                sku.isEmpty
+                    ? SelloFormatters.currency(
+                        option.sellingPrice,
+                        symbol: currencySymbol,
+                      )
+                    : '${SelloFormatters.currency(option.sellingPrice, symbol: currencySymbol)} · $sku',
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  height: 1.3,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OrderCatalogActionSlot(
+                selected: selected,
+                quantity: quantity,
+                maxQuantity: maxQuantity,
+                canAdd: _canAdd,
+                onAdd: _canAdd ? onAdd : onStockLimitReached,
+                onQuantityChanged: onQuantityChanged,
+                onStockLimitReached: onStockLimitReached,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          if (selected)
-            ProductQuantityControl(
-              value: quantity,
-              allowZero: true,
-              showRemove: true,
-              maxQuantity: maxQuantity,
-              onIncreaseBlocked: onStockLimitReached,
-              onChanged: onQuantityChanged,
-              compact: true,
-            )
-          else
-            SelloButton(
-              label: 'Add',
-              size: SelloButtonSize.small,
-              variant: SelloButtonVariant.outline,
-              onPressed: _canAdd ? onAdd : onStockLimitReached,
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

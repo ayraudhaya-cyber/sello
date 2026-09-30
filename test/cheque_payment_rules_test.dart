@@ -71,7 +71,7 @@ void main() {
     test('awaiting does not reduce outstanding', () {
       final c = cheque(status: ChequeStatus.awaitingCollection);
       expect(c.reducesOutstanding, isFalse);
-      expect(c.displayLabel, 'Awaiting collection');
+      expect(c.displayLabel, 'Waiting to receive');
       expect(c.isPendingApproval, isFalse);
     });
 
@@ -79,7 +79,7 @@ void main() {
       final c = cheque(status: ChequeStatus.collected);
       expect(c.isPendingApproval, isTrue);
       expect(c.reducesOutstanding, isFalse);
-      expect(c.displayLabel, 'Collected · Pending approval');
+      expect(c.displayLabel, 'Received — needs approval');
       expect(c.canDeposit, isFalse);
       expect(c.canBounce, isFalse);
       expect(c.canApproveCollection, isTrue);
@@ -93,7 +93,7 @@ void main() {
       expect(c.isPendingApproval, isFalse);
       expect(c.isPendingClearance, isTrue);
       expect(c.reducesOutstanding, isTrue);
-      expect(c.displayLabel, 'Collected · Pending clearance');
+      expect(c.displayLabel, 'In hand');
       expect(c.canDeposit, isTrue);
       expect(c.canBounce, isTrue);
     });

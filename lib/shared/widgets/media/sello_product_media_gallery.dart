@@ -1169,6 +1169,9 @@ class _ImagePreview extends StatelessWidget {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        gaplessPlayback: true,
+        cacheWidth: 720,
+        filterQuality: FilterQuality.medium,
         errorBuilder: (_, _, _) => const ColoredBox(
           color: AppColors.surfaceMuted,
           child: Icon(Icons.broken_image_outlined, color: AppColors.textFaint),

@@ -15,7 +15,7 @@ class OrderFulfillmentResult {
   final List<({String orderItemId, num quantity})> lines;
 }
 
-/// Owner/Manager — record what was actually delivered (full or partial).
+/// Owner/Manager and Sales — record what was actually delivered (full or partial).
 class OrderFulfillmentDialog extends StatefulWidget {
   const OrderFulfillmentDialog({
     super.key,

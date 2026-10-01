@@ -4,6 +4,7 @@ import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
+import 'package:sello/shared/models/customer_receivable_adjustment.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -352,6 +353,101 @@ class CustomerRepository {
     }
   }
 
+  Future<String> recordOpeningBalanceAdjustment({
+    required String customerId,
+    required num amount,
+    DateTime? recognizedAt,
+    String? notes,
+    String? referenceNumber,
+  }) async {
+    try {
+      final result = await _client.rpc(
+        'record_opening_balance_adjustment',
+        params: {
+          'p_customer_id': customerId,
+          'p_amount': amount,
+          'p_notes': _nullIfBlank(notes),
+          'p_recognized_at': recognizedAt?.toUtc().toIso8601String(),
+          'p_reference_number': _nullIfBlank(referenceNumber),
+        },
+      );
+      return result is String ? result : result.toString();
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(mapOpeningBalanceError(error.message));
+    } on AppFailure {
+      rethrow;
+    } catch (_) {
+      throw const UnexpectedFailure(
+        'Unable to add this opening balance. Please try again.',
+      );
+    }
+  }
+
+  Future<List<CustomerReceivableAdjustment>> fetchOpeningBalanceAdjustments(
+    String customerId,
+  ) async {
+    try {
+      final rows = await _client
+          .from('customer_receivable_adjustments')
+          .select(
+            'id, adjustment_number, amount, recognized_at, notes, '
+            'reference_number',
+          )
+          .eq('customer_id', customerId)
+          .eq('kind', 'opening_balance')
+          .order('recognized_at');
+
+      final paid = <String, num>{};
+      final ids = [
+        for (final row in rows as List) (row as Map)['id'] as String?,
+      ].whereType<String>().toList();
+      if (ids.isNotEmpty) {
+        final allocRows = await _client
+            .from('payment_allocations')
+            .select(
+              'receivable_adjustment_id, amount, payments!inner(status, deleted_at)',
+            )
+            .inFilter('receivable_adjustment_id', ids)
+            .eq('payments.status', 'completed')
+            .isFilter('payments.deleted_at', null);
+        for (final raw in allocRows as List) {
+          final map = Map<String, dynamic>.from(raw as Map);
+          final id = map['receivable_adjustment_id'] as String?;
+          if (id == null) continue;
+          paid[id] = (paid[id] ?? 0) + _asNum(map['amount']);
+        }
+      }
+
+      return [
+        for (final row in rows as List)
+          () {
+            final map = Map<String, dynamic>.from(row as Map);
+            final id = map['id'] as String? ?? '';
+            final amount = _asNum(map['amount']);
+            return CustomerReceivableAdjustment.fromJson(
+              map,
+              remaining: (amount - (paid[id] ?? 0)).clamp(0, double.infinity),
+            );
+          }(),
+      ];
+    } on PostgrestException catch (error) {
+      throw UnexpectedFailure(
+        error.message.trim().isEmpty
+            ? 'Unable to load opening balances.'
+            : error.message,
+      );
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw const UnexpectedFailure('Unable to load opening balances.');
+    }
+  }
+
+  static num _asNum(dynamic value) {
+    if (value is num) return value;
+    if (value is String) return num.tryParse(value) ?? 0;
+    return 0;
+  }
+
   String? _nullIfBlank(String? value) {
     if (value == null) return null;
     final trimmed = value.trim();
@@ -383,6 +479,32 @@ String mapCustomerSaveError(String message) {
   }
   if (message.trim().isEmpty) {
     return 'Unable to save this customer. Please try again.';
+  }
+  return message;
+}
+
+String mapOpeningBalanceError(String message) {
+  final lower = message.toLowerCase();
+  if (lower.contains('only owner or manager')) {
+    return 'Only Owner or Manager can add an opening balance.';
+  }
+  if (lower.contains('inactive')) {
+    return 'This customer is inactive.';
+  }
+  if (lower.contains('greater than zero') || lower.contains('amount must')) {
+    return 'Enter an opening balance greater than zero.';
+  }
+  if (lower.contains('future')) {
+    return 'As-of date cannot be in the future.';
+  }
+  if (lower.contains('too long')) {
+    return 'Old invoice / reference is too long.';
+  }
+  if (lower.contains('not found')) {
+    return 'Customer not found.';
+  }
+  if (message.trim().isEmpty) {
+    return 'Unable to add this opening balance. Please try again.';
   }
   return message;
 }

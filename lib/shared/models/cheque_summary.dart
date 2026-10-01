@@ -153,6 +153,15 @@ class ChequeSummary extends Equatable {
     return status.shortLabel;
   }
 
+  /// Hover copy for the status pill — when this status applies.
+  String get statusHelpText {
+    if (isPendingApproval) {
+      return 'You have this cheque. An owner or manager still needs to '
+          'approve it before it counts against what the customer owes.';
+    }
+    return status.helpText;
+  }
+
   factory ChequeSummary.fromJson(Map<String, dynamic> json) {
     return ChequeSummary(
       id: json['id'] as String,
@@ -168,7 +177,8 @@ class ChequeSummary extends Equatable {
       collectionDate: _dateOnly(json['collection_date']),
       photoPath: _stringValue(json['photo_path']),
       notes: _stringValue(json['notes']),
-      status: ChequeStatus.fromDb(json['status'] as String?) ??
+      status:
+          ChequeStatus.fromDb(json['status'] as String?) ??
           ChequeStatus.awaitingCollection,
       source: ChequeSource.fromDb(json['source'] as String?),
       visitId: _stringValue(json['visit_id']),
@@ -234,23 +244,24 @@ class ChequeDashboardStats extends Equatable {
       cleared: _numValue(json['cleared']).toInt(),
       bounced: _numValue(json['bounced']).toInt(),
       cancelled: _numValue(json['cancelled']).toInt(),
-      collectedPendingClearanceAmount:
-          _numValue(json['collected_pending_clearance_amount']),
+      collectedPendingClearanceAmount: _numValue(
+        json['collected_pending_clearance_amount'],
+      ),
     );
   }
 
   @override
   List<Object?> get props => [
-        awaitingCollection,
-        dueToday,
-        pendingApproval,
-        collected,
-        deposited,
-        cleared,
-        bounced,
-        cancelled,
-        collectedPendingClearanceAmount,
-      ];
+    awaitingCollection,
+    dueToday,
+    pendingApproval,
+    collected,
+    deposited,
+    cleared,
+    bounced,
+    cancelled,
+    collectedPendingClearanceAmount,
+  ];
 }
 
 class CreateChequeInput {

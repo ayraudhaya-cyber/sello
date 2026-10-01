@@ -75,7 +75,9 @@ class _SelloColorFieldState extends State<SelloColorField> {
     // Flutter web freezes if the custom HSV board lays out at infinite
     // width. Use the browser picker there — no overlay, no CustomPaint.
     if (kIsWeb) {
-      final picked = await pickBrowserColor(SelloColorField.hexOf(_swatchColor));
+      final picked = await pickBrowserColor(
+        SelloColorField.hexOf(_swatchColor),
+      );
       if (!mounted || picked == null) return;
       final parsed = _parse(picked);
       if (parsed != null) _applyColor(parsed);
@@ -116,10 +118,7 @@ class _SelloColorFieldState extends State<SelloColorField> {
                     style: context.texts.titleMedium,
                   ),
                   const SizedBox(height: 14),
-                  _HsvPicker(
-                    color: _swatchColor,
-                    onChanged: _applyColor,
-                  ),
+                  _HsvPicker(color: _swatchColor, onChanged: _applyColor),
                   const SizedBox(height: 16),
                   SelloButton(
                     label: 'Done',
@@ -149,15 +148,6 @@ class _SelloColorFieldState extends State<SelloColorField> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.outline,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -272,10 +262,7 @@ class _SelloColorFieldState extends State<SelloColorField> {
 }
 
 class _HsvPicker extends StatefulWidget {
-  const _HsvPicker({
-    required this.color,
-    required this.onChanged,
-  });
+  const _HsvPicker({required this.color, required this.onChanged});
 
   static const boardWidth = 280.0;
 
@@ -313,15 +300,9 @@ class _HsvPickerState extends State<_HsvPicker> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _SvSquare(
-          hsv: _hsv,
-          onChanged: _set,
-        ),
+        _SvSquare(hsv: _hsv, onChanged: _set),
         const SizedBox(height: 14),
-        _HueBar(
-          hsv: _hsv,
-          onChanged: _set,
-        ),
+        _HueBar(hsv: _hsv, onChanged: _set),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -349,10 +330,7 @@ class _HsvPickerState extends State<_HsvPicker> {
 }
 
 class _SvSquare extends StatelessWidget {
-  const _SvSquare({
-    required this.hsv,
-    required this.onChanged,
-  });
+  const _SvSquare({required this.hsv, required this.onChanged});
 
   final HSVColor hsv;
   final ValueChanged<HSVColor> onChanged;
@@ -388,10 +366,7 @@ class _SvSquare extends StatelessWidget {
                     color: hsv.toColor(),
                     border: Border.all(color: Colors.white, width: 2),
                     boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33000000),
-                        blurRadius: 4,
-                      ),
+                      BoxShadow(color: Color(0x33000000), blurRadius: 4),
                     ],
                   ),
                 ),
@@ -445,14 +420,12 @@ class _SvPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SvPainter oldDelegate) => oldDelegate.hue != hue;
+  bool shouldRepaint(covariant _SvPainter oldDelegate) =>
+      oldDelegate.hue != hue;
 }
 
 class _HueBar extends StatelessWidget {
-  const _HueBar({
-    required this.hsv,
-    required this.onChanged,
-  });
+  const _HueBar({required this.hsv, required this.onChanged});
 
   final HSVColor hsv;
   final ValueChanged<HSVColor> onChanged;
@@ -524,7 +497,10 @@ class _HexColorFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    var text = newValue.text.toUpperCase().replaceAll(RegExp(r'[^0-9A-F#]'), '');
+    var text = newValue.text.toUpperCase().replaceAll(
+      RegExp(r'[^0-9A-F#]'),
+      '',
+    );
     if (text.isEmpty) {
       return newValue.copyWith(text: '');
     }

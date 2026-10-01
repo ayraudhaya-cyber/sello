@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
+import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/cheque_status.dart';
@@ -21,13 +22,16 @@ class ChequeRepository {
     SupabaseClient? client,
     BusinessEventBus? events,
     MediaStorageService? storage,
-  })  : _client = client ?? SupabaseService.client,
-        _events = events ?? BusinessEventBus(),
-        _storage = storage ?? MediaStorageService();
+    PaymentReceivedDispatcher? paymentReceived,
+  }) : _client = client ?? SupabaseService.client,
+       _events = events ?? BusinessEventBus(),
+       _storage = storage ?? MediaStorageService(),
+       _paymentReceived = paymentReceived;
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
   final MediaStorageService _storage;
+  final PaymentReceivedDispatcher? _paymentReceived;
 
   static const _listSelect = '''
     id,
@@ -126,7 +130,9 @@ class ChequeRepository {
         final today = _dateOnly(DateTime.now());
         query = query
             .eq('status', ChequeStatus.awaitingCollection.dbValue)
-            .or('collection_date.eq.$today,and(collection_date.is.null,cheque_date.lte.$today)');
+            .or(
+              'collection_date.eq.$today,and(collection_date.is.null,cheque_date.lte.$today)',
+            );
       }
 
       final needle = search.trim();
@@ -161,7 +167,10 @@ class ChequeRepository {
           .range(from, to);
 
       final items = (rows as List)
-          .map((row) => ChequeSummary.fromJson(Map<String, dynamic>.from(row as Map)))
+          .map(
+            (row) =>
+                ChequeSummary.fromJson(Map<String, dynamic>.from(row as Map)),
+          )
           .toList();
       final hasMore = items.length > pageSize;
       return ChequePageResult(
@@ -221,8 +230,8 @@ class ChequeRepository {
     final ext = contentType.contains('png')
         ? 'png'
         : contentType.contains('webp')
-            ? 'webp'
-            : MediaConstants.jpegExtension;
+        ? 'webp'
+        : MediaConstants.jpegExtension;
     final path = '$companyId/$chequeKey/cheque.$ext';
     return _storage.upload(
       bucket: MediaConstants.chequeImagesBucket,
@@ -275,7 +284,9 @@ class ChequeRepository {
       final chequeId = result is String ? result : result.toString();
       final detail = await fetchById(chequeId);
       if (detail == null) {
-        throw const UnexpectedFailure('Cheque was created but could not be loaded.');
+        throw const UnexpectedFailure(
+          'Cheque was created but could not be loaded.',
+        );
       }
       await _notifyCreated(detail);
       return detail;
@@ -319,8 +330,9 @@ class ChequeRepository {
           'p_collection_date': input.collectionDate == null
               ? null
               : _dateOnly(input.collectionDate!),
-          'p_deposit_date':
-              input.depositDate == null ? null : _dateOnly(input.depositDate!),
+          'p_deposit_date': input.depositDate == null
+              ? null
+              : _dateOnly(input.depositDate!),
           'p_clearance_date': input.clearanceDate == null
               ? null
               : _dateOnly(input.clearanceDate!),
@@ -337,6 +349,26 @@ class ChequeRepository {
       }
       await _notifyCreated(detail);
       return detail;
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapChequeError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  Future<num> allocateChequePaymentToOrder({
+    required String chequeId,
+    required String orderId,
+  }) async {
+    try {
+      final result = await _client.rpc(
+        'allocate_cheque_payment_to_order',
+        params: {'p_cheque_id': chequeId, 'p_order_id': orderId},
+      );
+      if (result is num) return result;
+      if (result is String) return num.tryParse(result) ?? 0;
+      return 0;
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapChequeError(error.message));
     } catch (error) {
@@ -364,6 +396,7 @@ class ChequeRepository {
         throw const UnexpectedFailure('Unable to load collected cheque.');
       }
       await _notifyStatus(detail, title: 'Cheque received');
+      await _dispatchAppliedPaymentSms(detail.paymentId);
       return detail;
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapChequeError(error.message));
@@ -392,12 +425,14 @@ class ChequeRepository {
   }
 
   Future<ChequeSummary> approveChequeCollection(String chequeId) async {
-    return _transition(
+    final detail = await _transition(
       rpc: 'approve_cheque_collection',
       params: {'p_cheque_id': chequeId},
       chequeId: chequeId,
       title: 'Cheque approved',
     );
+    await _dispatchAppliedPaymentSms(detail.paymentId);
+    return detail;
   }
 
   Future<ChequeSummary> bounceCheque(String chequeId, {String? reason}) async {
@@ -440,6 +475,14 @@ class ChequeRepository {
     }
   }
 
+  Future<void> _dispatchAppliedPaymentSms(String? paymentId) async {
+    final id = paymentId?.trim();
+    if (id == null || id.isEmpty) return;
+    try {
+      await _paymentReceived?.dispatch(id);
+    } catch (_) {}
+  }
+
   Future<void> _notifyCreated(ChequeSummary cheque) async {
     try {
       await _events.publish(
@@ -448,8 +491,7 @@ class ChequeRepository {
           chequeId: cheque.id,
           customerName: cheque.customerName ?? 'a customer',
           amountLabel: cheque.amount.toStringAsFixed(2),
-          awaitingCollection:
-              cheque.status == ChequeStatus.awaitingCollection,
+          awaitingCollection: cheque.status == ChequeStatus.awaitingCollection,
           pendingApproval: cheque.isPendingApproval,
         ),
         actorEmployeeId: cheque.employeeId,
@@ -458,7 +500,10 @@ class ChequeRepository {
     } catch (_) {}
   }
 
-  Future<void> _notifyStatus(ChequeSummary cheque, {required String title}) async {
+  Future<void> _notifyStatus(
+    ChequeSummary cheque, {
+    required String title,
+  }) async {
     try {
       await _events.publish(
         companyId: cheque.companyId,

@@ -133,17 +133,18 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
 
   num get _amountPaid => _collections?.amountPaid ?? 0;
 
-  num get _outstanding => _collections?.outstandingFor(order.total) ??
+  num get _outstanding =>
+      _collections?.outstandingFor(order.total) ??
       (order.paymentStatus == PaymentStatus.paid ? 0 : order.total);
 
   bool get _canCollect =>
       !readOnly &&
-      OrderCollectionRules.canCollect(
+      OrderCollectionRules.canOfferRecordCollection(
         status: order.status,
         paymentStatus: order.paymentStatus,
         total: order.total,
-      ) &&
-      _outstanding > 0.001;
+        outstanding: _outstanding,
+      );
 
   Future<void> _recordCollection() async {
     if (_recording || !_canCollect) return;
@@ -156,6 +157,11 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
       orderNumber: order.orderNumber,
       outstanding: _outstanding,
       currencySymbol: currencySymbol,
+      orderVisitId: order.visitId,
+      orderTotal: order.total,
+      amountPaid: _collections?.amountPaid ?? 0,
+      amountPending: _collections?.amountPending ?? 0,
+      priorEntries: _collections?.entries ?? const [],
     );
     if (!mounted) return;
     if (!saved) {
@@ -163,8 +169,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
       return;
     }
     try {
-      final fresh =
-          await ref.read(orderRepositoryProvider).fetchById(order.id);
+      final fresh = await ref.read(orderRepositoryProvider).fetchById(order.id);
       final balance = await ref
           .read(paymentRepositoryProvider)
           .fetchOrderCollections(order.id);
@@ -188,22 +193,30 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     final canManageDraft = !readOnly && order.isEditable;
     final canFulfill =
         !readOnly && order.status.canFulfill && onFulfill != null;
-    final canArchive = !readOnly &&
+    final canArchive =
+        !readOnly &&
         onArchive != null &&
         (order.status == OrderStatus.completed ||
             order.status == OrderStatus.cancelled);
     final totalOrdered = detail.lines.fold<num>(0, (s, l) => s + l.quantity);
-    final totalDelivered =
-        detail.lines.fold<num>(0, (s, l) => s + l.deliveredQuantity);
-    final totalRemaining =
-        detail.lines.fold<num>(0, (s, l) => s + l.remainingQuantity);
-    final totalCancelled =
-        detail.lines.fold<num>(0, (s, l) => s + l.cancelledQuantity);
-    final fieldConfig = ref.watch(productFieldConfigProvider).valueOrNull ??
+    final totalDelivered = detail.lines.fold<num>(
+      0,
+      (s, l) => s + l.deliveredQuantity,
+    );
+    final totalRemaining = detail.lines.fold<num>(
+      0,
+      (s, l) => s + l.remainingQuantity,
+    );
+    final totalCancelled = detail.lines.fold<num>(
+      0,
+      (s, l) => s + l.cancelledQuantity,
+    );
+    final fieldConfig =
+        ref.watch(productFieldConfigProvider).valueOrNull ??
         ProductFieldConfig(fields: []);
     final hasNotes = order.notes != null && order.notes!.trim().isNotEmpty;
-    final hasAccountExtras = detail.customerWallet != null ||
-        detail.customerCreditAllowed != null;
+    final hasAccountExtras =
+        detail.customerWallet != null || detail.customerCreditAllowed != null;
 
     return SelloFormDialog(
       header: _OrderHero(order: order),
@@ -387,61 +400,57 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               onPrimary: onComplete,
             )
           : _canCollect
-              ? SelloDialogFooter(
-                  destructiveLabel: canFulfill
-                      ? (totalDelivered > 0
-                          ? 'Cancel remaining'
-                          : 'Cancel order')
-                      : (canArchive ? 'Archive' : null),
-                  onDestructive: canFulfill
-                      ? (totalDelivered > 0
-                          ? onCancelRemaining
-                          : onCancelOrder)
-                      : (canArchive ? onArchive : null),
-                  leading: _InvoiceFooterLinks(
-                    onViewInvoice: onViewInvoice,
-                    onPrintInvoice: onPrintInvoice,
-                    onWhatsAppInvoice: onWhatsAppInvoice,
-                    onSmsInvoice: onSmsInvoice,
-                  ),
-                  cancelLabel: canFulfill ? 'Record delivery' : 'Close',
-                  cancelVariant: SelloButtonVariant.outline,
-                  onCancel: canFulfill
-                      ? onFulfill
-                      : () => Navigator.of(context).maybePop(),
-                  primaryLabel: 'Record collection',
-                  primaryLoading: _recording,
-                  onPrimary: _recording ? null : () => _recordCollection(),
-                )
-              : canFulfill
-              ? SelloDialogFooter(
-                  destructiveLabel: totalDelivered > 0
-                      ? 'Cancel remaining'
-                      : 'Cancel order',
-                  onDestructive: totalDelivered > 0
-                      ? onCancelRemaining
-                      : onCancelOrder,
-                  cancelLabel: 'Close',
-                  cancelVariant: SelloButtonVariant.outline,
-                  onCancel: () => Navigator.of(context).maybePop(),
-                  primaryLabel: 'Record delivery',
-                  onPrimary: onFulfill,
-                )
-              : SelloDialogFooter(
-                  destructiveLabel: canArchive ? 'Archive' : null,
-                  onDestructive: canArchive ? onArchive : null,
-                  leading: _InvoiceFooterLinks(
-                    onViewInvoice: onViewInvoice,
-                    onPrintInvoice: onPrintInvoice,
-                    onWhatsAppInvoice: onWhatsAppInvoice,
-                    onSmsInvoice: onSmsInvoice,
-                  ),
-                  cancelLabel: 'Close',
-                  cancelVariant: SelloButtonVariant.outline,
-                  onCancel: () => Navigator.of(context).maybePop(),
-                  primaryLabel: 'Done',
-                  onPrimary: () => Navigator.of(context).maybePop(),
-                ),
+          ? SelloDialogFooter(
+              destructiveLabel: canFulfill
+                  ? (totalDelivered > 0 ? 'Cancel remaining' : 'Cancel order')
+                  : (canArchive ? 'Archive' : null),
+              onDestructive: canFulfill
+                  ? (totalDelivered > 0 ? onCancelRemaining : onCancelOrder)
+                  : (canArchive ? onArchive : null),
+              leading: _InvoiceFooterLinks(
+                onViewInvoice: onViewInvoice,
+                onPrintInvoice: onPrintInvoice,
+                onWhatsAppInvoice: onWhatsAppInvoice,
+                onSmsInvoice: onSmsInvoice,
+              ),
+              cancelLabel: canFulfill ? 'Record delivery' : 'Close',
+              cancelVariant: SelloButtonVariant.outline,
+              onCancel: canFulfill
+                  ? onFulfill
+                  : () => Navigator.of(context).maybePop(),
+              primaryLabel: 'Record collection',
+              primaryLoading: _recording,
+              onPrimary: _recording ? null : () => _recordCollection(),
+            )
+          : canFulfill
+          ? SelloDialogFooter(
+              destructiveLabel: totalDelivered > 0
+                  ? 'Cancel remaining'
+                  : 'Cancel order',
+              onDestructive: totalDelivered > 0
+                  ? onCancelRemaining
+                  : onCancelOrder,
+              cancelLabel: 'Close',
+              cancelVariant: SelloButtonVariant.outline,
+              onCancel: () => Navigator.of(context).maybePop(),
+              primaryLabel: 'Record delivery',
+              onPrimary: onFulfill,
+            )
+          : SelloDialogFooter(
+              destructiveLabel: canArchive ? 'Archive' : null,
+              onDestructive: canArchive ? onArchive : null,
+              leading: _InvoiceFooterLinks(
+                onViewInvoice: onViewInvoice,
+                onPrintInvoice: onPrintInvoice,
+                onWhatsAppInvoice: onWhatsAppInvoice,
+                onSmsInvoice: onSmsInvoice,
+              ),
+              cancelLabel: 'Close',
+              cancelVariant: SelloButtonVariant.outline,
+              onCancel: () => Navigator.of(context).maybePop(),
+              primaryLabel: 'Done',
+              onPrimary: () => Navigator.of(context).maybePop(),
+            ),
     );
   }
 }
@@ -469,36 +478,39 @@ class _InvoiceFooterLinks extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!_hasAny) return const SizedBox.shrink();
 
-    return Wrap(
-      spacing: 4,
-      runSpacing: 0,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (onViewInvoice != null)
-          _InvoiceLink(
-            label: 'View invoice',
-            icon: Icons.open_in_new_rounded,
-            onPressed: onViewInvoice!,
-          ),
-        if (onPrintInvoice != null)
-          _InvoiceLink(
-            label: 'Print invoice',
-            icon: Icons.print_outlined,
-            onPressed: onPrintInvoice!,
-          ),
-        if (onWhatsAppInvoice != null)
-          _InvoiceLink(
-            label: 'WhatsApp',
-            icon: Icons.chat_bubble_outline_rounded,
-            onPressed: onWhatsAppInvoice!,
-          ),
-        if (onSmsInvoice != null)
-          _InvoiceLink(
-            label: 'SMS',
-            icon: Icons.sms_outlined,
-            onPressed: onSmsInvoice!,
-          ),
-      ],
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (onViewInvoice != null)
+            _InvoiceLink(
+              label: 'View invoice',
+              icon: Icons.open_in_new_rounded,
+              onPressed: onViewInvoice!,
+            ),
+          if (onPrintInvoice != null)
+            _InvoiceLink(
+              label: 'Print invoice',
+              icon: Icons.print_outlined,
+              onPressed: onPrintInvoice!,
+            ),
+          if (onWhatsAppInvoice != null)
+            _InvoiceLink(
+              label: 'WhatsApp',
+              icon: Icons.chat_bubble_outline_rounded,
+              onPressed: onWhatsAppInvoice!,
+            ),
+          if (onSmsInvoice != null)
+            _InvoiceLink(
+              label: 'SMS',
+              icon: Icons.sms_outlined,
+              onPressed: onSmsInvoice!,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -516,24 +528,31 @@ class _InvoiceLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 16, color: AppColors.textSecondary),
-      label: Text(
-        label,
-        style: const TextStyle(
-          fontFamily: AppTypography.fontFamily,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textSecondary,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 16, color: AppColors.textSecondary),
+        label: Text(
+          label,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary,
+          ),
         ),
-      ),
-      style: TextButton.styleFrom(
-        foregroundColor: AppColors.textSecondary,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.textSecondary,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
       ),
     );
   }
@@ -642,11 +661,7 @@ class _InfoBlock {
 }
 
 class _InfoGrid extends StatelessWidget {
-  const _InfoGrid({
-    required this.customer,
-    required this.order,
-    this.delivery,
-  });
+  const _InfoGrid({required this.customer, required this.order, this.delivery});
 
   final _InfoBlock customer;
   final _InfoBlock order;
@@ -658,7 +673,8 @@ class _InfoGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= _OrderGrid.wideBreakpoint &&
+        final wide =
+            constraints.maxWidth >= _OrderGrid.wideBreakpoint &&
             blocks.length > 1;
         if (!wide) {
           return Column(
@@ -1011,16 +1027,14 @@ class _ProductMobileRow extends StatelessWidget {
               width: _OrderGrid.indexW,
               child: Text('$index', style: _Type.meta),
             ),
-            Expanded(
-              child: Text(
-                line.displayTitle,
-                style: _Type.productName,
-              ),
-            ),
+            Expanded(child: Text(line.displayTitle, style: _Type.productName)),
             SizedBox(
               width: _OrderGrid.amountW,
               child: Text(
-                SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
+                SelloFormatters.currency(
+                  line.lineTotal,
+                  symbol: currencySymbol,
+                ),
                 textAlign: TextAlign.right,
                 style: _Type.amount,
               ),
@@ -1087,10 +1101,7 @@ String _deliveryLine(OrderLineItem line) {
 }
 
 class _CollectionsList extends StatelessWidget {
-  const _CollectionsList({
-    required this.entries,
-    required this.currencySymbol,
-  });
+  const _CollectionsList({required this.entries, required this.currencySymbol});
 
   final List<OrderCollectionEntry> entries;
   final String currencySymbol;
@@ -1167,18 +1178,12 @@ class _TotalsBlock extends StatelessWidget {
           children: [
             _TotalLine(
               label: 'Subtotal',
-              value: SelloFormatters.currency(
-                subtotal,
-                symbol: currencySymbol,
-              ),
+              value: SelloFormatters.currency(subtotal, symbol: currencySymbol),
             ),
             const SizedBox(height: 8),
             _TotalLine(
               label: 'Discount',
-              value: SelloFormatters.currency(
-                discount,
-                symbol: currencySymbol,
-              ),
+              value: SelloFormatters.currency(discount, symbol: currencySymbol),
             ),
             const SizedBox(height: 8),
             _TotalLine(
@@ -1199,10 +1204,7 @@ class _TotalsBlock extends StatelessWidget {
               ),
               child: _TotalLine(
                 label: 'Grand total',
-                value: SelloFormatters.currency(
-                  total,
-                  symbol: currencySymbol,
-                ),
+                value: SelloFormatters.currency(total, symbol: currencySymbol),
                 emphasize: true,
               ),
             ),

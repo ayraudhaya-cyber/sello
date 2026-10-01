@@ -5,6 +5,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/shared/models/customer_visit.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
+import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
 import 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 import 'package:sello/shared/widgets/inputs/sello_text_field.dart';
 
@@ -54,7 +55,9 @@ class _CompleteVisitSheetState extends ConsumerState<_CompleteVisitSheet> {
     }
     setState(() => _saving = true);
     try {
-      await ref.read(activeCustomerVisitProvider.notifier).completeVisit(
+      await ref
+          .read(activeCustomerVisitProvider.notifier)
+          .completeVisit(
             outcome: outcome,
             notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
           );
@@ -80,17 +83,7 @@ class _CompleteVisitSheetState extends ConsumerState<_CompleteVisitSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.outlinePanel,
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           Text(
             'Complete visit',
             style: context.texts.titleMedium?.copyWith(
@@ -100,6 +93,8 @@ class _CompleteVisitSheetState extends ConsumerState<_CompleteVisitSheet> {
           const SizedBox(height: 4),
           Text(
             widget.customerName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: context.texts.bodyMedium?.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -149,14 +144,23 @@ class _CompleteVisitSheetState extends ConsumerState<_CompleteVisitSheet> {
             maxLines: 3,
           ),
           const SizedBox(height: 20),
-          SelloButton(
-            label: _saving ? 'Saving…' : 'Complete visit',
-            onPressed: _saving ? null : _submit,
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-            child: const Text('Keep visiting'),
+          SelloButtonBar(
+            stretch: true,
+            children: [
+              SelloButton(
+                label: 'Keep visiting',
+                variant: SelloButtonVariant.outline,
+                expanded: true,
+                onPressed: _saving
+                    ? null
+                    : () => Navigator.of(context).pop(false),
+              ),
+              SelloButton(
+                label: _saving ? 'Saving…' : 'Complete visit',
+                expanded: true,
+                onPressed: _saving ? null : _submit,
+              ),
+            ],
           ),
         ],
       ),
@@ -309,4 +313,3 @@ class _MeaningChip extends StatelessWidget {
     );
   }
 }
-

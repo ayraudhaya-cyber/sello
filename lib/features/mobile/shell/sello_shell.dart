@@ -10,6 +10,7 @@ import 'package:sello/services/iam/permission_service.dart';
 import 'package:sello/shared/providers/branding_provider.dart';
 import 'package:sello/shared/widgets/branding/branded_logo.dart';
 import 'package:sello/shared/widgets/branding/branded_shell_app_bar.dart';
+import 'package:sello/shared/widgets/chrome/quick_actions_button.dart';
 import 'package:sello/shared/widgets/chrome/shell_chrome.dart';
 import 'package:sello/shared/widgets/layout/app_page_scaffold.dart';
 import 'package:sello/shared/widgets/navigation/sello_navigation.dart';
@@ -133,19 +134,19 @@ class _MobileSelloShell extends StatelessWidget {
       (d) => (d.branchIndex ?? 0) == index,
     );
 
-    final onHome = index == 0;
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: onHome
-          ? null
-          : BrandedShellAppBar(
-              actions: const [
-                NotificationBellButton(),
-                UserProfileMenu(compact: true),
-                SizedBox(width: AppSpacing.xs),
-              ],
-            ),
+      appBar: BrandedShellAppBar(
+        leading: const QuickActionsButton(style: QuickActionsButtonStyle.menu),
+        centerTitle: true,
+        compactMark: true,
+        size: 24,
+        actions: const [
+          NotificationBellButton(),
+          UserProfileMenu(compact: true),
+          SizedBox(width: AppSpacing.xs),
+        ],
+      ),
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
         selectedIndex: visibleSelected < 0 ? 0 : visibleSelected,
@@ -186,8 +187,7 @@ class _RailSelloShell extends ConsumerWidget {
       (d) => (d.branchIndex ?? 0) == index,
     );
     final branding = ref.watch(brandingProvider);
-    final darkLogo =
-        branding.hasCustomLogo || branding.hasCustomNavBackground;
+    final darkLogo = branding.hasCustomLogo || branding.hasCustomNavBackground;
     final mark = SelloBrandMark(
       compact: !extended,
       size: extended ? 36 : 32,

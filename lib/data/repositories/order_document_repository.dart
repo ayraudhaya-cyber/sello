@@ -111,6 +111,30 @@ class OrderDocumentRepository {
     }
   }
 
+  Future<PaymentReceiptPrepareResult?> preparePaymentReceipt(
+    String paymentId,
+  ) async {
+    try {
+      final result = await _client.rpc(
+        'prepare_payment_receipt',
+        params: {'p_payment_id': paymentId},
+      );
+      if (result is Map<String, dynamic>) {
+        return PaymentReceiptPrepareResult.fromJson(result);
+      }
+      if (result is Map) {
+        return PaymentReceiptPrepareResult.fromJson(
+          Map<String, dynamic>.from(result),
+        );
+      }
+      return null;
+    } on PostgrestException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> recordDispatch({
     required String eventId,
     required OutboundChannel channel,

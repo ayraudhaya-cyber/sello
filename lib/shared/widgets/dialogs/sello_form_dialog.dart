@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:sello/core/responsive/app_breakpoints.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/feedback/sello_info_hint.dart';
@@ -11,6 +12,25 @@ const double kSelloFormDialogWidth = 1120;
 
 /// Standard width for entity detail dialogs (Product, Customer, etc.).
 const double kSelloDetailDialogWidth = 1100;
+
+/// Default body inset on desktop. Narrow / fullscreen phones use a tighter inset.
+const EdgeInsets kSelloFormDialogBodyPadding = EdgeInsets.fromLTRB(
+  32,
+  28,
+  32,
+  8,
+);
+
+/// Phone inset so form copy and fields are not squeezed beside dialog chrome.
+const EdgeInsets kSelloFormDialogBodyPaddingNarrow = EdgeInsets.fromLTRB(
+  20,
+  20,
+  20,
+  8,
+);
+
+/// Compact confirms stay a floating card. Wider forms go edge-to-edge.
+const double kSelloFormDialogCompactMaxWidth = 480;
 
 /// Premium enterprise form / detail dialog shell.
 ///
@@ -30,7 +50,7 @@ class SelloFormDialog extends StatelessWidget {
     this.showCloseButton = true,
     this.onClose,
     this.fullscreenOnMobile = false,
-    this.bodyPadding = const EdgeInsets.fromLTRB(32, 28, 32, 8),
+    this.bodyPadding = kSelloFormDialogBodyPadding,
     this.scrollableBody = true,
   }) : assert(
          header != null || title != null,
@@ -68,9 +88,18 @@ class SelloFormDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final isFullscreen = fullscreenOnMobile && media.width < 720;
+    final narrow = media.width < 720;
+    // Wide CRUD forms (Add Product, Customer, …) fill the phone. Short
+    // confirmations keep a compact floating card.
+    final isFullscreen =
+        narrow &&
+        (fullscreenOnMobile || maxWidth > kSelloFormDialogCompactMaxWidth);
     final maxH = media.height * maxHeightFactor;
     final close = onClose ?? () => Navigator.of(context).maybePop();
+    final resolvedBodyPadding =
+        narrow && bodyPadding == kSelloFormDialogBodyPadding
+        ? kSelloFormDialogBodyPaddingNarrow
+        : bodyPadding;
 
     final content = Material(
       color: AppColors.surface,
@@ -129,8 +158,11 @@ class SelloFormDialog extends StatelessWidget {
             ),
             Flexible(
               child: scrollableBody
-                  ? SingleChildScrollView(padding: bodyPadding, child: body)
-                  : Padding(padding: bodyPadding, child: body),
+                  ? SingleChildScrollView(
+                      padding: resolvedBodyPadding,
+                      child: body,
+                    )
+                  : Padding(padding: resolvedBodyPadding, child: body),
             ),
             // Shared inset so custom footers (raw Rows) get the same margins.
             // Right inset matches the header close control (20) so primary
@@ -140,8 +172,8 @@ class SelloFormDialog extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(
                 isFullscreen ? 20 : 32,
                 16,
-                isFullscreen ? 12 : 20,
-                isFullscreen ? 16 : 24,
+                isFullscreen ? 20 : 20,
+                isFullscreen ? 20 : 24,
               ),
               decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: AppColors.outlinePanel)),
@@ -195,11 +227,18 @@ class _SelloDialogTitleBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: AppTypography.dialogTitle),
+        Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.dialogTitle,
+        ),
         if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
           const SizedBox(height: 2),
           Text(
             subtitle!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 14,
@@ -388,7 +427,7 @@ class SelloFormWeightedRow extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, c) {
-        if (c.maxWidth < stackBelow) {
+        if (!c.maxWidth.isFinite || c.maxWidth < stackBelow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -438,30 +477,28 @@ class SelloStatusToggle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(
-            child: InkWell(
-              onTap: () => onChanged(!value),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: Row(
-                children: [
-                  SelloSwitch(value: value, onChanged: onChanged),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
+          InkWell(
+            onTap: () => onChanged(!value),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SelloSwitch(value: value, onChanged: onChanged),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           if (hint.isNotEmpty) ...[
@@ -663,6 +700,82 @@ class _EmptyPreview extends StatelessWidget {
   }
 }
 
+/// Shared action row for dialogs, sheets, and mobile screens.
+///
+/// Two actions always sit side by side. On a phone they share the width
+/// equally at the bottom of the surface. On a wide dialog they shrink to
+/// the trailing edge. Three or more: quieter actions wrap above, the last
+/// (primary) stays on the bottom row.
+class SelloButtonBar extends StatelessWidget {
+  const SelloButtonBar({
+    super.key,
+    required this.children,
+    this.spacing = 12,
+    this.alignment = Alignment.centerRight,
+    this.stretch,
+  });
+
+  final List<Widget> children;
+  final double spacing;
+  final Alignment alignment;
+
+  /// When true, two actions always share the row equally (sheets / crop).
+  /// When false, they shrink-wrap. Null follows the layout width.
+  final bool? stretch;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.maxWidth.isFinite;
+        final narrow = bounded && constraints.maxWidth < AppBreakpoints.mobile;
+        final fill = stretch ?? narrow;
+        if (!fill) {
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: alignment,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < children.length; i++) ...[
+                  if (i > 0) SizedBox(width: spacing),
+                  children[i],
+                ],
+              ],
+            ),
+          );
+        }
+        if (children.length == 1) {
+          return children.first;
+        }
+        if (children.length == 2) {
+          return Row(
+            children: [
+              Expanded(child: children[0]),
+              SizedBox(width: spacing),
+              Expanded(child: children[1]),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              spacing: spacing,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: children.sublist(0, children.length - 1),
+            ),
+            const SizedBox(height: 10),
+            children.last,
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Dialog action bar — Cancel (secondary) + primary, generously spaced.
 class SelloDialogFooter extends StatelessWidget {
   const SelloDialogFooter({
@@ -673,7 +786,9 @@ class SelloDialogFooter extends StatelessWidget {
     this.cancelLabel = 'Cancel',
     this.primaryLoading = false,
     this.primaryEnabled = true,
+    this.cancelEnabled = true,
     this.cancelVariant = SelloButtonVariant.outline,
+    this.cancelAtStart = false,
     this.destructiveLabel,
     this.onDestructive,
     this.leading,
@@ -687,7 +802,14 @@ class SelloDialogFooter extends StatelessWidget {
   final String cancelLabel;
   final bool primaryLoading;
   final bool primaryEnabled;
+  final bool cancelEnabled;
   final SelloButtonVariant cancelVariant;
+
+  /// Places the cancel/secondary action on the start edge, opposite primary.
+  ///
+  /// Use for account-level actions (Deactivate) that should not sit beside
+  /// Edit as a competing pair.
+  final bool cancelAtStart;
 
   /// Optional leading destructive action (e.g. permanent delete).
   final String? destructiveLabel;
@@ -700,48 +822,79 @@ class SelloDialogFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasDestructive = destructiveLabel != null && onDestructive != null;
 
-    // Left actions grow/wrap; Close + primary stay pinned to the right edge.
-    // Padding / top rule live on [SelloFormDialog] so every modal footer
-    // shares the same inset — including custom Rows.
-    return SizedBox(
-      width: double.infinity,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (hasDestructive)
-                    SelloButton(
-                      label: destructiveLabel!,
-                      variant: SelloButtonVariant.danger,
-                      onPressed: onDestructive,
+    final startActions = <Widget>[
+      if (hasDestructive)
+        SelloButton(
+          label: destructiveLabel!,
+          variant: SelloButtonVariant.danger,
+          onPressed: onDestructive,
+        ),
+      ?leading,
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow =
+            !constraints.maxWidth.isFinite ||
+            constraints.maxWidth < AppBreakpoints.mobile;
+        final fill = narrow;
+        final cancelButton = SelloButton(
+          label: cancelLabel,
+          variant: cancelVariant,
+          expanded: fill,
+          onPressed: !cancelEnabled
+              ? null
+              : (onCancel ?? () => Navigator.of(context).maybePop()),
+        );
+        final primaryButton = SelloButton(
+          label: primaryLabel,
+          variant: SelloButtonVariant.primary,
+          expanded: fill,
+          loading: primaryLoading,
+          onPressed: primaryEnabled && !primaryLoading ? onPrimary : null,
+        );
+
+        final pair = SelloButtonBar(children: [cancelButton, primaryButton]);
+
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (startActions.isNotEmpty) ...[
+                Wrap(spacing: 8, runSpacing: 4, children: startActions),
+                const SizedBox(height: 12),
+              ],
+              pair,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: startActions.isEmpty && !cancelAtStart
+                  ? const SizedBox.shrink()
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ...startActions,
+                        if (cancelAtStart) cancelButton,
+                      ],
                     ),
-                  ?leading,
-                ],
-              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          SelloButton(
-            label: cancelLabel,
-            variant: cancelVariant,
-            onPressed: onCancel ?? () => Navigator.of(context).maybePop(),
-          ),
-          const SizedBox(width: 12),
-          SelloButton(
-            label: primaryLabel,
-            variant: SelloButtonVariant.primary,
-            loading: primaryLoading,
-            onPressed: primaryEnabled && !primaryLoading ? onPrimary : null,
-          ),
-        ],
-      ),
+            const SizedBox(width: 12),
+            cancelAtStart
+                ? SelloButtonBar(stretch: false, children: [primaryButton])
+                : SelloButtonBar(
+                    stretch: false,
+                    children: [cancelButton, primaryButton],
+                  ),
+          ],
+        );
+      },
     );
   }
 }

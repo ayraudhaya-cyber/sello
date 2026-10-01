@@ -316,6 +316,9 @@ class ReportRepository {
               orderedAt: orderedAt,
               asOfDate: asOfDate,
             ),
+            documentType: _asString(map['document_type']) ??
+                kCollectionsDocumentType,
+            referenceNumber: _asString(map['reference_number']),
           ),
         );
       }

@@ -22,6 +22,11 @@ Future<bool> showRecordOrderCollectionSheet({
   required String orderNumber,
   required num outstanding,
   required String currencySymbol,
+  String? orderVisitId,
+  num orderTotal = 0,
+  num amountPaid = 0,
+  num amountPending = 0,
+  List<OrderCollectionEntry> priorEntries = const [],
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -37,6 +42,11 @@ Future<bool> showRecordOrderCollectionSheet({
       orderNumber: orderNumber,
       outstanding: outstanding,
       currencySymbol: currencySymbol,
+      orderVisitId: orderVisitId,
+      orderTotal: orderTotal,
+      amountPaid: amountPaid,
+      amountPending: amountPending,
+      priorEntries: priorEntries,
     ),
   ).then((value) => value ?? false);
 }
@@ -50,6 +60,11 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
     required this.orderNumber,
     required this.outstanding,
     required this.currencySymbol,
+    this.orderVisitId,
+    this.orderTotal = 0,
+    this.amountPaid = 0,
+    this.amountPending = 0,
+    this.priorEntries = const [],
   });
 
   final String customerId;
@@ -58,6 +73,11 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
   final String orderNumber;
   final num outstanding;
   final String currencySymbol;
+  final String? orderVisitId;
+  final num orderTotal;
+  final num amountPaid;
+  final num amountPending;
+  final List<OrderCollectionEntry> priorEntries;
 
   @override
   ConsumerState<RecordOrderCollectionSheet> createState() =>
@@ -70,18 +90,33 @@ class _RecordOrderCollectionSheetState
   final _bank = TextEditingController();
   final _chequeNumber = TextEditingController();
   final _holder = TextEditingController();
-  PaymentMethod _method = PaymentMethod.cash;
+  PaymentMethod _method = OrderCollectionAssociation.defaultNewCollectionMethod;
   DateTime _chequeDate = DateTime.now();
   bool _saving = false;
+  bool _loading = true;
   String? _error;
+  AssociatedChequeMatch? _match;
+
+  OrderCollectionSnapshot get _snapshot => OrderCollectionSnapshot(
+    orderTotal: widget.orderTotal > 0
+        ? widget.orderTotal
+        : widget.outstanding + widget.amountPaid + widget.amountPending,
+    amountPaid: widget.amountPaid,
+    amountPending: widget.amountPending,
+    entries: widget.priorEntries,
+  );
+
+  bool get _usingExisting => OrderCollectionAssociation.shouldUseExistingCheque(
+    method: _method,
+    match: _match,
+  );
 
   @override
   void initState() {
     super.initState();
     _holder.text = widget.customerName;
-    _amount.text = widget.outstanding == widget.outstanding.roundToDouble()
-        ? widget.outstanding.toStringAsFixed(0)
-        : widget.outstanding.toString();
+    _writeAmount(widget.outstanding);
+    Future.microtask(_loadAssociatedCheques);
   }
 
   @override
@@ -95,10 +130,71 @@ class _RecordOrderCollectionSheetState
 
   num? get _parsedAmount => num.tryParse(_amount.text.trim());
 
+  String _money(num value) =>
+      SelloFormatters.currency(value, symbol: widget.currencySymbol);
+
+  void _writeAmount(num value) {
+    _amount.text = value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toString();
+  }
+
+  void _syncAmountToCeiling() {
+    final ceiling = OrderCollectionAssociation.newCollectionCeiling(
+      remaining: widget.outstanding,
+      method: _method,
+      match: _match,
+    );
+    _writeAmount(ceiling > 0 ? ceiling : widget.outstanding);
+  }
+
+  Future<void> _loadAssociatedCheques() async {
+    try {
+      final cheques = await ref
+          .read(chequeRepositoryProvider)
+          .fetchCheques(customerId: widget.customerId, pageSize: 100);
+      final paymentIds = [
+        for (final cheque in cheques.items)
+          if (cheque.paymentId != null) cheque.paymentId!,
+      ];
+      final allocations = await ref
+          .read(paymentRepositoryProvider)
+          .fetchAllocationsForPayments(paymentIds);
+      final match = OrderCollectionAssociation.findAssociatedCheque(
+        cheques: cheques.items,
+        orderId: widget.orderId,
+        orderNumber: widget.orderNumber,
+        orderVisitId: widget.orderVisitId,
+        orderRemaining: widget.outstanding,
+        allocationsByPaymentId: allocations,
+      );
+      if (!mounted) return;
+      setState(() {
+        _match = match;
+        _loading = false;
+        if (match != null &&
+            match.applicableAmount >= widget.outstanding - 0.001) {
+          _method = PaymentMethod.cheque;
+        }
+        _syncAmountToCeiling();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
   Future<void> _save() async {
-    final amountError = OrderCollectionRules.validateAmount(
+    if (_usingExisting) {
+      await _saveExistingCheque();
+      return;
+    }
+
+    final amountError = OrderCollectionRules.validateNewCollection(
+      method: _method,
       amount: _parsedAmount,
-      outstanding: widget.outstanding,
+      remaining: widget.outstanding,
+      match: _match,
     );
     if (amountError != null) {
       setState(() => _error = amountError);
@@ -126,8 +222,13 @@ class _RecordOrderCollectionSheetState
         orderId: widget.orderId,
         amount: amount,
       );
-      if (_method == PaymentMethod.cheque) {
-        await ref.read(chequeRepositoryProvider).createCheque(
+      if (OrderCollectionAssociation.shouldCreateNewCheque(
+        method: _method,
+        match: _match,
+      )) {
+        await ref
+            .read(chequeRepositoryProvider)
+            .createCheque(
               CreateChequeInput(
                 customerId: widget.customerId,
                 amount: amount,
@@ -138,17 +239,21 @@ class _RecordOrderCollectionSheetState
                 collectionDate: DateTime.now(),
                 allocations: [allocation],
                 markCollected: true,
+                visitId: widget.orderVisitId,
                 notes: 'Collected against ${widget.orderNumber}',
               ),
             );
       } else {
-        final result = await ref.read(paymentRepositoryProvider).receivePayment(
+        final result = await ref
+            .read(paymentRepositoryProvider)
+            .receivePayment(
               ReceivePaymentInput(
                 customerId: widget.customerId,
                 amount: amount,
                 method: _method,
                 allocations: [allocation],
                 notes: 'Collected against ${widget.orderNumber}',
+                visitId: widget.orderVisitId,
               ),
             );
         if (!mounted) return;
@@ -176,168 +281,258 @@ class _RecordOrderCollectionSheetState
     }
   }
 
+  Future<void> _saveExistingCheque() async {
+    final match = _match;
+    if (match == null) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(chequeRepositoryProvider);
+      if (match.action == AssociatedChequeAction.collectExisting) {
+        await repo.collectCheque(
+          CollectChequeInput(
+            chequeId: match.cheque.id,
+            collectionDate: DateTime.now(),
+            allocations: [
+              PaymentAllocationInput(
+                orderId: widget.orderId,
+                amount: match.applicableAmount,
+              ),
+            ],
+            notes: 'Collected against ${widget.orderNumber}',
+          ),
+        );
+      } else {
+        await repo.allocateChequePaymentToOrder(
+          chequeId: match.cheque.id,
+          orderId: widget.orderId,
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on AppFailure catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = match.action == AssociatedChequeAction.collectExisting
+            ? 'Unable to collect this cheque.'
+            : 'Unable to apply this cheque.';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    final money = SelloFormatters.currency(
-      widget.outstanding,
-      symbol: widget.currencySymbol,
-    );
+    final outstandingMoney = _money(widget.outstanding);
+    final match = _match;
+    final primaryLabel = _saving
+        ? 'Saving…'
+        : _usingExisting
+        ? OrderCollectionAssociation.existingChequeActionLabel(match!.action)
+        : 'Record collection';
 
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.outlineSubtle,
-                borderRadius: BorderRadius.circular(999),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 4),
+            const Text(
+              'Record collection',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Record collection',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.orderNumber,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          Text(
-            widget.customerName,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Outstanding',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            money,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w800,
-              fontSize: 22,
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Payment method',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final method in OrderCollectionRules.methods)
-                _MethodChip(
-                  label: method == PaymentMethod.bankTransfer
-                      ? 'Bank'
-                      : method.label,
-                  selected: _method == method,
-                  onTap: _saving
-                      ? null
-                      : () => setState(() {
-                            _method = method;
-                            _error = null;
-                          }),
-                ),
-            ],
-          ),
-          if (_method == PaymentMethod.cheque) ...[
-            const SizedBox(height: 14),
-            SelloSriLankaBankField(
-              controller: _bank,
-              optionsViewOpenDirection: OptionsViewOpenDirection.up,
-              onChanged: (_) => setState(() => _error = null),
-            ),
-            const SizedBox(height: 12),
-            SelloTextField(
-              controller: _chequeNumber,
-              label: 'Cheque number',
-              required: true,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            SelloTextField(
-              controller: _holder,
-              label: 'Name on cheque',
-              required: true,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SelloButton(
-                label: 'Cheque date ${DateFormat('d MMM yyyy').format(_chequeDate)}',
-                variant: SelloButtonVariant.outline,
-                onPressed: _saving ? null : _pickChequeDate,
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          SelloTextField(
-            controller: _amount,
-            label: 'Amount received',
-            required: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-            ],
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
-              _error!,
+              widget.orderNumber,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.textSecondary,
               ),
             ),
+            Text(
+              widget.customerName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            if (_loading) ...[
+              const SizedBox(height: 24),
+              const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              const SizedBox(height: 16),
+              const Text(
+                'Outstanding',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                outstandingMoney,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 22,
+                ),
+              ),
+              if (_snapshot.hasPriorCollections) ...[
+                const SizedBox(height: 12),
+                _LabeledValue(
+                  label: 'Already collected',
+                  value: _alreadyCollectedLine(),
+                ),
+                const SizedBox(height: 8),
+                _LabeledValue(label: 'Remaining', value: outstandingMoney),
+              ],
+              if (match != null) ...[
+                const SizedBox(height: 12),
+                _ExistingChequeCard(
+                  match: match,
+                  amountLabel: _money(match.applicableAmount),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SelloTextField(
+                controller: _amount,
+                label: 'Amount received',
+                required: true,
+                enabled: !_usingExisting && !_saving,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'How is this amount being received?',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final method in OrderCollectionRules.methods)
+                    _MethodChip(
+                      label: OrderCollectionAssociation.methodChipLabel(method),
+                      selected: _method == method,
+                      onTap: _saving
+                          ? null
+                          : () => setState(() {
+                              _method = method;
+                              _error = null;
+                              _syncAmountToCeiling();
+                            }),
+                    ),
+                ],
+              ),
+              if (_method == PaymentMethod.cheque && !_usingExisting) ...[
+                const SizedBox(height: 14),
+                SelloSriLankaBankField(
+                  controller: _bank,
+                  optionsViewOpenDirection: OptionsViewOpenDirection.up,
+                  onChanged: (_) => setState(() => _error = null),
+                ),
+                const SizedBox(height: 12),
+                SelloTextField(
+                  controller: _chequeNumber,
+                  label: 'Cheque number',
+                  required: true,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                SelloTextField(
+                  controller: _holder,
+                  label: 'Name on cheque',
+                  required: true,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SelloButton(
+                    label:
+                        'Cheque date ${DateFormat('d MMM yyyy').format(_chequeDate)}',
+                    variant: SelloButtonVariant.outline,
+                    onPressed: _saving ? null : _pickChequeDate,
+                  ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    color: AppColors.error,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SelloButton(
+                label: primaryLabel,
+                expanded: true,
+                loading: _saving,
+                onPressed: _saving ? null : _save,
+              ),
+            ],
           ],
-          const SizedBox(height: 16),
-          SelloButton(
-            label: _saving ? 'Saving…' : 'Record collection',
-            expanded: true,
-            loading: _saving,
-            onPressed: _saving ? null : _save,
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  String _alreadyCollectedLine() {
+    final collected = widget.amountPaid + widget.amountPending;
+    final methods = widget.priorEntries
+        .map(
+          (entry) => OrderCollectionAssociation.methodChipLabel(entry.method),
+        )
+        .toSet();
+    final money = _money(collected);
+    if (methods.length == 1) return '$money · ${methods.first}';
+    return money;
   }
 
   Future<void> _pickChequeDate() async {
@@ -349,6 +544,102 @@ class _RecordOrderCollectionSheetState
     );
     if (picked == null) return;
     setState(() => _chequeDate = picked);
+  }
+}
+
+class _LabeledValue extends StatelessWidget {
+  const _LabeledValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ExistingChequeCard extends StatelessWidget {
+  const _ExistingChequeCard({required this.match, required this.amountLabel});
+
+  final AssociatedChequeMatch match;
+  final String amountLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cheque = match.cheque;
+    final waiting = match.action == AssociatedChequeAction.collectExisting;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: context.brandAccentContainer.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            waiting
+                ? 'Cheque waiting to be collected'
+                : 'Existing cheque not applied to this order',
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            [
+              cheque.chequeNumberLabel,
+              cheque.bankName,
+              amountLabel,
+            ].where((part) => part.trim().isNotEmpty).join(' · '),
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            waiting
+                ? 'Mark this cheque as received instead of recording another one.'
+                : 'Apply this cheque instead of creating another collection.',
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -189,13 +189,13 @@ class ProductOptionsEditorSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 420;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (compact) ...[
                     const Text(
                       'Variants',
                       style: TextStyle(
@@ -216,74 +216,192 @@ class ProductOptionsEditorSection extends StatelessWidget {
                         color: AppColors.textSecondary,
                       ),
                     ),
+                  ] else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Variants',
+                                style: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Each variant is a separate sellable unit with its own '
+                                'item code, price and stock.',
+                                style: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 12.5,
+                                  height: 1.35,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SelloButton(
+                          label: 'Add another option',
+                          icon: Icons.add_rounded,
+                          variant: SelloButtonVariant.secondary,
+                          size: SelloButtonSize.small,
+                          onPressed: onAddOption,
+                        ),
+                      ],
+                    ),
+                  if (lockedNote != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      lockedNote!,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12.5,
+                        height: 1.35,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              SelloButton(
-                label: 'Add another option',
-                icon: Icons.add_rounded,
-                variant: SelloButtonVariant.secondary,
-                size: SelloButtonSize.small,
-                onPressed: onAddOption,
-              ),
-            ],
-          ),
-          if (lockedNote != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              lockedNote!,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12.5,
-                height: 1.35,
-                color: AppColors.textTertiary,
-              ),
-            ),
-          ],
-          if (errorText != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              errorText!,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 13,
-                color: AppColors.error,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0) const SizedBox(height: 12),
-            _OptionCard(
-              index: i,
-              row: rows[i],
-              showCost: showCost,
-              canRemove: canRemoveDraftOption(rows: rows, index: i),
-              onChanged: onChanged,
-              onToggleActive: (active) => onToggleActive(i, active),
-              onRemove: onRemoveOption == null
-                  ? null
-                  : () => onRemoveOption!(i),
-              onNameChanged: onOptionNameChanged,
-              onCodeEdited: onItemCodeEdited,
-              optionNameSuggestions: optionNameSuggestions,
-            ),
-          ],
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelloButton(
-              label: 'Add another option',
-              icon: Icons.add_rounded,
-              variant: SelloButtonVariant.ghost,
-              size: SelloButtonSize.small,
-              onPressed: onAddOption,
-            ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorText!,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13,
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  for (var i = 0; i < rows.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 12),
+                    _OptionCard(
+                      index: i,
+                      row: rows[i],
+                      showCost: showCost,
+                      compact: compact,
+                      canRemove: canRemoveDraftOption(rows: rows, index: i),
+                      onChanged: onChanged,
+                      onToggleActive: (active) => onToggleActive(i, active),
+                      onRemove: onRemoveOption == null
+                          ? null
+                          : () => onRemoveOption!(i),
+                      onNameChanged: onOptionNameChanged,
+                      onCodeEdited: onItemCodeEdited,
+                      optionNameSuggestions: optionNameSuggestions,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: SelloButton(
+                        label: 'Add another option',
+                        icon: Icons.add_rounded,
+                        variant: SelloButtonVariant.ghost,
+                        size: SelloButtonSize.small,
+                        onPressed: onAddOption,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
+    );
+  }
+}
+
+class _OptionCardToolbar extends StatelessWidget {
+  const _OptionCardToolbar({
+    required this.index,
+    required this.compact,
+    required this.isActive,
+    required this.canRemove,
+    required this.onToggleActive,
+    this.onRemove,
+  });
+
+  final int index;
+  final bool compact;
+  final bool isActive;
+  final bool canRemove;
+  final ValueChanged<bool> onToggleActive;
+  final VoidCallback? onRemove;
+
+  static const _titleStyle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontWeight: FontWeight.w600,
+    fontSize: 13,
+    color: AppColors.textSecondary,
+  );
+
+  Widget get _title => Text('Option ${index + 1}', style: _titleStyle);
+
+  Widget get _toggle => SelloStatusToggle(
+        value: isActive,
+        onChanged: onToggleActive,
+        label: 'Active',
+        helper: 'Inactive options stay in history but cannot be sold.',
+      );
+
+  Widget? get _remove {
+    if (!canRemove || onRemove == null) return null;
+    return IconButton(
+      onPressed: onRemove,
+      tooltip: 'Remove option',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      icon: const Icon(
+        Icons.delete_outline_rounded,
+        size: 20,
+        color: AppColors.textTertiary,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remove = _remove;
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _title),
+              if (remove != null) remove,
+            ],
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _toggle,
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: _title),
+        if (remove != null) ...[remove, const SizedBox(width: 4)],
+        _toggle,
+      ],
     );
   }
 }
@@ -293,6 +411,7 @@ class _OptionCard extends StatelessWidget {
     required this.index,
     required this.row,
     required this.showCost,
+    required this.compact,
     required this.canRemove,
     required this.onChanged,
     required this.onToggleActive,
@@ -305,6 +424,7 @@ class _OptionCard extends StatelessWidget {
   final int index;
   final ProductOptionEditorRow row;
   final bool showCost;
+  final bool compact;
   final bool canRemove;
   final VoidCallback onChanged;
   final ValueChanged<bool> onToggleActive;
@@ -329,48 +449,13 @@ class _OptionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Option ${index + 1}',
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-                if (canRemove && onRemove != null) ...[
-                  IconButton(
-                    onPressed: onRemove,
-                    tooltip: 'Remove option',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 36,
-                      minHeight: 36,
-                    ),
-                    icon: const Icon(
-                      Icons.delete_outline_rounded,
-                      size: 20,
-                      color: AppColors.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                SizedBox(
-                  width: 136,
-                  child: SelloStatusToggle(
-                    value: row.isActive,
-                    onChanged: onToggleActive,
-                    label: 'Active',
-                    helper:
-                        'Inactive options stay in history but cannot be sold.',
-                  ),
-                ),
-              ],
+            _OptionCardToolbar(
+              index: index,
+              compact: compact,
+              isActive: row.isActive,
+              canRemove: canRemove && onRemove != null,
+              onToggleActive: onToggleActive,
+              onRemove: onRemove,
             ),
             const SizedBox(height: 12),
             SelloFormRow(

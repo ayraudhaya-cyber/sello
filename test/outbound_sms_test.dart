@@ -599,6 +599,115 @@ void main() {
     });
   });
 
+  group('PaymentReceivedDispatcher opening-balance SMS', () {
+    PaymentReceiptPrepareResult applied({
+      String eventId = 'ev-receipt-1',
+      num amount = 50000,
+      String? openingReference = 'INV-4587',
+      bool alreadyPrepared = false,
+    }) {
+      return PaymentReceiptPrepareResult(
+        ok: true,
+        alreadyPrepared: alreadyPrepared,
+        eventId: eventId,
+        amount: amount,
+        currency: 'LKR',
+        companyName: 'Acme',
+        customerName: 'City Mart',
+        openingReference: openingReference,
+        customer: const OrderConfirmationContact(
+          id: 'cust-1',
+          name: 'City Mart',
+          phone: '0771111111',
+        ),
+      );
+    }
+
+    test('sends payment-received SMS with amount and old reference', () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = PaymentReceivedDispatcher(
+        prepare: (_) async => applied(),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+      );
+
+      await dispatcher.dispatch('pay-1');
+
+      expect(sms.requests, hasLength(1));
+      expect(sms.requests.single.recipientKind, OutboundRecipientKind.customer);
+      expect(sms.requests.single.message, contains('Payment received:'));
+      expect(sms.requests.single.message, contains('50,000.00'));
+      expect(sms.requests.single.message, contains('Reference: INV-4587'));
+      expect(sms.requests.single.message, isNot(contains('Nimal')));
+      expect(sms.requests.single.message.toLowerCase(), isNot(contains('aging')));
+    });
+
+    test('pending or order-only prepare does not send', () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = PaymentReceivedDispatcher(
+        prepare: (_) async => PaymentReceiptPrepareResult.fromJson({
+          'ok': false,
+          'reason': 'not_applied',
+          'has_opening_allocation': false,
+        }),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+      );
+
+      await dispatcher.dispatch('pay-pending');
+      expect(sms.requests, isEmpty);
+    });
+
+    test('approval retry does not send a second provider SMS', () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = PaymentReceivedDispatcher(
+        prepare: (_) async => applied(),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+      );
+
+      await dispatcher.dispatch('pay-1');
+      await dispatcher.dispatch('pay-1');
+
+      expect(sms.providerPosts, 1);
+      expect(sms.results.last, OutboundSmsStatus.alreadySent);
+    });
+
+    test('existing order collection acknowledgement still sends pending copy',
+        () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = CollectionAcknowledgementDispatcher(
+        prepare: (_) async => CollectionAcknowledgementPrepareResult(
+          alreadyPrepared: false,
+          eventId: 'ev-ack',
+          token: 'cccccccccccccccccccccccccccccccccccccccccccccccc',
+          paymentNumber: 'PAY-1',
+          amount: 25000,
+          currency: 'LKR',
+          methodLabel: 'cash',
+          companyName: 'Acme',
+          customerName: 'City Mart',
+          receivedAt: DateTime.utc(2026, 8, 17),
+          customer: const OrderConfirmationContact(
+            id: 'cust-1',
+            name: 'City Mart',
+            phone: '0771111111',
+          ),
+        ),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+      );
+
+      await dispatcher.dispatch('pay-order');
+      expect(sms.requests, isNotEmpty);
+      expect(
+        sms.requests.first.message,
+        contains('pending owner/manager review'),
+      );
+      expect(sms.requests.first.message, isNot(contains('Payment received:')));
+    });
+  });
+
   group('Test SMS', () {
     test('client payload has no token, Sender ID, or message body', () {
       final json = OutboundSmsTest.requestJson('94771234567');

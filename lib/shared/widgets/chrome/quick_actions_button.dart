@@ -6,19 +6,37 @@ import 'package:sello/services/quick_actions/quick_actions_launcher.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/quick_action.dart';
 
+/// Visual treatment for [QuickActionsButton].
+enum QuickActionsButtonStyle {
+  /// Purple chip with label — Hub / Sales desktop top bar.
+  labeled,
+
+  /// Purple bolt icon — dense tablet chrome.
+  compact,
+
+  /// Hamburger in the Sales mobile app bar.
+  menu,
+}
+
 /// Hub / Sales top-bar entry for the Quick Actions workspace.
 ///
 /// Lightweight popup — launches shared dialogs / `?new=1` routes via
 /// [QuickActionsLauncher]. Architecture leaves room for role, context, and
 /// recently-used ranking later.
 class QuickActionsButton extends ConsumerWidget {
-  const QuickActionsButton({
-    super.key,
-    this.compact = false,
-  });
+  const QuickActionsButton({super.key, this.compact = false, this.style});
 
-  /// Icon-only for dense mobile chrome.
+  /// Icon-only for dense mobile chrome. Ignored when [style] is set.
   final bool compact;
+
+  /// Explicit style. Defaults from [compact] when null.
+  final QuickActionsButtonStyle? style;
+
+  QuickActionsButtonStyle get _style =>
+      style ??
+      (compact
+          ? QuickActionsButtonStyle.compact
+          : QuickActionsButtonStyle.labeled);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,24 +46,43 @@ class QuickActionsButton extends ConsumerWidget {
     final actions = QuickActionsCatalog.forRole(session.appRole);
     if (actions.isEmpty) return const SizedBox.shrink();
 
+    List<PopupMenuEntry<QuickActionId>> items(BuildContext context) => [
+      for (var i = 0; i < actions.length; i++) ...[
+        if (i > 0 && _sectionBreak(actions[i - 1].id, actions[i].id))
+          const PopupMenuDivider(height: 8),
+        PopupMenuItem<QuickActionId>(
+          value: actions[i].id,
+          child: _QuickActionRow(action: actions[i]),
+        ),
+      ],
+    ];
+
+    if (_style == QuickActionsButtonStyle.menu) {
+      return PopupMenuButton<QuickActionId>(
+        tooltip: 'Quick Actions',
+        offset: const Offset(0, 8),
+        position: PopupMenuPosition.under,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
+        onSelected: (id) {
+          QuickActionsLauncher.launch(context, ref, id);
+        },
+        itemBuilder: items,
+        icon: const Icon(Icons.menu_rounded),
+      );
+    }
+
     return PopupMenuButton<QuickActionId>(
       tooltip: 'Quick Actions',
-      offset: const Offset(0, 44),
+      offset: const Offset(0, 8),
+      position: PopupMenuPosition.under,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
       onSelected: (id) {
         QuickActionsLauncher.launch(context, ref, id);
       },
-      itemBuilder: (context) => [
-        for (var i = 0; i < actions.length; i++) ...[
-          if (i > 0 && _sectionBreak(actions[i - 1].id, actions[i].id))
-            const PopupMenuDivider(height: 8),
-          PopupMenuItem<QuickActionId>(
-            value: actions[i].id,
-            child: _QuickActionRow(action: actions[i]),
-          ),
-        ],
-      ],
-      child: compact ? const _CompactChip() : const _LabeledChip(),
+      itemBuilder: items,
+      child: _style == QuickActionsButtonStyle.compact
+          ? const _CompactChip()
+          : const _LabeledChip(),
     );
   }
 

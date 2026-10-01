@@ -8,9 +8,11 @@ import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/customers/application/hub_customers_provider.dart';
+import 'package:sello/features/customers/presentation/add_opening_balance_dialog.dart';
 import 'package:sello/features/customers/presentation/customer_details_dialog.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
+import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
@@ -175,7 +177,7 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (dialogContext) => CustomerDetailsDialog(
+      builder: (dialogContext) => _HubCustomerDetailsHost(
         customer: customer,
         currencySymbol: currencySymbol,
         assignedRepresentativeName: assigneeName,
@@ -1397,5 +1399,87 @@ class CustomerEditorDialogState extends State<CustomerEditorDialog> {
     if (parsed == null) return 'Enter a valid number.';
     if (parsed < 0) return 'Value cannot be negative.';
     return null;
+  }
+}
+
+class _HubCustomerDetailsHost extends ConsumerStatefulWidget {
+  const _HubCustomerDetailsHost({
+    required this.customer,
+    required this.currencySymbol,
+    this.assignedRepresentativeName,
+    this.onAddExistingCheque,
+    this.onEdit,
+    this.onToggleArchive,
+    this.onDeletePermanently,
+  });
+
+  final CustomerSummary customer;
+  final String currencySymbol;
+  final String? assignedRepresentativeName;
+  final VoidCallback? onAddExistingCheque;
+  final VoidCallback? onEdit;
+  final VoidCallback? onToggleArchive;
+  final VoidCallback? onDeletePermanently;
+
+  @override
+  ConsumerState<_HubCustomerDetailsHost> createState() =>
+      _HubCustomerDetailsHostState();
+}
+
+class _HubCustomerDetailsHostState
+    extends ConsumerState<_HubCustomerDetailsHost> {
+  late CustomerSummary _customer;
+  int _historyEpoch = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _customer = widget.customer;
+  }
+
+  Future<void> _addOpeningBalance() async {
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AddOpeningBalanceDialog(
+        customer: _customer,
+        currencySymbol: widget.currencySymbol,
+      ),
+    );
+    if (saved != true || !mounted) return;
+    final fresh = await ref
+        .read(customerRepositoryProvider)
+        .fetchById(_customer.id);
+    if (!mounted) return;
+    if (fresh != null) {
+      setState(() {
+        _customer = fresh;
+        _historyEpoch++;
+      });
+    }
+    await ref
+        .read(hubCustomersProvider.notifier)
+        .loadCustomers(showLoading: false);
+    if (!mounted) return;
+    SelloSnackbars.success(context, 'Opening balance added.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdd = ref.watch(permissionServiceProvider)
+            ?.canRecordOpeningBalanceAdjustment ??
+        false;
+    return CustomerDetailsDialog(
+      customer: _customer,
+      currencySymbol: widget.currencySymbol,
+      assignedRepresentativeName: widget.assignedRepresentativeName,
+      openingBalanceHistoryEpoch: _historyEpoch,
+      onAddOpeningBalance:
+          canAdd && _customer.isActive ? _addOpeningBalance : null,
+      onAddExistingCheque: widget.onAddExistingCheque,
+      onEdit: widget.onEdit,
+      onToggleArchive: widget.onToggleArchive,
+      onDeletePermanently: widget.onDeletePermanently,
+    );
   }
 }

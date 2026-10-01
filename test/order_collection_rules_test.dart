@@ -6,17 +6,20 @@ import 'package:sello/shared/models/payment_status.dart';
 
 void main() {
   group('OrderCollectionRules', () {
-    test('unpaid cheque-received orders can be collected later from the order', () {
-      expect(
-        OrderCollectionRules.canCollect(
-          status: OrderStatus.completed,
-          paymentStatus: PaymentStatus.unpaid,
-          total: 50000,
-        ),
-        isTrue,
-      );
-      expect(OrderCollectionRules.methods, contains(PaymentMethod.cheque));
-    });
+    test(
+      'unpaid cheque-received orders can be collected later from the order',
+      () {
+        expect(
+          OrderCollectionRules.canCollect(
+            status: OrderStatus.completed,
+            paymentStatus: PaymentStatus.unpaid,
+            total: 50000,
+          ),
+          isTrue,
+        );
+        expect(OrderCollectionRules.methods, contains(PaymentMethod.cheque));
+      },
+    );
 
     test('credit and cheque-later orders can be collected once submitted', () {
       expect(
@@ -67,7 +70,10 @@ void main() {
     test('partial collection leaves a remainder on the same order', () {
       const outstanding = 100000;
       expect(
-        OrderCollectionRules.validateAmount(amount: 40000, outstanding: outstanding),
+        OrderCollectionRules.validateAmount(
+          amount: 40000,
+          outstanding: outstanding,
+        ),
         isNull,
       );
       expect(
@@ -79,7 +85,10 @@ void main() {
         isNotNull,
       );
       expect(
-        OrderCollectionRules.validateAmount(amount: 0, outstanding: outstanding),
+        OrderCollectionRules.validateAmount(
+          amount: 0,
+          outstanding: outstanding,
+        ),
         isNotNull,
       );
     });
@@ -108,6 +117,27 @@ void main() {
           holderName: 'ABC Inc',
         ),
         isNull,
+      );
+    });
+
+    test('pending allocations hide Record collection even if still unpaid', () {
+      expect(
+        OrderCollectionRules.canOfferRecordCollection(
+          status: OrderStatus.completed,
+          paymentStatus: PaymentStatus.unpaid,
+          total: 19716,
+          outstanding: 0,
+        ),
+        isFalse,
+      );
+    });
+
+    test('checkout method is never inherited for a new collection', () {
+      expect(
+        OrderCollectionAssociation.methodForNewCollection(
+          orderPaymentMethod: PaymentMethod.cheque,
+        ),
+        PaymentMethod.cash,
       );
     });
   });

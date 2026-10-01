@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sello/core/animations/app_durations.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/customer_receivable_adjustment.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_visit.dart';
 import 'package:sello/shared/utils/formatters.dart';
@@ -17,7 +19,7 @@ import 'package:sello/shared/widgets/widgets.dart';
 ///
 /// Shared by Hub (manage) and Sales (lookup). Pass [readOnly] for field sales
 /// so edit/archive/delete stay Owner/Manager-only.
-class CustomerDetailsDialog extends StatelessWidget {
+class CustomerDetailsDialog extends StatefulWidget {
   const CustomerDetailsDialog({
     super.key,
     required this.customer,
@@ -25,6 +27,8 @@ class CustomerDetailsDialog extends StatelessWidget {
     this.onToggleArchive,
     this.onDeletePermanently,
     this.onAddExistingCheque,
+    this.onAddOpeningBalance,
+    this.openingBalanceHistoryEpoch = 0,
     this.readOnly = false,
     this.currencySymbol = '\$',
     this.assignedRepresentativeName,
@@ -36,6 +40,8 @@ class CustomerDetailsDialog extends StatelessWidget {
   final VoidCallback? onToggleArchive;
   final VoidCallback? onDeletePermanently;
   final VoidCallback? onAddExistingCheque;
+  final VoidCallback? onAddOpeningBalance;
+  final int openingBalanceHistoryEpoch;
   final bool readOnly;
   final String currencySymbol;
 
@@ -45,13 +51,25 @@ class CustomerDetailsDialog extends StatelessWidget {
   /// Sales field actions: Start / Complete visit.
   final bool enableVisitActions;
 
+  @override
+  State<CustomerDetailsDialog> createState() => _CustomerDetailsDialogState();
+}
+
+enum _CustomerDetailTab { overview, visitHistory }
+
+class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
   static const double _sectionGap = 36;
+  static const double _fieldGap = 18;
+
+  _CustomerDetailTab _tab = _CustomerDetailTab.overview;
+
+  CustomerSummary get customer => widget.customer;
 
   @override
   Widget build(BuildContext context) {
     final isMobile = context.isMobile;
-    final dash = '—';
-    final canManage = !readOnly && onEdit != null && onToggleArchive != null;
+    final canManage =
+        !widget.readOnly && widget.onEdit != null && widget.onToggleArchive != null;
 
     return SelloFormDialog(
       header: _CustomerHero(customer: customer),
@@ -70,286 +88,32 @@ class CustomerDetailsDialog extends StatelessWidget {
             const _ArchivedNotice(),
             const SizedBox(height: _sectionGap),
           ],
-          if (enableVisitActions)
+          if (widget.enableVisitActions)
             _FieldSalesFocus(
               customer: customer,
-              currencySymbol: currencySymbol,
-              assignedRepresentativeName: assignedRepresentativeName,
+              currencySymbol: widget.currencySymbol,
+              assignedRepresentativeName: widget.assignedRepresentativeName,
             )
           else ...[
-          const SelloIntelligenceBanner(
-            message:
-                'Purchase patterns, risk signals, and growth insights will '
-                'appear here as Sello Intelligence rolls out.',
-          ),
-          const SizedBox(height: _sectionGap),
-          _ProfileSection(
-            label: 'Financial summary',
-            child: Column(
-              children: [
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Outstanding balance',
-                    value: SelloFormatters.currency(
-                      customer.outstandingBalance,
-                      symbol: currencySymbol,
-                    ),
-                  ),
-                  right: _ProfileField(
-                    label: 'Wallet balance',
-                    value: SelloFormatters.currency(
-                      customer.walletBalance,
-                      symbol: currencySymbol,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Credit limit',
-                    value: customer.creditAllowed
-                        ? SelloFormatters.currency(
-                            customer.creditLimit,
-                            symbol: currencySymbol,
-                          )
-                        : 'Credit not allowed',
-                    mutedEmpty: !customer.creditAllowed,
-                  ),
-                  right: _ProfileField(
-                    label: 'Opening balance',
-                    value: SelloFormatters.currency(
-                      customer.openingBalance,
-                      symbol: currencySymbol,
-                    ),
-                  ),
-                ),
-                if (onAddExistingCheque != null) ...[
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SelloButton(
-                      label: 'Add existing cheque',
-                      icon: Icons.account_balance_outlined,
-                      variant: SelloButtonVariant.outline,
-                      size: SelloButtonSize.small,
-                      onPressed: onAddExistingCheque,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Record a cheque received before you started using Sello.',
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 12.5,
-                      height: 1.35,
-                      color: AppColors.textTertiary,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 18),
-                const SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Lifetime sales',
-                    value: 'Coming soon',
-                    mutedEmpty: true,
-                  ),
-                  right: _ProfileField(
-                    label: 'Total orders',
-                    value: 'Coming soon',
-                    mutedEmpty: true,
-                  ),
-                ),
-              ],
+            _CustomerDetailTabs(
+              tab: _tab,
+              onChanged: (value) => setState(() => _tab = value),
             ),
-          ),
-          const SizedBox(height: _sectionGap),
-          _ProfileSection(
-            label: 'Relationship',
-            child: Column(
-              children: [
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Customer since',
-                    value: customer.createdAt != null
-                        ? SelloFormatters.date(customer.createdAt)
-                        : dash,
-                    mutedEmpty: customer.createdAt == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Last purchase',
-                    value: customer.lastPurchaseAt != null
-                        ? SelloFormatters.date(customer.lastPurchaseAt)
-                        : dash,
-                    mutedEmpty: customer.lastPurchaseAt == null,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Type',
-                    value: customer.customerType.label,
-                  ),
-                  right: _ProfileField(
-                    label: 'Company',
-                    value: customer.companyName ?? dash,
-                    mutedEmpty: customer.companyName == null,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Upcoming visit',
-                    value: customer.nextVisitAt != null
-                        ? SelloFormatters.date(customer.nextVisitAt)
-                        : dash,
-                    mutedEmpty: customer.nextVisitAt == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Last completed visit',
-                    value: customer.lastVisitAt != null
-                        ? SelloFormatters.date(customer.lastVisitAt)
-                        : dash,
-                    mutedEmpty: customer.lastVisitAt == null,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Assigned representative',
-                    value: assignedRepresentativeName ?? dash,
-                    mutedEmpty: assignedRepresentativeName == null,
-                  ),
-                  right: const _ProfileField(
-                    label: 'Visit frequency',
-                    value: 'Coming soon',
-                    mutedEmpty: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: _sectionGap),
-          _ProfileSection(
-            label: 'Visit history',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  () {
-                    final parts = <String>[
-                      if (customer.lastVisitAt != null)
-                        'Last visit ${SelloFormatters.date(customer.lastVisitAt)}',
-                      if (customer.nextVisitAt != null)
-                        'Upcoming ${SelloFormatters.date(customer.nextVisitAt)}',
-                    ];
-                    return parts.isEmpty
-                        ? 'Field visit activity for this customer.'
-                        : parts.join(' · ');
-                  }(),
-                  style: _CustomerDetailType.label.copyWith(
-                    color: AppColors.textFaint,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _CustomerVisitTimeline(customerId: customer.id),
-              ],
-            ),
-          ),
-          const SizedBox(height: _sectionGap),
-          _ProfileSection(
-            label: 'Contact',
-            child: Column(
-              children: [
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Phone',
-                    value: PhoneNumber.displayOrNull(customer.phone) ?? dash,
-                    mutedEmpty: customer.phone == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'WhatsApp',
-                    value: PhoneNumber.displayOrNull(customer.whatsapp) ?? dash,
-                    mutedEmpty: customer.whatsapp == null,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Email',
-                    value: customer.email ?? dash,
-                    mutedEmpty: customer.email == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Tax number',
-                    value: customer.taxNumber ?? dash,
-                    mutedEmpty: customer.taxNumber == null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: _sectionGap),
-          _ProfileSection(
-            label: 'Address',
-            child: SelloFormRow(
-              left: _ProfileField(
-                label: 'Address',
-                value: customer.addressLine1 ?? dash,
-                mutedEmpty: customer.addressLine1 == null,
-              ),
-              right: _ProfileField(
-                label: 'City',
-                value: customer.city ?? dash,
-                mutedEmpty: customer.city == null,
-              ),
-            ),
-          ),
-          if (customer.notes != null &&
-              customer.notes!.trim().isNotEmpty &&
-              !readOnly) ...[
-            const SizedBox(height: _sectionGap),
-            _ProfileSection(
-              label: 'Notes',
-              child: Text(
-                customer.notes!,
-                style: _CustomerDetailType.value.copyWith(
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: _sectionGap),
-          _ProfileSection(
-            label: 'Activity',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                EntityActivityPanel(
-                  referenceType: 'customer',
-                  referenceId: customer.id,
-                  emptyMessage: 'No company activity for this customer yet.',
-                  limit: 12,
-                ),
-                const SizedBox(height: 18),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Created',
-                    value: customer.createdAt != null
-                        ? SelloFormatters.date(customer.createdAt)
-                        : dash,
-                    mutedEmpty: customer.createdAt == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Updated',
-                    value: SelloFormatters.date(customer.updatedAt),
-                  ),
-                ),
-              ],
-            ),
-          ),
+            const SizedBox(height: AppSpacing.mdPlus),
+            if (_tab == _CustomerDetailTab.overview)
+              _HubOverviewBody(
+                customer: customer,
+                currencySymbol: widget.currencySymbol,
+                assignedRepresentativeName: widget.assignedRepresentativeName,
+                readOnly: widget.readOnly,
+                openingBalanceHistoryEpoch: widget.openingBalanceHistoryEpoch,
+                onAddOpeningBalance: widget.onAddOpeningBalance,
+                onAddExistingCheque: widget.onAddExistingCheque,
+                sectionGap: _sectionGap,
+                fieldGap: _fieldGap,
+              )
+            else
+              _HubVisitHistoryBody(customer: customer),
           ],
         ],
       ),
@@ -357,15 +121,16 @@ class CustomerDetailsDialog extends StatelessWidget {
           ? SelloDialogFooter(
               cancelLabel: customer.isActive ? 'Deactivate' : 'Reactivate',
               cancelVariant: SelloButtonVariant.ghost,
-              onCancel: onToggleArchive,
+              cancelAtStart: true,
+              onCancel: widget.onToggleArchive,
               primaryLabel: 'Edit Customer',
-              onPrimary: onEdit,
+              onPrimary: widget.onEdit,
               destructiveLabel:
                   customer.isActive ? null : 'Delete permanently',
               onDestructive:
-                  customer.isActive ? null : onDeletePermanently,
+                  customer.isActive ? null : widget.onDeletePermanently,
             )
-          : enableVisitActions
+          : widget.enableVisitActions
               ? _SalesVisitFooter(customer: customer)
               : SelloDialogFooter(
                   cancelLabel: 'Close',
@@ -379,6 +144,455 @@ class CustomerDetailsDialog extends StatelessWidget {
   }
 }
 
+class _CustomerDetailTabs extends StatelessWidget {
+  const _CustomerDetailTabs({
+    required this.tab,
+    required this.onChanged,
+  });
+
+  final _CustomerDetailTab tab;
+  final ValueChanged<_CustomerDetailTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.outlinePanel)),
+      ),
+      child: Row(
+        children: [
+          _tab(context, 'Overview', _CustomerDetailTab.overview),
+          const SizedBox(width: AppSpacing.lg),
+          _tab(context, 'Visit History', _CustomerDetailTab.visitHistory),
+        ],
+      ),
+    );
+  }
+
+  Widget _tab(
+    BuildContext context,
+    String label,
+    _CustomerDetailTab value,
+  ) {
+    final selected = tab == value;
+    return InkWell(
+      onTap: () => onChanged(value),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 10, right: 4),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected
+                      ? AppColors.textPrimary
+                      : AppColors.textTertiary,
+                ),
+              ),
+            ),
+            AnimatedContainer(
+              duration: AppDurations.fast,
+              curve: AppCurves.standard,
+              height: 2,
+              color: selected ? context.brandAccent : Colors.transparent,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HubOverviewBody extends StatelessWidget {
+  const _HubOverviewBody({
+    required this.customer,
+    required this.currencySymbol,
+    required this.readOnly,
+    required this.openingBalanceHistoryEpoch,
+    required this.sectionGap,
+    required this.fieldGap,
+    this.assignedRepresentativeName,
+    this.onAddOpeningBalance,
+    this.onAddExistingCheque,
+  });
+
+  final CustomerSummary customer;
+  final String currencySymbol;
+  final String? assignedRepresentativeName;
+  final bool readOnly;
+  final int openingBalanceHistoryEpoch;
+  final VoidCallback? onAddOpeningBalance;
+  final VoidCallback? onAddExistingCheque;
+  final double sectionGap;
+  final double fieldGap;
+
+  static const _dash = '—';
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFinancialActions =
+        onAddOpeningBalance != null || onAddExistingCheque != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SelloIntelligenceBanner(
+          message:
+              'Purchase patterns, risk signals, and growth insights will '
+              'appear here as Sello Intelligence rolls out.',
+        ),
+        SizedBox(height: sectionGap),
+        _ProfileSection(
+          label: 'Financial summary',
+          showDivider: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Outstanding balance',
+                  value: SelloFormatters.currency(
+                    customer.outstandingBalance,
+                    symbol: currencySymbol,
+                  ),
+                ),
+                right: _ProfileField(
+                  label: 'Wallet balance',
+                  value: SelloFormatters.currency(
+                    customer.walletBalance,
+                    symbol: currencySymbol,
+                  ),
+                ),
+              ),
+              SizedBox(height: fieldGap),
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Credit limit',
+                  value: customer.creditAllowed
+                      ? SelloFormatters.currency(
+                          customer.creditLimit,
+                          symbol: currencySymbol,
+                        )
+                      : 'Credit not allowed',
+                  mutedEmpty: !customer.creditAllowed,
+                ),
+                right: _ProfileField(
+                  label: 'Opening balance',
+                  value: SelloFormatters.currency(
+                    customer.openingBalance,
+                    symbol: currencySymbol,
+                  ),
+                ),
+              ),
+              if (hasFinancialActions) ...[
+                SizedBox(height: fieldGap),
+                Text(
+                  'Financial actions',
+                  style: _CustomerDetailType.label.copyWith(
+                    color: AppColors.textFaint,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
+                  children: [
+                    if (onAddOpeningBalance != null)
+                      _FinancialAction(
+                        button: SelloButton(
+                          label: 'Add opening balance',
+                          icon: Icons.add_card_outlined,
+                          variant: SelloButtonVariant.secondary,
+                          onPressed: onAddOpeningBalance,
+                        ),
+                        hint:
+                            'Add money this customer already owed before Sello.',
+                      ),
+                    if (onAddExistingCheque != null)
+                      _FinancialAction(
+                        button: SelloButton(
+                          label: 'Add existing cheque',
+                          icon: Icons.account_balance_outlined,
+                          variant: SelloButtonVariant.outline,
+                          onPressed: onAddExistingCheque,
+                        ),
+                        hint:
+                            'Record a cheque received before you started using Sello.',
+                      ),
+                  ],
+                ),
+              ],
+              _OpeningBalanceHistory(
+                customerId: customer.id,
+                currencySymbol: currencySymbol,
+                epoch: openingBalanceHistoryEpoch,
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: sectionGap),
+        _ProfileSection(
+          label: 'Customer information',
+          child: Column(
+            children: [
+              const SelloFormRow(
+                left: _ProfileField(
+                  label: 'Lifetime sales',
+                  value: 'Coming soon',
+                  mutedEmpty: true,
+                ),
+                right: _ProfileField(
+                  label: 'Total orders',
+                  value: 'Coming soon',
+                  mutedEmpty: true,
+                ),
+              ),
+              SizedBox(height: fieldGap),
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Customer since',
+                  value: customer.createdAt != null
+                      ? SelloFormatters.date(customer.createdAt)
+                      : _dash,
+                  mutedEmpty: customer.createdAt == null,
+                ),
+                right: _ProfileField(
+                  label: 'Last purchase',
+                  value: customer.lastPurchaseAt != null
+                      ? SelloFormatters.date(customer.lastPurchaseAt)
+                      : _dash,
+                  mutedEmpty: customer.lastPurchaseAt == null,
+                ),
+              ),
+              SizedBox(height: fieldGap),
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Type',
+                  value: customer.customerType.label,
+                ),
+                right: _ProfileField(
+                  label: 'Company',
+                  value: customer.companyName ?? _dash,
+                  mutedEmpty: customer.companyName == null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: sectionGap),
+        _ProfileSection(
+          label: 'Relationship',
+          child: Column(
+            children: [
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Upcoming visit',
+                  value: customer.nextVisitAt != null
+                      ? SelloFormatters.date(customer.nextVisitAt)
+                      : _dash,
+                  mutedEmpty: customer.nextVisitAt == null,
+                ),
+                right: _ProfileField(
+                  label: 'Last completed visit',
+                  value: customer.lastVisitAt != null
+                      ? SelloFormatters.date(customer.lastVisitAt)
+                      : _dash,
+                  mutedEmpty: customer.lastVisitAt == null,
+                ),
+              ),
+              SizedBox(height: fieldGap),
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Assigned representative',
+                  value: assignedRepresentativeName ?? _dash,
+                  mutedEmpty: assignedRepresentativeName == null,
+                ),
+                right: const _ProfileField(
+                  label: 'Visit frequency',
+                  value: 'Coming soon',
+                  mutedEmpty: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: sectionGap),
+        _ProfileSection(
+          label: 'Contact',
+          child: Column(
+            children: [
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Phone',
+                  value: PhoneNumber.displayOrNull(customer.phone) ?? _dash,
+                  mutedEmpty: customer.phone == null,
+                ),
+                right: _ProfileField(
+                  label: 'WhatsApp',
+                  value: PhoneNumber.displayOrNull(customer.whatsapp) ?? _dash,
+                  mutedEmpty: customer.whatsapp == null,
+                ),
+              ),
+              SizedBox(height: fieldGap),
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Email',
+                  value: customer.email ?? _dash,
+                  mutedEmpty: customer.email == null,
+                ),
+                right: _ProfileField(
+                  label: 'Tax number',
+                  value: customer.taxNumber ?? _dash,
+                  mutedEmpty: customer.taxNumber == null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: sectionGap),
+        _ProfileSection(
+          label: 'Address',
+          child: SelloFormRow(
+            left: _ProfileField(
+              label: 'Address',
+              value: customer.addressLine1 ?? _dash,
+              mutedEmpty: customer.addressLine1 == null,
+            ),
+            right: _ProfileField(
+              label: 'City',
+              value: customer.city ?? _dash,
+              mutedEmpty: customer.city == null,
+            ),
+          ),
+        ),
+        if (customer.notes != null &&
+            customer.notes!.trim().isNotEmpty &&
+            !readOnly) ...[
+          SizedBox(height: sectionGap),
+          _ProfileSection(
+            label: 'Notes',
+            child: Text(
+              customer.notes!,
+              style: _CustomerDetailType.value.copyWith(
+                fontWeight: FontWeight.w500,
+                height: 1.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+        SizedBox(height: sectionGap),
+        _ProfileSection(
+          label: 'Activity',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              EntityActivityPanel(
+                referenceType: 'customer',
+                referenceId: customer.id,
+                emptyMessage: 'No company activity for this customer yet.',
+                limit: 12,
+              ),
+              SizedBox(height: fieldGap),
+              SelloFormRow(
+                left: _ProfileField(
+                  label: 'Created',
+                  value: customer.createdAt != null
+                      ? SelloFormatters.date(customer.createdAt)
+                      : _dash,
+                  mutedEmpty: customer.createdAt == null,
+                ),
+                right: _ProfileField(
+                  label: 'Updated',
+                  value: SelloFormatters.date(customer.updatedAt),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HubVisitHistoryBody extends StatelessWidget {
+  const _HubVisitHistoryBody({required this.customer});
+
+  final CustomerSummary customer;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[
+      if (customer.lastVisitAt != null)
+        'Last visit ${SelloFormatters.date(customer.lastVisitAt)}',
+      if (customer.nextVisitAt != null)
+        'Upcoming ${SelloFormatters.date(customer.nextVisitAt)}',
+    ];
+
+    return _ProfileSection(
+      label: 'Visit history',
+      showDivider: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (parts.isNotEmpty) ...[
+            Text(
+              parts.join(' · '),
+              style: _CustomerDetailType.label.copyWith(
+                color: AppColors.textFaint,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          _CustomerVisitTimeline(customerId: customer.id),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _FinancialAction extends StatelessWidget {
+  const _FinancialAction({
+    required this.button,
+    required this.hint,
+  });
+
+  final Widget button;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          button,
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            hint,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12.5,
+              height: 1.35,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Field-sales first view — outstanding, contact, last order; rest behind expand.
 class _FieldSalesFocus extends StatelessWidget {
@@ -627,10 +841,27 @@ class _CustomerVisitTimelineState
       );
     }
     if (_items.isEmpty) {
-      return Text(
-        'No completed visits yet.',
-        style: _CustomerDetailType.label.copyWith(
-          color: AppColors.textFaint,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'No visits yet',
+              style: _CustomerDetailType.label.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              'Completed field visits will appear here.',
+              style: _CustomerDetailType.label.copyWith(
+                color: AppColors.textFaint,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -792,6 +1023,159 @@ class _CustomerHero extends StatelessWidget {
   }
 }
 
+class _OpeningBalanceHistory extends ConsumerStatefulWidget {
+  const _OpeningBalanceHistory({
+    required this.customerId,
+    required this.currencySymbol,
+    required this.epoch,
+  });
+
+  final String customerId;
+  final String currencySymbol;
+  final int epoch;
+
+  @override
+  ConsumerState<_OpeningBalanceHistory> createState() =>
+      _OpeningBalanceHistoryState();
+}
+
+class _OpeningBalanceHistoryState
+    extends ConsumerState<_OpeningBalanceHistory> {
+  List<CustomerReceivableAdjustment> _items = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant _OpeningBalanceHistory oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.epoch != widget.epoch ||
+        oldWidget.customerId != widget.customerId) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final items = await ref
+          .read(customerRepositoryProvider)
+          .fetchOpeningBalanceAdjustments(widget.customerId);
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 18),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (_items.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Opening balance adjustments',
+            style: _CustomerDetailType.label.copyWith(
+              color: AppColors.textFaint,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < _items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            _OpeningBalanceRow(
+              item: _items[i],
+              currencySymbol: widget.currencySymbol,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _OpeningBalanceRow extends StatelessWidget {
+  const _OpeningBalanceRow({
+    required this.item,
+    required this.currencySymbol,
+  });
+
+  final CustomerReceivableAdjustment item;
+  final String currencySymbol;
+
+  TextStyle get _title => _CustomerDetailType.label.copyWith(
+        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w600,
+      );
+
+  TextStyle get _meta => _CustomerDetailType.label.copyWith(
+        color: AppColors.textFaint,
+        fontSize: 12,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final reference = item.referenceNumber?.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Opening balance', style: _title),
+        const SizedBox(height: 2),
+        Text(item.adjustmentNumber, style: _title),
+        if (reference != null && reference.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text('Old invoice / reference: $reference', style: _meta),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Original: ${SelloFormatters.currency(item.amount, symbol: currencySymbol)}',
+          style: _CustomerDetailType.label.copyWith(
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Remaining: ${SelloFormatters.currency(item.remaining, symbol: currencySymbol)}',
+          style: _CustomerDetailType.label.copyWith(
+            color: AppColors.textTertiary,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Date: ${SelloFormatters.date(item.recognizedAt)}',
+          style: _meta,
+        ),
+      ],
+    );
+  }
+}
+
 class _ArchivedNotice extends StatelessWidget {
   const _ArchivedNotice();
 
@@ -830,20 +1214,24 @@ class _ProfileSection extends StatelessWidget {
   const _ProfileSection({
     required this.label,
     required this.child,
+    this.showDivider = true,
   });
 
   final String label;
   final Widget child;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Divider(height: 1, thickness: 1, color: AppColors.outlinePanel),
-        const SizedBox(height: 14),
+        if (showDivider) ...[
+          const Divider(height: 1, thickness: 1, color: AppColors.outlinePanel),
+          const SizedBox(height: 14),
+        ],
         Text(label.toUpperCase(), style: _CustomerDetailType.section),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.md),
         child,
       ],
     );

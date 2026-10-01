@@ -145,20 +145,22 @@ class _OptionalUpdatePromptState extends State<OptionalUpdatePrompt> {
             ),
             const SizedBox(height: 10),
           ],
-          Row(
+          SelloButtonBar(
+            stretch: true,
             children: [
               SelloButton(
                 label: 'Later',
                 variant: SelloButtonVariant.ghost,
+                expanded: true,
                 onPressed: widget.downloading ? null : widget.onLater,
               ),
-              const Spacer(),
               SelloButton(
                 label: widget.downloading
                     ? (widget.downloadFraction == null
-                        ? 'Downloading…'
-                        : 'Downloading ${(widget.downloadFraction! * 100).round()}%')
+                          ? 'Downloading…'
+                          : 'Downloading ${(widget.downloadFraction! * 100).round()}%')
                     : 'Update',
+                expanded: true,
                 onPressed: widget.downloading ? null : widget.onUpdate,
               ),
             ],
@@ -236,7 +238,8 @@ class RequiredUpdatePage extends StatelessWidget {
                     ),
                     _MetaLine(
                       label: 'Required',
-                      value: snapshot.minimum?.versionName ??
+                      value:
+                          snapshot.minimum?.versionName ??
                           snapshot.latest?.versionName ??
                           '—',
                     ),

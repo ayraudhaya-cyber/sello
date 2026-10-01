@@ -6,6 +6,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/payments/application/cheque_lifecycle.dart';
+import 'package:sello/features/payments/presentation/receivable_picker_copy.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
@@ -125,8 +126,8 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
               orders: orders,
               preferredOrderId: widget.preferredOrderId,
             );
-            final fill = preferred ??
-                orders.fold<num>(0, (sum, o) => sum + o.remaining);
+            final fill =
+                preferred ?? orders.fold<num>(0, (sum, o) => sum + o.remaining);
             _amount.text = fill.toStringAsFixed(2);
             _rebalanceAllocations(fill);
           }
@@ -155,8 +156,10 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       orders: _receivables,
       preferredOrderId: widget.preferredOrderId,
     )) {
-      _allocations[alloc.orderId] = alloc.amount;
-      _selectedOrderIds.add(alloc.orderId);
+      final targetId = alloc.orderId ?? alloc.receivableAdjustmentId;
+      if (targetId == null) continue;
+      _allocations[targetId] = alloc.amount;
+      _selectedOrderIds.add(targetId);
     }
   }
 
@@ -229,7 +232,9 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       }
 
       final tempKey = 'draft-${DateTime.now().millisecondsSinceEpoch}';
-      final path = await ref.read(chequeRepositoryProvider).uploadChequePhoto(
+      final path = await ref
+          .read(chequeRepositoryProvider)
+          .uploadChequePhoto(
             companyId: companyId,
             chequeKey: tempKey,
             bytes: prepared.bytes,
@@ -286,7 +291,10 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       return null;
     }
     if (_inHand && _collectionDate == null) {
-      setState(() => _error = 'Date received is required when you already have the cheque.');
+      setState(
+        () => _error =
+            'Date received is required when you already have the cheque.',
+      );
       return null;
     }
     if (_inHand) {
@@ -315,9 +323,9 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
           ? [
               for (final entry in _allocations.entries)
                 if (entry.value > 0)
-                  PaymentAllocationInput(
-                    orderId: entry.key,
-                    amount: entry.value,
+                  PaymentAllocationInput.fromReceivable(
+                    _receivables.firstWhere((r) => r.id == entry.key),
+                    entry.value,
                   ),
             ]
           : const [],
@@ -365,8 +373,8 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
       subtitle: widget.recordingIsOptional
           ? 'The order is already saved. Record this cheque now, or skip and record it later from the order.'
           : _inHand
-              ? 'We have this cheque.'
-              : 'Turn this off if the customer has not given the cheque yet.',
+          ? 'We have this cheque.'
+          : 'Turn this off if the customer has not given the cheque yet.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -408,11 +416,7 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
             },
           ),
           const SizedBox(height: 14),
-          SelloTextField(
-            controller: _holder,
-            label: 'Holder',
-            required: true,
-          ),
+          SelloTextField(controller: _holder, label: 'Holder', required: true),
           const SizedBox(height: 14),
           SelloTextField(
             controller: _amount,
@@ -480,7 +484,8 @@ class _RecordChequeDialogState extends ConsumerState<RecordChequeDialog> {
           ],
           const SizedBox(height: 8),
           _ChequeExtrasSection(
-            expanded: _extrasOpen || _photoBytes != null || _notes.text.isNotEmpty,
+            expanded:
+                _extrasOpen || _photoBytes != null || _notes.text.isNotEmpty,
             onExpansionChanged: (open) => setState(() => _extrasOpen = open),
             photoBytes: _photoBytes,
             uploading: _uploadingPhoto,
@@ -670,9 +675,7 @@ class _ChequeExtrasSection extends StatelessWidget {
             onRemove: onClearPhoto,
             uploadLabel: uploading ? 'Uploading…' : 'Add photo',
             height: 140,
-            hints: const [
-              'Optional photo of the physical cheque',
-            ],
+            hints: const ['Optional photo of the physical cheque'],
           ),
           const SizedBox(height: 12),
           SelloTextField(
@@ -755,103 +758,107 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
         borderRadius: BorderRadius.circular(AppRadius.panel),
       ),
       child: Container(
-          padding: const EdgeInsets.fromLTRB(6, 10, 12, 10),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: selected
-                  ? context.brandAccent.withValues(alpha: 0.28)
-                  : AppColors.outlinePanel,
-            ),
-            borderRadius: BorderRadius.circular(AppRadius.panel),
+        padding: const EdgeInsets.fromLTRB(6, 10, 12, 12),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: selected
+                ? context.brandAccent.withValues(alpha: 0.28)
+                : AppColors.outlinePanel,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => widget.onSelected(!selected),
-                  borderRadius: BorderRadius.circular(AppRadius.panel),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: selected,
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          activeColor: context.brandAccent,
-                          onChanged: (value) =>
-                              widget.onSelected(value ?? false),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                order.orderNumber,
-                                style: const TextStyle(
-                                  fontFamily: AppTypography.fontFamily,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                'Due ${SelloFormatters.currency(order.remaining, symbol: widget.currencySymbol)} · '
-                                '${SelloFormatters.date(order.orderedAt)}',
-                                style: const TextStyle(
-                                  fontFamily: AppTypography.fontFamily,
-                                  fontSize: 12.5,
-                                  color: AppColors.textFaint,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 118,
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _amountFocus,
-                  enabled: selected,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  ],
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    label: const SelloFieldLabel(label: 'Amount'),
-                    isDense: true,
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 10,
-                    ),
-                  ),
-                  onChanged: (value) {
-                    widget.onAmountChanged(num.tryParse(value.trim()) ?? 0);
-                  },
-                ),
-              ),
-            ],
-          ),
+          borderRadius: BorderRadius.circular(AppRadius.panel),
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => widget.onSelected(!selected),
+              borderRadius: BorderRadius.circular(AppRadius.panel),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: selected,
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      activeColor: context.brandAccent,
+                      onChanged: (value) => widget.onSelected(value ?? false),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.pickerTitle,
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              height: 1.3,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          for (final line in ReceivablePickerCopy.subtitleLines(
+                            order,
+                            currencySymbol: widget.currencySymbol,
+                          )) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              line,
+                              style: const TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 12.5,
+                                height: 1.35,
+                                color: AppColors.textFaint,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 8, right: 2),
+              child: TextField(
+                controller: _controller,
+                focusNode: _amountFocus,
+                enabled: selected,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  label: const SelloFieldLabel(label: 'Amount'),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (value) {
+                  widget.onAmountChanged(num.tryParse(value.trim()) ?? 0);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

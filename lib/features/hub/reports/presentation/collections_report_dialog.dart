@@ -545,10 +545,11 @@ class _InvoiceTable extends StatelessWidget {
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(1.1),
-        1: FlexColumnWidth(1.5),
+        1: FlexColumnWidth(1.4),
         2: FlexColumnWidth(1.3),
-        3: FlexColumnWidth(1.1),
-        4: FlexColumnWidth(1.4),
+        3: FlexColumnWidth(1.2),
+        4: FlexColumnWidth(1.0),
+        5: FlexColumnWidth(1.3),
       },
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
@@ -561,6 +562,10 @@ class _InvoiceTable extends StatelessWidget {
             Padding(
               padding: EdgeInsets.only(bottom: 8),
               child: Text('No.', style: headerStyle),
+            ),
+            Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('Old invoice / reference', style: headerStyle),
             ),
             Padding(
               padding: EdgeInsets.only(bottom: 8),
@@ -587,11 +592,15 @@ class _InvoiceTable extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(kCollectionsDocumentType, style: cellStyle),
+                child: Text(invoice.documentType, style: cellStyle),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(invoice.orderNumber, style: cellStyle),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(invoice.referenceNumber ?? '—', style: cellStyle),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),

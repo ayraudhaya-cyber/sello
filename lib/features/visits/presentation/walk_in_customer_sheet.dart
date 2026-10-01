@@ -108,17 +108,7 @@ class _WalkInCustomerSheetState extends State<WalkInCustomerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.outlineSubtle,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
             const Text(
               'Who is buying?',
               style: TextStyle(
@@ -183,11 +173,21 @@ class _WalkInCustomerSheetState extends State<WalkInCustomerSheet> {
               optionsViewOpenDirection: OptionsViewOpenDirection.up,
             ),
             const SizedBox(height: 20),
-            SelloButton(label: 'Save & continue sale', onPressed: _submit),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel — discard this sale'),
+            SelloButtonBar(
+              stretch: true,
+              children: [
+                SelloButton(
+                  label: 'Cancel',
+                  variant: SelloButtonVariant.outline,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                SelloButton(
+                  label: 'Save & continue',
+                  expanded: true,
+                  onPressed: _submit,
+                ),
+              ],
             ),
           ],
         ),

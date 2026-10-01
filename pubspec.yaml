@@ -1,7 +1,7 @@
 name: sello
 description: B2B Sales Order Management for wholesalers and distributors.
 publish_to: "none"
-version: 1.0.10+11
+version: 1.0.11+12
 
 environment:
   sdk: ^3.12.2

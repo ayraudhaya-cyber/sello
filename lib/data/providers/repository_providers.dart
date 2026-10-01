@@ -120,6 +120,36 @@ final collectionAcknowledgementDispatcherProvider =
   },
 );
 
+final paymentReceivedDispatcherProvider = Provider<PaymentReceivedDispatcher>(
+  (ref) {
+    final repo = ref.watch(orderDocumentRepositoryProvider);
+    return PaymentReceivedDispatcher(
+      prepare: repo.preparePaymentReceipt,
+      recordDispatch: ({
+        required String eventId,
+        required OutboundChannel channel,
+        required OutboundRecipientKind recipientKind,
+        required String recipientKey,
+        String? address,
+        OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
+        String? skipReason,
+      }) {
+        return repo.recordDispatch(
+          eventId: eventId,
+          channel: channel,
+          recipientKind: recipientKind,
+          recipientKey: recipientKey,
+          address: address,
+          status: status,
+          skipReason: skipReason,
+        );
+      },
+      policiesResolver: () => repo.fetchOutboundPolicies(),
+      smsSender: ref.watch(outboundSmsSenderProvider),
+    );
+  },
+);
+
 final orderRepositoryProvider = Provider<OrderRepository>(
   (ref) => OrderRepository(
     events: ref.watch(businessEventBusProvider),
@@ -132,11 +162,15 @@ final paymentRepositoryProvider = Provider<PaymentRepository>(
     events: ref.watch(businessEventBusProvider),
     collectionAcknowledgements:
         ref.watch(collectionAcknowledgementDispatcherProvider),
+    paymentReceived: ref.watch(paymentReceivedDispatcherProvider),
   ),
 );
 
 final chequeRepositoryProvider = Provider<ChequeRepository>(
-  (ref) => ChequeRepository(events: ref.watch(businessEventBusProvider)),
+  (ref) => ChequeRepository(
+    events: ref.watch(businessEventBusProvider),
+    paymentReceived: ref.watch(paymentReceivedDispatcherProvider),
+  ),
 );
 
 final inventoryRepositoryProvider = Provider<InventoryRepository>(

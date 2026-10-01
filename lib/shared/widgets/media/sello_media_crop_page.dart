@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
+import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
 import 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 
 /// Optional portrait crop (default 4:5).
@@ -30,10 +31,8 @@ class SelloMediaCropPage extends StatefulWidget {
     return Navigator.of(context).push<Uint8List>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => SelloMediaCropPage(
-          loadBytes: loadBytes,
-          aspectRatio: aspectRatio,
-        ),
+        builder: (_) =>
+            SelloMediaCropPage(loadBytes: loadBytes, aspectRatio: aspectRatio),
       ),
     );
   }
@@ -83,28 +82,26 @@ class _SelloMediaCropPageState extends State<SelloMediaCropPage> {
           Container(
             color: AppColors.surface,
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: Row(
+            child: SelloButtonBar(
+              stretch: true,
               children: [
-                Expanded(
-                  child: SelloButton(
-                    label: 'Cancel',
-                    variant: SelloButtonVariant.outline,
-                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                  ),
+                SelloButton(
+                  label: 'Cancel',
+                  variant: SelloButtonVariant.outline,
+                  expanded: true,
+                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SelloButton(
-                    label: 'Apply crop',
-                    variant: SelloButtonVariant.primary,
-                    loading: _busy,
-                    onPressed: _bytes == null || _busy
-                        ? null
-                        : () {
-                            setState(() => _busy = true);
-                            _controller.crop();
-                          },
-                  ),
+                SelloButton(
+                  label: 'Apply crop',
+                  variant: SelloButtonVariant.primary,
+                  expanded: true,
+                  loading: _busy,
+                  onPressed: _bytes == null || _busy
+                      ? null
+                      : () {
+                          setState(() => _busy = true);
+                          _controller.crop();
+                        },
                 ),
               ],
             ),

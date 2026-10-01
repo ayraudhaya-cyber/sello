@@ -1,8 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sello/core/theme/app_theme.dart';
 import 'package:sello/features/hub/products/presentation/product_options_section.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
 import 'package:sello/shared/models/user_role.dart';
+import 'package:sello/shared/utils/product_catalog_display.dart';
 
 Map<String, dynamic> _variantRow({
   required String id,
@@ -296,6 +299,12 @@ void main() {
       // Parent row still carries legacy columns for DB, but UI must not use them.
       expect(product.sellingPrice, 6000);
       expect(product.costPrice, 4000);
+      expect(product.activePriceRange, (low: 6000, high: 6500));
+      expect(
+        productCatalogPriceLabel(product, symbol: 'Rs'),
+        'Rs6,000.00 – Rs6,500.00',
+      );
+      expect(productCatalogIdentityHint(product), '2 options');
     });
 
     test('10. single-product parent price/cost remain authoritative', () {
@@ -749,6 +758,81 @@ void main() {
       expect(product.sku, 'DL');
       expect(product.activeVariants.map((o) => o.sku).toSet(), {'26342', '13424'});
       expect(product.activeVariants.map((o) => o.sku).contains(product.sku), isFalse);
+    });
+  });
+
+  group('option editor phone layout', () {
+    Future<void> pumpEditor(
+      WidgetTester tester, {
+      required double width,
+      required List<ProductOptionEditorRow> rows,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: width,
+                child: SingleChildScrollView(
+                  child: ProductOptionsEditorSection(
+                    rows: rows,
+                    showCost: true,
+                    errorText: null,
+                    onChanged: () {},
+                    onAddOption: () {},
+                    onToggleActive: (_, _) {},
+                    onRemoveOption: (_) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('does not letter-wrap option copy at phone width', (
+      tester,
+    ) async {
+      final rows = [
+        ProductOptionEditorRow(isDefault: true),
+        ProductOptionEditorRow(),
+      ];
+      addTearDown(() {
+        for (final row in rows) {
+          row.dispose();
+        }
+      });
+
+      await pumpEditor(tester, width: 320, rows: rows);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.text('Option 1')).height, lessThan(24));
+      expect(
+        tester.getSize(find.textContaining('separate sellable unit')).width,
+        greaterThan(160),
+      );
+      expect(find.text('Add another option'), findsOneWidget);
+    });
+
+    testWidgets('keeps the header add action on a wide form', (tester) async {
+      final rows = [
+        ProductOptionEditorRow(isDefault: true),
+        ProductOptionEditorRow(),
+      ];
+      addTearDown(() {
+        for (final row in rows) {
+          row.dispose();
+        }
+      });
+
+      await pumpEditor(tester, width: 720, rows: rows);
+      await tester.pump();
+
+      expect(find.text('Add another option'), findsNWidgets(2));
     });
   });
 }

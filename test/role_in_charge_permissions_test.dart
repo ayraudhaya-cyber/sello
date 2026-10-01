@@ -100,6 +100,7 @@ void main() {
       expect(perms.canManage(AppModule.payments), isFalse);
       expect(perms.canView(AppModule.suppliers), isFalse);
       expect(perms.canView(AppModule.reports), isFalse);
+      expect(perms.canRecordOpeningBalanceAdjustment, isFalse);
     });
   });
 
@@ -124,6 +125,7 @@ void main() {
       expect(perms.canView(AppModule.reports), isTrue);
       expect(perms.canView(AppModule.products), isTrue);
       expect(perms.canView(AppModule.inventory), isTrue);
+      expect(perms.canRecordOpeningBalanceAdjustment, isFalse);
     });
 
     test('cannot adjust inventory or administer settings/team', () {

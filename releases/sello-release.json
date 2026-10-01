@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.10",
-        "build": 11,
-        "released_at": "2026-10-01",
-        "notes": "You can record delivery on an order, unless the owner turns that off\nA visit sale is submitted first — goods stay undelivered until someone records delivery\nYou can skip the cheque at checkout and record it later\nThe customer invoice shows Payment approved after the owner accepts the payment"
+        "version": "1.0.11",
+        "build": 12,
+        "released_at": "2026-10-02",
+        "notes": "Tick the orders or opening balance you are collecting — or Select all\nRecord collection will not create a second cheque if one from this visit already exists\nYou can collect the rest of an order with a different method, such as cheque then cash\nThe catalog shows product options and the price range\nOutstanding, wallet, and credit stay fully readable on a phone"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.10",
-        "build": 11,
-        "released_at": "2026-10-01",
-        "notes": "Settings lets you turn off Sales recording delivery\nThe invoice shows the date the payment was first recorded, not the approval date\nCheque steps use plain words: received, take to bank, bank paid, bank returned\nA visit sale is submitted first — Owner or Sales can record delivery later\nHub dropdowns support arrow keys and Enter"
+        "version": "1.0.11",
+        "build": 12,
+        "released_at": "2026-10-02",
+        "notes": "Add an opening balance on a customer, and collect against it like an invoice\nThe collections report includes opening-balance rows\nReceive payment uses checkboxes — Select all, one order, or only the opening balance\nRecord collection applies an existing visit cheque instead of creating another one\nProduct options and Hub forms wrap cleanly on a phone"
       },
       "minimum": {
         "version": "1.0.0",

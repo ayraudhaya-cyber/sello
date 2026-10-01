@@ -12,20 +12,14 @@ import 'package:sello/shared/models/payment_status.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class OrderPageResult {
-  const OrderPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const OrderPageResult({required this.items, required this.hasMore});
 
   final List<OrderSummary> items;
   final bool hasMore;
 }
 
 class OrderSaveResult {
-  const OrderSaveResult({
-    required this.orderId,
-    this.confirmation,
-  });
+  const OrderSaveResult({required this.orderId, this.confirmation});
 
   final String orderId;
   final OrderConfirmationOutcome? confirmation;
@@ -36,8 +30,8 @@ class OrderRepository {
     SupabaseClient? client,
     BusinessEventBus? events,
     this.confirmations,
-  })  : _client = client ?? SupabaseService.client,
-        _events = events ?? BusinessEventBus();
+  }) : _client = client ?? SupabaseService.client,
+       _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
@@ -60,6 +54,7 @@ class OrderRepository {
     tax_amount,
     total,
     notes,
+    visit_id,
     ordered_at,
     completed_at,
     cancelled_at,
@@ -93,6 +88,7 @@ class OrderRepository {
     tax_amount,
     total,
     notes,
+    visit_id,
     ordered_at,
     completed_at,
     cancelled_at,
@@ -254,10 +250,7 @@ class OrderRepository {
           .map((row) => OrderSummary.fromJson(Map<String, dynamic>.from(row)))
           .toList();
 
-      return OrderPageResult(
-        items: items,
-        hasMore: list.length >= pageSize,
-      );
+      return OrderPageResult(items: items, hasMore: list.length >= pageSize);
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
     } catch (error) {
@@ -371,9 +364,10 @@ class OrderRepository {
         if (remaining <= 0) continue;
 
         variantIds.add(variantId);
-        remainingByOrder
-            .putIfAbsent(orderId, () => [])
-            .add((variantId: variantId, remaining: remaining));
+        remainingByOrder.putIfAbsent(orderId, () => []).add((
+          variantId: variantId,
+          remaining: remaining,
+        ));
       }
 
       if (variantIds.isEmpty) {
@@ -445,7 +439,7 @@ class OrderRepository {
   }
 
   Future<FulfillmentAttentionCounts>
-      _fetchFulfillmentAttentionWithoutReserved() async {
+  _fetchFulfillmentAttentionWithoutReserved() async {
     final orderRows = await _client
         .from('orders')
         .select('id, branch_id, status')
@@ -505,9 +499,10 @@ class OrderRepository {
       final remaining = ordered - delivered - cancelled;
       if (remaining <= 0) continue;
       productIds.add(productId);
-      remainingByOrder
-          .putIfAbsent(orderId, () => [])
-          .add((productId: productId, remaining: remaining));
+      remainingByOrder.putIfAbsent(orderId, () => []).add((
+        productId: productId,
+        remaining: remaining,
+      ));
     }
 
     if (productIds.isEmpty) {
@@ -571,18 +566,14 @@ class OrderRepository {
     try {
       final rows = await _client
           .from('employees')
-          .select(
-            'id, full_name, roles!employees_role_id_fkey (code)',
-          )
+          .select('id, full_name, roles!employees_role_id_fkey (code)')
           .isFilter('deleted_at', null)
           .eq('is_active', true)
           .order('full_name');
       return (rows as List).map((raw) {
         final row = Map<String, dynamic>.from(raw as Map);
         final roles = row['roles'];
-        final roleCode = roles is Map
-            ? roles['code'] as String?
-            : null;
+        final roleCode = roles is Map ? roles['code'] as String? : null;
         return SalesRepOption(
           id: row['id'] as String,
           name: (row['full_name'] as String?)?.trim().isNotEmpty == true
@@ -687,7 +678,8 @@ class OrderRepository {
           kind: OrderTimelineKind.completed,
           title: 'Order completed',
           at: order.completedAt!,
-          detail: 'Inventory reduced · '
+          detail:
+              'Inventory reduced · '
               '${order.paymentStatus.label}'
               '${order.paymentMethod == null ? '' : ' · ${order.paymentMethod!.label}'}',
         ),
@@ -723,30 +715,31 @@ class OrderRepository {
 
       final paymentList = paymentRows as List;
       for (final raw in paymentList) {
-          final row = Map<String, dynamic>.from(raw as Map);
-          final payment = row['payments'];
-          if (payment is! Map) continue;
-          if (payment['deleted_at'] != null) continue;
-          if ((payment['status'] as String?) == 'cancelled') continue;
-          final method = PaymentMethod.fromDb(payment['method'] as String?);
-          final amount = _asNum(row['amount']);
-          final at = DateTime.tryParse(
-                (payment['received_at'] as String?) ??
-                    (row['created_at'] as String?) ??
-                    '',
-              ) ??
-              order.updatedAt;
-          events.add(
-            OrderTimelineEvent(
-              kind: OrderTimelineKind.paymentReceived,
-              title: 'Payment recorded',
-              at: at,
-              detail:
-                  '${payment['payment_number'] ?? 'Payment'} · '
-                  '${method?.label ?? 'Payment'} · $amount',
-            ),
-          );
-        }
+        final row = Map<String, dynamic>.from(raw as Map);
+        final payment = row['payments'];
+        if (payment is! Map) continue;
+        if (payment['deleted_at'] != null) continue;
+        if ((payment['status'] as String?) == 'cancelled') continue;
+        final method = PaymentMethod.fromDb(payment['method'] as String?);
+        final amount = _asNum(row['amount']);
+        final at =
+            DateTime.tryParse(
+              (payment['received_at'] as String?) ??
+                  (row['created_at'] as String?) ??
+                  '',
+            ) ??
+            order.updatedAt;
+        events.add(
+          OrderTimelineEvent(
+            kind: OrderTimelineKind.paymentReceived,
+            title: 'Payment recorded',
+            at: at,
+            detail:
+                '${payment['payment_number'] ?? 'Payment'} · '
+                '${method?.label ?? 'Payment'} · $amount',
+          ),
+        );
+      }
     } catch (_) {
       // Timeline enrichment is best-effort when migrations lag.
     }
@@ -773,7 +766,8 @@ class OrderRepository {
             kind: OrderTimelineKind.stockMoved,
             title: 'Stock movement',
             at: at ?? order.completedAt ?? order.updatedAt,
-            detail: '${stockList.length} line'
+            detail:
+                '${stockList.length} line'
                 '${stockList.length == 1 ? '' : 's'} · '
                 '$totalUnits units adjusted',
           ),
@@ -862,19 +856,22 @@ class OrderRepository {
           );
         }
 
-        await _client.from('orders').update({
-          'customer_id': input.customerId,
-          'payment_status': input.paymentStatus.dbValue,
-          'payment_method': input.paymentMethod?.dbValue,
-          'subtotal': subtotal,
-          'discount_amount': input.resolvedDiscount,
-          'discount_percent': input.orderDiscountPercent,
-          'discount_fixed_amount': input.orderDiscount,
-          'tax_amount': input.taxAmount,
-          'total': total,
-          'notes': _nullIfBlank(input.notes),
-          'updated_by': employeeId,
-        }).eq('id', orderId);
+        await _client
+            .from('orders')
+            .update({
+              'customer_id': input.customerId,
+              'payment_status': input.paymentStatus.dbValue,
+              'payment_method': input.paymentMethod?.dbValue,
+              'subtotal': subtotal,
+              'discount_amount': input.resolvedDiscount,
+              'discount_percent': input.orderDiscountPercent,
+              'discount_fixed_amount': input.orderDiscount,
+              'tax_amount': input.taxAmount,
+              'total': total,
+              'notes': _nullIfBlank(input.notes),
+              'updated_by': employeeId,
+            })
+            .eq('id', orderId);
 
         await _client.from('order_items').delete().eq('order_id', orderId);
       }
@@ -949,9 +946,10 @@ class OrderRepository {
   }) async {
     var publishedCompletion = false;
     try {
-      await _client.rpc('complete_sales_order', params: {
-        'p_order_id': orderId,
-      });
+      await _client.rpc(
+        'complete_sales_order',
+        params: {'p_order_id': orderId},
+      );
       publishedCompletion = true;
     } on PostgrestException catch (error) {
       final existing = await fetchById(orderId);
@@ -988,9 +986,7 @@ class OrderRepository {
     String? employeeId,
   }) async {
     try {
-      await _client.rpc('place_sales_order', params: {
-        'p_order_id': orderId,
-      });
+      await _client.rpc('place_sales_order', params: {'p_order_id': orderId});
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapOrderError(error.message));
     } catch (error) {
@@ -1028,16 +1024,16 @@ class OrderRepository {
       throw const ValidationFailure('Provide at least one delivery line.');
     }
     try {
-      await _client.rpc('fulfill_order_items', params: {
-        'p_order_id': orderId,
-        'p_lines': [
-          for (final line in lines)
-            {
-              'order_item_id': line.orderItemId,
-              'quantity': line.quantity,
-            },
-        ],
-      });
+      await _client.rpc(
+        'fulfill_order_items',
+        params: {
+          'p_order_id': orderId,
+          'p_lines': [
+            for (final line in lines)
+              {'order_item_id': line.orderItemId, 'quantity': line.quantity},
+          ],
+        },
+      );
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapOrderError(error.message));
     } catch (error) {
@@ -1054,18 +1050,21 @@ class OrderRepository {
     List<({String orderItemId, num quantity})>? lines,
   }) async {
     try {
-      await _client.rpc('cancel_order_remaining', params: {
-        'p_order_id': orderId,
-        'p_lines': lines == null
-            ? null
-            : [
-                for (final line in lines)
-                  {
-                    'order_item_id': line.orderItemId,
-                    'quantity': line.quantity,
-                  },
-              ],
-      });
+      await _client.rpc(
+        'cancel_order_remaining',
+        params: {
+          'p_order_id': orderId,
+          'p_lines': lines == null
+              ? null
+              : [
+                  for (final line in lines)
+                    {
+                      'order_item_id': line.orderItemId,
+                      'quantity': line.quantity,
+                    },
+                ],
+        },
+      );
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapOrderError(error.message));
     } catch (error) {
@@ -1105,15 +1104,17 @@ class OrderRepository {
           return;
         }
       } else {
-        await _client.from('orders').update({
-          'status': OrderStatus.cancelled.dbValue,
-          'cancelled_at': DateTime.now().toUtc().toIso8601String(),
-          'updated_by': employeeId,
-        }).eq('id', orderId);
+        await _client
+            .from('orders')
+            .update({
+              'status': OrderStatus.cancelled.dbValue,
+              'cancelled_at': DateTime.now().toUtc().toIso8601String(),
+              'updated_by': employeeId,
+            })
+            .eq('id', orderId);
       }
 
-      final resolvedCompanyId =
-          companyId ?? existing['company_id'] as String?;
+      final resolvedCompanyId = companyId ?? existing['company_id'] as String?;
       final orderNumber = existing['order_number'] as String? ?? orderId;
       if (resolvedCompanyId != null) {
         await _events.publish(

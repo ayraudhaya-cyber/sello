@@ -39,6 +39,7 @@ export 'package:sello/shared/widgets/media/sello_media_source_sheet.dart';
 export 'package:sello/shared/widgets/media/sello_product_media_gallery.dart';
 export 'package:sello/shared/widgets/navigation/sello_navigation.dart';
 export 'package:sello/shared/widgets/products/product_dynamic_fields.dart';
+export 'package:sello/shared/widgets/products/product_options_readonly_list.dart';
 export 'package:sello/shared/widgets/reports/sello_report_filters.dart';
 export 'package:sello/shared/widgets/reports/sello_report_kpi.dart';
 export 'package:sello/shared/widgets/security/permission_gate.dart';

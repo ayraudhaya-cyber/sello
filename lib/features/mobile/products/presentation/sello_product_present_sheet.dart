@@ -9,7 +9,9 @@ import 'package:sello/shared/models/product_field.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/utils/country_catalog.dart';
 import 'package:sello/shared/utils/formatters.dart';
+import 'package:sello/shared/utils/product_catalog_display.dart';
 import 'package:sello/shared/widgets/media/sello_image_lightbox.dart';
+import 'package:sello/shared/widgets/products/product_options_readonly_list.dart';
 import 'package:sello/shared/widgets/states/sello_empty_state.dart';
 
 /// Opens the Photos-style viewer for a product's full gallery.
@@ -122,6 +124,11 @@ class _SelloProductPresentSheetState
 
   ProductSummary get product => widget.product;
 
+  String get _unitLabel {
+    final label = product.unitLabel?.trim();
+    return (label != null && label.isNotEmpty) ? label : 'piece';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -224,6 +231,9 @@ class _SelloProductPresentSheetState
                       [
                         product.sku,
                         if (product.categoryName != null) product.categoryName!,
+                        if (product.unitLabel != null &&
+                            product.unitLabel!.trim().isNotEmpty)
+                          product.unitLabel!.trim(),
                       ].join(' · '),
                       style: context.texts.bodyMedium?.copyWith(
                         color: context.selloColors.textSecondary,
@@ -231,8 +241,8 @@ class _SelloProductPresentSheetState
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      SelloFormatters.currency(
-                        product.sellingPrice,
+                      productCatalogPriceLabel(
+                        product,
                         symbol: widget.currencySymbol,
                       ),
                       style: context.texts.headlineMedium?.copyWith(
@@ -242,12 +252,24 @@ class _SelloProductPresentSheetState
                     ),
                     const SizedBox(height: AppSpacing.xxs),
                     Text(
-                      '${SelloFormatters.quantity(product.currentStockQuantity)} '
-                      '${product.unitLabel?.trim().isNotEmpty == true ? product.unitLabel : 'units'} in stock',
+                      product.hasMultipleActiveVariants
+                          ? '${product.activeOptionCount} active options · '
+                              '${SelloFormatters.quantity(product.currentStockQuantity)} '
+                              '$_unitLabel total'
+                          : '${SelloFormatters.quantity(product.currentStockQuantity)} '
+                              '$_unitLabel in stock',
                       style: context.texts.bodyMedium?.copyWith(
                         color: context.selloColors.textSecondary,
                       ),
                     ),
+                    if (product.hasMultipleActiveVariants) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      ProductOptionsReadonlyList(
+                        options: product.activeVariants,
+                        currencySymbol: widget.currencySymbol,
+                        unitLabel: _unitLabel,
+                      ),
+                    ],
                     ..._buildCatalogSpecs(context),
                     if (product.description != null &&
                         product.description!.trim().isNotEmpty &&

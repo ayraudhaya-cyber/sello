@@ -1,11 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/payments/application/receive_payment_allocation.dart';
+import 'package:sello/features/payments/presentation/receivable_picker_copy.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
@@ -34,6 +37,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   CustomerSummary? _customer;
   List<ReceivableOrder> _receivables = const [];
   final Map<String, num> _allocations = {};
+  final Set<String> _selectedIds = {};
   PaymentMethod? _method = PaymentMethod.cash;
   final _amount = TextEditingController();
   final _reference = TextEditingController();
@@ -63,9 +67,8 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   Future<void> _pickCustomer() async {
     final selected = await showDialog<CustomerSummary>(
       context: context,
-      builder: (context) => _CustomerPicker(
-        currencySymbol: widget.currencySymbol,
-      ),
+      builder: (context) =>
+          _CustomerPicker(currencySymbol: widget.currencySymbol),
     );
     if (selected == null || !mounted) return;
     await _applyCustomer(selected);
@@ -75,6 +78,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     setState(() {
       _customer = selected;
       _allocations.clear();
+      _selectedIds.clear();
       _amount.clear();
       _error = null;
       _loadingOrders = true;
@@ -87,20 +91,6 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       setState(() {
         _receivables = orders;
         _loadingOrders = false;
-        if (orders.isNotEmpty) {
-          final totalDue = orders.fold<num>(0, (sum, o) => sum + o.remaining);
-          _amount.text = totalDue.toStringAsFixed(2);
-          // Default FIFO full allocation
-          var remaining = totalDue;
-          for (final order in orders) {
-            final take = order.remaining.clamp(0, remaining);
-            if (take > 0) {
-              _allocations[order.id] = take;
-              remaining -= take;
-            }
-            if (remaining <= 0) break;
-          }
-        }
       });
     } on AppFailure catch (failure) {
       if (!mounted) return;
@@ -111,17 +101,68 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     }
   }
 
-  void _rebalanceAllocations(num paymentAmount) {
-    _allocations.clear();
-    var remaining = paymentAmount;
-    for (final order in _receivables) {
-      if (remaining <= 0) break;
-      final take = order.remaining.clamp(0, remaining);
-      if (take > 0) {
-        _allocations[order.id] = take;
-        remaining -= take;
-      }
+  void _writePaymentAmount(num value) {
+    if (value <= 0) {
+      _amount.clear();
+      return;
     }
+    _amount.text = value.toStringAsFixed(2);
+  }
+
+  void _syncAmountFromAllocations() {
+    _writePaymentAmount(ReceivePaymentAllocation.totalOf(_allocations));
+  }
+
+  void _toggleReceivable(ReceivableOrder receivable, bool selected) {
+    setState(() {
+      _error = null;
+      if (selected) {
+        _selectedIds.add(receivable.id);
+        _allocations[receivable.id] = ReceivePaymentAllocation.fullAmount(
+          receivable,
+        );
+      } else {
+        _selectedIds.remove(receivable.id);
+        _allocations.remove(receivable.id);
+      }
+      _syncAmountFromAllocations();
+    });
+  }
+
+  void _editReceivableAmount(ReceivableOrder receivable, num amount) {
+    setState(() {
+      _error = null;
+      final clamped = ReceivePaymentAllocation.clampAmount(
+        amount: amount,
+        remaining: receivable.remaining,
+      );
+      if (clamped <= 0) {
+        _selectedIds.remove(receivable.id);
+        _allocations.remove(receivable.id);
+      } else {
+        _selectedIds.add(receivable.id);
+        _allocations[receivable.id] = clamped;
+      }
+      _syncAmountFromAllocations();
+    });
+  }
+
+  void _toggleSelectAll(bool? value) {
+    setState(() {
+      _error = null;
+      if (value == true) {
+        _allocations
+          ..clear()
+          ..addAll(ReceivePaymentAllocation.selectAll(_receivables));
+        _selectedIds
+          ..clear()
+          ..addAll(_allocations.keys);
+      } else {
+        _allocations.clear();
+        _selectedIds.clear();
+      }
+      _syncAmountFromAllocations();
+    });
   }
 
   ReceivePaymentInput? _buildInput() {
@@ -143,6 +184,15 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       setState(() => _error = 'Wallet balance is insufficient.');
       return null;
     }
+    final allocationError = ReceivePaymentAllocation.validate(
+      paymentAmount: amount,
+      allocations: _allocations,
+      receivables: _receivables,
+    );
+    if (allocationError != null) {
+      setState(() => _error = allocationError);
+      return null;
+    }
 
     return ReceivePaymentInput(
       customerId: _customer!.id,
@@ -151,7 +201,10 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       allocations: [
         for (final entry in _allocations.entries)
           if (entry.value > 0)
-            PaymentAllocationInput(orderId: entry.key, amount: entry.value),
+            PaymentAllocationInput.fromReceivable(
+              _receivables.firstWhere((r) => r.id == entry.key),
+              entry.value,
+            ),
       ],
       reference: _reference.text.trim().isEmpty ? null : _reference.text.trim(),
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
@@ -172,8 +225,6 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
 
     return SelloFormDialog(
       title: 'Receive payment',
-      subtitle:
-          'Collect against outstanding orders. Partial and multi-order payments are supported.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -217,12 +268,12 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
           ),
           if (_customer != null)
             SelloDialogSection(
-              title: 'Outstanding orders',
+              title: 'Outstanding',
               children: [
                 if (_loadingOrders)
                   const LinearProgressIndicator(minHeight: 2)
                 else if (_receivables.isEmpty)
-                  Text(
+                  const Text(
                     'No unpaid completed orders. Payment will reduce the '
                     'customer balance / credit the wallet if overpaid.',
                     style: TextStyle(
@@ -232,27 +283,14 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                     ),
                   )
                 else
-                  Column(
-                    children: [
-                      for (final order in _receivables) ...[
-                        _OrderAllocRow(
-                          order: order,
-                          currencySymbol: symbol,
-                          allocated: _allocations[order.id] ?? 0,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value <= 0) {
-                                _allocations.remove(order.id);
-                              } else {
-                                _allocations[order.id] =
-                                    value.clamp(0, order.remaining);
-                              }
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
+                  _OutstandingAllocations(
+                    receivables: _receivables,
+                    selectedIds: _selectedIds,
+                    allocations: _allocations,
+                    currencySymbol: symbol,
+                    onSelectAll: _toggleSelectAll,
+                    onSelected: _toggleReceivable,
+                    onAmountChanged: _editReceivableAmount,
                   ),
               ],
             ),
@@ -263,14 +301,11 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                 controller: _amount,
                 label: 'Amount',
                 required: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (value) {
-                  final parsed = num.tryParse(value.trim()) ?? 0;
-                  setState(() {
-                    _error = null;
-                    _rebalanceAllocations(parsed);
-                  });
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (_) {
+                  setState(() => _error = null);
                 },
               ),
             ],
@@ -363,47 +398,248 @@ class _CustomerStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.panel),
         border: Border.all(color: AppColors.outlinePanel),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  customer.name,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      customer.name,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        height: 1.3,
+                      ),
+                    ),
+                    if (customer.phone != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        customer.phone!,
+                        style: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 13,
+                          height: 1.35,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SelloButton(
+                label: 'Change',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.ghost,
+                onPressed: onChange,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _CustomerFact(
+            label: 'Outstanding',
+            value: SelloFormatters.currency(
+              customer.outstandingBalance,
+              symbol: currencySymbol,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _CustomerFact(
+            label: 'Wallet',
+            value: SelloFormatters.currency(
+              customer.walletBalance,
+              symbol: currencySymbol,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _CustomerFact(
+            label: 'Credit',
+            value: customer.creditAllowed
+                ? SelloFormatters.currency(
+                    customer.creditLimit,
+                    symbol: currencySymbol,
+                  )
+                : 'Not allowed',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerFact extends StatelessWidget {
+  const _CustomerFact({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 104,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OutstandingAllocations extends StatelessWidget {
+  const _OutstandingAllocations({
+    required this.receivables,
+    required this.selectedIds,
+    required this.allocations,
+    required this.currencySymbol,
+    required this.onSelectAll,
+    required this.onSelected,
+    required this.onAmountChanged,
+  });
+
+  final List<ReceivableOrder> receivables;
+  final Set<String> selectedIds;
+  final Map<String, num> allocations;
+  final String currencySymbol;
+  final ValueChanged<bool?> onSelectAll;
+  final void Function(ReceivableOrder receivable, bool selected) onSelected;
+  final void Function(ReceivableOrder receivable, num amount) onAmountChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDue = receivables.fold<num>(
+      0,
+      (sum, row) => sum + row.remaining,
+    );
+    final selectAllValue = ReceivePaymentAllocation.selectAllValue(
+      receivables: receivables,
+      selectedIds: selectedIds,
+    );
+
+    return Column(
+      children: [
+        _SelectAllRow(
+          value: selectAllValue,
+          totalLabel: SelloFormatters.currency(
+            totalDue,
+            symbol: currencySymbol,
+          ),
+          onChanged: onSelectAll,
+        ),
+        const SizedBox(height: 8),
+        for (final receivable in receivables) ...[
+          _OrderAllocRow(
+            order: receivable,
+            currencySymbol: currencySymbol,
+            selected: selectedIds.contains(receivable.id),
+            allocated: allocations[receivable.id] ?? 0,
+            onSelected: (selected) => onSelected(receivable, selected),
+            onAmountChanged: (value) => onAmountChanged(receivable, value),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _SelectAllRow extends StatelessWidget {
+  const _SelectAllRow({
+    required this.value,
+    required this.totalLabel,
+    required this.onChanged,
+  });
+
+  final bool? value;
+  final String totalLabel;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == true;
+    return Material(
+      color: selected
+          ? context.brandAccentContainer.withValues(alpha: 0.45)
+          : AppColors.surfaceMuted,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.panel),
+      ),
+      child: InkWell(
+        onTap: () => onChanged(value == true ? false : true),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(6, 8, 14, 8),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected
+                  ? context.brandAccent.withValues(alpha: 0.28)
+                  : AppColors.outlinePanel,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.panel),
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                tristate: true,
+                value: value,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                activeColor: context.brandAccent,
+                onChanged: onChanged,
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                'Select all',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  totalLabel,
+                  textAlign: TextAlign.end,
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  [
-                    if (customer.phone != null) customer.phone!,
-                    'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: currencySymbol)}',
-                    'Wallet ${SelloFormatters.currency(customer.walletBalance, symbol: currencySymbol)}',
-                    customer.creditAllowed
-                        ? 'Credit ${SelloFormatters.currency(customer.creditLimit, symbol: currencySymbol)}'
-                        : 'No credit',
-                  ].join(' · '),
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
                     fontSize: 13,
-                    height: 1.4,
+                    height: 1.3,
                     color: AppColors.textSecondary,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          SelloButton(
-            label: 'Change',
-            size: SelloButtonSize.small,
-            variant: SelloButtonVariant.ghost,
-            onPressed: onChange,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -413,14 +649,18 @@ class _OrderAllocRow extends StatefulWidget {
   const _OrderAllocRow({
     required this.order,
     required this.currencySymbol,
+    required this.selected,
     required this.allocated,
-    required this.onChanged,
+    required this.onSelected,
+    required this.onAmountChanged,
   });
 
   final ReceivableOrder order;
   final String currencySymbol;
+  final bool selected;
   final num allocated;
-  final ValueChanged<num> onChanged;
+  final ValueChanged<bool> onSelected;
+  final ValueChanged<num> onAmountChanged;
 
   @override
   State<_OrderAllocRow> createState() => _OrderAllocRowState();
@@ -428,27 +668,33 @@ class _OrderAllocRow extends StatefulWidget {
 
 class _OrderAllocRowState extends State<_OrderAllocRow> {
   late final TextEditingController _controller;
+  late final FocusNode _amountFocus;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(
-      text: widget.allocated > 0 ? widget.allocated.toStringAsFixed(2) : '',
-    );
+    _amountFocus = FocusNode();
+    _controller = TextEditingController(text: _displayAmount(widget));
   }
 
   @override
   void didUpdateWidget(covariant _OrderAllocRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final next =
-        widget.allocated > 0 ? widget.allocated.toStringAsFixed(2) : '';
+    if (_amountFocus.hasFocus) return;
+    final next = _displayAmount(widget);
     if (_controller.text != next) {
       _controller.text = next;
     }
   }
 
+  String _displayAmount(_OrderAllocRow row) {
+    if (!row.selected || row.allocated <= 0) return '';
+    return row.allocated.toStringAsFixed(2);
+  }
+
   @override
   void dispose() {
+    _amountFocus.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -456,54 +702,117 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.outlinePanel),
+    final selected = widget.selected;
+
+    return Material(
+      color: selected
+          ? context.brandAccentContainer.withValues(alpha: 0.45)
+          : AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.panel),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  order.orderNumber,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Due ${SelloFormatters.currency(order.remaining, symbol: widget.currencySymbol)} · '
-                  '${SelloFormatters.date(order.orderedAt)}',
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-              ],
-            ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 10, 12, 12),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: selected
+                ? context.brandAccent.withValues(alpha: 0.28)
+                : AppColors.outlinePanel,
           ),
-          SizedBox(
-            width: 120,
-            child: TextField(
-              controller: _controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Allocate',
-                isDense: true,
+          borderRadius: BorderRadius.circular(AppRadius.panel),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => widget.onSelected(!selected),
+              borderRadius: BorderRadius.circular(AppRadius.panel),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: selected,
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      activeColor: context.brandAccent,
+                      onChanged: (value) => widget.onSelected(value ?? false),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.pickerTitle,
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              height: 1.3,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          for (final line in ReceivablePickerCopy.subtitleLines(
+                            order,
+                            currencySymbol: widget.currencySymbol,
+                          )) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              line,
+                              style: const TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 12.5,
+                                height: 1.35,
+                                color: AppColors.textFaint,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onChanged: (value) {
-                widget.onChanged(num.tryParse(value.trim()) ?? 0);
-              },
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 8, right: 2),
+              child: TextField(
+                controller: _controller,
+                focusNode: _amountFocus,
+                enabled: selected,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  label: const SelloFieldLabel(label: 'Amount'),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (value) {
+                  widget.onAmountChanged(num.tryParse(value.trim()) ?? 0);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -544,11 +853,9 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
       _error = null;
     });
     try {
-      final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-            search: _search.text,
-            isActive: true,
-            pageSize: 40,
-          );
+      final result = await ref
+          .read(customerRepositoryProvider)
+          .fetchCustomers(search: _search.text, isActive: true, pageSize: 40);
       if (!mounted) return;
       setState(() {
         _items = result.items;
@@ -606,19 +913,47 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
                 separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final customer = _items[index];
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      customer.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      [
-                        if (customer.phone != null) customer.phone!,
-                        'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: widget.currencySymbol)}',
-                      ].join(' · '),
-                    ),
+                  return InkWell(
                     onTap: () => Navigator.of(context).pop(customer),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            customer.name,
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              height: 1.3,
+                            ),
+                          ),
+                          if (customer.phone != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              customer.phone!,
+                              style: const TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 13,
+                                height: 1.35,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                          Text(
+                            'Outstanding ${SelloFormatters.currency(customer.outstandingBalance, symbol: widget.currencySymbol)}',
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 13,
+                              height: 1.35,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 },
               ),

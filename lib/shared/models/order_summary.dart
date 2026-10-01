@@ -67,6 +67,7 @@ class OrderSummary extends Equatable {
     this.customerPhone,
     this.employeeName,
     this.notes,
+    this.visitId,
     this.completedAt,
     this.cancelledAt,
   });
@@ -98,6 +99,9 @@ class OrderSummary extends Equatable {
   final String? customerPhone;
   final String? employeeName;
   final String? notes;
+
+  /// Visit that created this order, when it was placed from field checkout.
+  final String? visitId;
   final DateTime? completedAt;
   final DateTime? cancelledAt;
 
@@ -127,12 +131,10 @@ class OrderSummary extends Equatable {
       id: json['id'] as String,
       companyId: json['company_id'] as String,
       branchId: json['branch_id'] as String,
-      customerId: json['customer_id'] as String? ??
-          _embedId(json['customers']) ??
-          '',
-      employeeId: json['employee_id'] as String? ??
-          _embedId(json['employees']) ??
-          '',
+      customerId:
+          json['customer_id'] as String? ?? _embedId(json['customers']) ?? '',
+      employeeId:
+          json['employee_id'] as String? ?? _embedId(json['employees']) ?? '',
       orderNumber: json['order_number'] as String? ?? '',
       status: OrderStatus.fromDb(json['status'] as String?),
       paymentStatus: PaymentStatus.fromDb(json['payment_status'] as String?),
@@ -149,6 +151,7 @@ class OrderSummary extends Equatable {
       customerPhone: _embedName(json['customers'], 'phone'),
       employeeName: _embedName(json['employees'], 'full_name'),
       notes: _stringValue(json['notes']),
+      visitId: _stringValue(json['visit_id']),
       completedAt: _dateValue(json['completed_at']),
       cancelledAt: _dateValue(json['cancelled_at']),
     );
@@ -190,8 +193,10 @@ class OrderLineItem extends Equatable {
 
   /// Ordered / requested quantity (customer demand).
   final num quantity;
+
   /// Cumulative quantity actually fulfilled (inventory deducted).
   final num deliveredQuantity;
+
   /// Cumulative quantity closed without delivery.
   final num cancelledQuantity;
   final num unitPrice;
@@ -207,9 +212,7 @@ class OrderLineItem extends Equatable {
   /// Parent name · option when labeled; never shows "Default".
   String get displayTitle {
     final label = variantLabel?.trim();
-    if (label != null &&
-        label.isNotEmpty &&
-        label.toLowerCase() != 'default') {
+    if (label != null && label.isNotEmpty && label.toLowerCase() != 'default') {
       return '${productName ?? 'Product'} · $label';
     }
     return productName ?? 'Product';
@@ -253,8 +256,10 @@ class OrderLineItem extends Equatable {
       lineTotal: _numValue(json['line_total']),
       // Snapshots win: a later rename/re-SKU must not rewrite order history.
       productName:
-          _stringValue(json['product_name']) ?? _embedName(json['products'], 'name'),
-      productSku: _stringValue(json['sku']) ?? _embedName(json['products'], 'sku'),
+          _stringValue(json['product_name']) ??
+          _embedName(json['products'], 'name'),
+      productSku:
+          _stringValue(json['sku']) ?? _embedName(json['products'], 'sku'),
       imageUrl: null,
       discount: json['discount'] == null ? null : _numValue(json['discount']),
       discountType: _stringValue(json['discount_type']),
@@ -265,14 +270,14 @@ class OrderLineItem extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        productId,
-        variantId,
-        quantity,
-        deliveredQuantity,
-        cancelledQuantity,
-        lineTotal,
-      ];
+    id,
+    productId,
+    variantId,
+    quantity,
+    deliveredQuantity,
+    cancelledQuantity,
+    lineTotal,
+  ];
 }
 
 class OrderDetail extends Equatable {
@@ -328,11 +333,7 @@ class FulfillmentAttentionCounts {
 }
 
 class SalesRepOption {
-  const SalesRepOption({
-    required this.id,
-    required this.name,
-    this.roleCode,
-  });
+  const SalesRepOption({required this.id, required this.name, this.roleCode});
 
   final String id;
   final String name;

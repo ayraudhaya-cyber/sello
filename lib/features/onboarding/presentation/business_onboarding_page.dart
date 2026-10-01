@@ -92,16 +92,15 @@ class _BusinessOnboardingPageState
                 businessNameController: _businessNameController,
                 obscurePassword: _obscurePassword,
                 obscureConfirm: _obscureConfirm,
-                onTogglePassword: () => setState(
-                  () => _obscurePassword = !_obscurePassword,
-                ),
-                onToggleConfirm: () => setState(
-                  () => _obscureConfirm = !_obscureConfirm,
-                ),
+                onTogglePassword: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+                onToggleConfirm: () =>
+                    setState(() => _obscureConfirm = !_obscureConfirm),
                 loading: loading,
                 fieldError: draft.fieldError,
                 errorMessage: draft.errorMessage ?? auth.errorMessage,
-                inviteRequired: draft.inviteRequired ||
+                inviteRequired:
+                    draft.inviteRequired ||
                     SignupInvitePolicy.isInviteGateError(
                       draft.errorMessage ?? auth.errorMessage ?? '',
                     ),
@@ -115,9 +114,8 @@ class _BusinessOnboardingPageState
                 onConfirmChanged: (v) => ref
                     .read(onboardingProvider.notifier)
                     .updateConfirmPassword(v),
-                onBusinessNameChanged: (v) => ref
-                    .read(onboardingProvider.notifier)
-                    .updateBusinessName(v),
+                onBusinessNameChanged: (v) =>
+                    ref.read(onboardingProvider.notifier).updateBusinessName(v),
                 onSubmit: loading ? null : _submit,
                 onSignIn: loading ? null : _backToSignIn,
               ),
@@ -391,19 +389,23 @@ class _EmailConfirmationSuccess extends StatelessWidget {
           _ErrorText(message: errorMessage!),
         ],
         const SizedBox(height: AppSpacing.xl),
-        SelloButton(
-          label: 'Resend email',
-          variant: SelloButtonVariant.primary,
-          expanded: true,
-          loading: loading,
-          onPressed: loading ? null : onResend,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        SelloButton(
-          label: 'Back to sign in',
-          variant: SelloButtonVariant.outline,
-          expanded: true,
-          onPressed: loading ? null : onBackToSignIn,
+        SelloButtonBar(
+          stretch: true,
+          children: [
+            SelloButton(
+              label: 'Back to sign in',
+              variant: SelloButtonVariant.outline,
+              expanded: true,
+              onPressed: loading ? null : onBackToSignIn,
+            ),
+            SelloButton(
+              label: 'Resend email',
+              variant: SelloButtonVariant.primary,
+              expanded: true,
+              loading: loading,
+              onPressed: loading ? null : onResend,
+            ),
+          ],
         ),
       ],
     );

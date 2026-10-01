@@ -127,6 +127,21 @@ class ProductSummary extends Equatable {
   /// Active option count for subtle list hints (`2 options`).
   int get activeOptionCount => activeVariants.length;
 
+  /// Lowest and highest selling price among active options.
+  /// Null when this is a simple product (one sellable unit).
+  ({num low, num high})? get activePriceRange {
+    if (!hasMultipleActiveVariants) return null;
+    num? low;
+    num? high;
+    for (final variant in activeVariants) {
+      final price = variant.sellingPrice;
+      low = low == null || price < low ? price : low;
+      high = high == null || price > high ? price : high;
+    }
+    if (low == null || high == null) return null;
+    return (low: low, high: high);
+  }
+
   String? attribute(String key) {
     final value = attributes[key];
     if (value == null || value.trim().isEmpty) return null;

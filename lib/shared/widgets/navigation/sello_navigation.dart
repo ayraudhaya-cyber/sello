@@ -20,6 +20,7 @@ class SelloNavDestination {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+
   /// Thin stroke icon for Hub sidebar; falls back to [icon] when null.
   final SelloNavGlyph? glyph;
   final String location;
@@ -30,10 +31,7 @@ class SelloNavDestination {
 }
 
 class SelloNavSection {
-  const SelloNavSection({
-    required this.label,
-    required this.destinations,
-  });
+  const SelloNavSection({required this.label, required this.destinations});
 
   final String label;
   final List<SelloNavDestination> destinations;
@@ -48,6 +46,7 @@ class SelloBrandMark extends ConsumerWidget {
     this.size,
     this.light = false,
     this.onLightSurface = false,
+    this.alignment = Alignment.centerLeft,
   });
 
   final bool compact;
@@ -59,6 +58,8 @@ class SelloBrandMark extends ConsumerWidget {
   /// Dark chrome keeps the reverse wordmark.
   final bool onLightSurface;
 
+  final Alignment alignment;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final logoSize = size ?? (compact ? 32.0 : 36.0);
@@ -68,36 +69,40 @@ class SelloBrandMark extends ConsumerWidget {
     if (useLightLogo || branding.hasCustomLogo) {
       final sidebar = hub && !compact && size == null;
       return Align(
-        alignment: Alignment.centerLeft,
+        alignment: alignment,
         child: BrandedLogo(
           size: compact ? 26 : (sidebar ? 36 : (size ?? 36)),
           maxWidth: compact ? 88 : (sidebar ? 208 : 180),
           branding: branding,
           onLightSurface: useLightLogo,
+          alignment: alignment,
         ),
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        BrandedLogo(
-          size: logoSize,
-          shadows: light ? null : AppShadows.level1,
-        ),
-        if (!compact) ...[
-          const SizedBox(width: AppSpacing.sm),
-          Text(
-            'Sello',
-            style: context.texts.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.02 * 21,
-              fontSize: 21,
-              color: light ? AppColors.navInkStrong : AppColors.textPrimary,
-            ),
+    return Align(
+      alignment: alignment,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          BrandedLogo(
+            size: logoSize,
+            shadows: light ? null : AppShadows.level1,
           ),
+          if (!compact) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'Sello',
+              style: context.texts.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.02 * 21,
+                fontSize: 21,
+                color: light ? AppColors.navInkStrong : AppColors.textPrimary,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -170,9 +175,7 @@ class SelloSideNav extends StatelessWidget {
         gradient: dark ? context.selloColors.navRail : null,
         color: dark ? null : AppColors.surface,
         border: dark
-            ? const Border(
-                right: BorderSide(color: Color(0x0DFFFFFF)),
-              )
+            ? const Border(right: BorderSide(color: Color(0x0DFFFFFF)))
             : const Border(right: BorderSide(color: AppColors.outline)),
       ),
       child: Stack(
@@ -252,8 +255,8 @@ class _SideNavItemState extends State<_SideNavItem> {
     final background = selected
         ? (dark ? AppColors.navActive : context.selloColors.surfaceSelected)
         : hovered
-            ? (dark ? AppColors.navHover : AppColors.veil)
-            : Colors.transparent;
+        ? (dark ? AppColors.navHover : AppColors.veil)
+        : Colors.transparent;
 
     final ink = selected
         ? (dark ? AppColors.navInkStrong : AppColors.textPrimary)
@@ -264,8 +267,8 @@ class _SideNavItemState extends State<_SideNavItem> {
     final iconColor = selected
         ? (dark ? Color.lerp(accent, Colors.white, 0.42)! : accent)
         : (dark
-            ? AppColors.navInk.withValues(alpha: 0.72)
-            : context.selloColors.textSecondary);
+              ? AppColors.navInk.withValues(alpha: 0.72)
+              : context.selloColors.textSecondary);
 
     final pill = DecoratedBox(
       decoration: BoxDecoration(
@@ -301,8 +304,7 @@ class _SideNavItemState extends State<_SideNavItem> {
             if (widget.badge != null)
               Container(
                 margin: const EdgeInsets.only(left: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: dark
                       ? const Color(0x38E8686D)
@@ -315,9 +317,7 @@ class _SideNavItemState extends State<_SideNavItem> {
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: dark
-                        ? const Color(0xFFFFB4B7)
-                        : AppColors.attention,
+                    color: dark ? const Color(0xFFFFB4B7) : AppColors.attention,
                   ),
                 ),
               ),

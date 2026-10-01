@@ -135,14 +135,14 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     final input = await showDialog<CreateChequeInput>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => RecordChequeDialog(
-        currencySymbol: _currencySymbol(),
-      ),
+      builder: (context) =>
+          RecordChequeDialog(currencySymbol: _currencySymbol()),
     );
     if (input == null) return;
 
-    final result =
-        await ref.read(hubChequesProvider.notifier).createCheque(input);
+    final result = await ref
+        .read(hubChequesProvider.notifier)
+        .createCheque(input);
     if (!mounted) return;
     if (result == null) {
       final message = ref.read(hubChequesProvider).errorMessage;
@@ -161,9 +161,8 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     final input = await showDialog<CreateExistingChequeInput>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AddExistingChequeDialog(
-        currencySymbol: _currencySymbol(),
-      ),
+      builder: (context) =>
+          AddExistingChequeDialog(currencySymbol: _currencySymbol()),
     );
     if (input == null) return;
 
@@ -283,10 +282,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                     .read(hubChequesProvider.notifier)
                     .approveChequeCollection(cheque.id);
                 if (error == null && context.mounted) {
-                  SelloSnackbars.success(
-                    context,
-                    'Payment approved.',
-                  );
+                  SelloSnackbars.success(context, 'Payment approved.');
                 }
                 return error;
               }
@@ -324,7 +320,8 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                 return error;
               }
             : null,
-        onCancel: (canManage ||
+        onCancel:
+            (canManage ||
                 (canCollect &&
                     cheque.status == ChequeStatus.awaitingCollection))
             ? (reason) async {
@@ -367,7 +364,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
       }
     }
 
-    final result = await ref.read(hubChequesProvider.notifier).collectCheque(
+    final result = await ref
+        .read(hubChequesProvider.notifier)
+        .collectCheque(
           CollectChequeInput(
             chequeId: cheque.id,
             collectionDate: DateTime.now(),
@@ -379,7 +378,10 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     if (!mounted) return;
     if (result == null) {
       final message = ref.read(hubChequesProvider).errorMessage;
-      SelloSnackbars.error(context, message ?? 'Could not mark this cheque as received.');
+      SelloSnackbars.error(
+        context,
+        message ?? 'Could not mark this cheque as received.',
+      );
       return;
     }
     SelloSnackbars.success(
@@ -442,8 +444,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         }
         SelloSnackbars.success(context, 'Cheque taken to the bank.');
       case ChequeForwardAction.clear:
-        final error =
-            await ref.read(hubChequesProvider.notifier).clearCheque(cheque.id);
+        final error = await ref
+            .read(hubChequesProvider.notifier)
+            .clearCheque(cheque.id);
         if (!mounted) return;
         if (error != null) {
           SelloSnackbars.error(context, error);
@@ -476,8 +479,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         .map((cheque) => cheque.id)
         .toList(growable: false);
     if (ids.isEmpty) return;
-    final error =
-        await ref.read(hubChequesProvider.notifier).depositCheques(ids);
+    final error = await ref
+        .read(hubChequesProvider.notifier)
+        .depositCheques(ids);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -514,8 +518,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     if (_bankFilterController.text != chequeState.bankFilter) {
       _bankFilterController.value = TextEditingValue(
         text: chequeState.bankFilter,
-        selection:
-            TextSelection.collapsed(offset: chequeState.bankFilter.length),
+        selection: TextSelection.collapsed(
+          offset: chequeState.bankFilter.length,
+        ),
       );
     }
 
@@ -597,10 +602,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         else
           const SelloTableSkeleton(columns: 8),
       ] else ...[
-        _PaymentsSummaryRow(
-          stats: state.stats,
-          currencySymbol: currencySymbol,
-        ),
+        _PaymentsSummaryRow(stats: state.stats, currencySymbol: currencySymbol),
         const SizedBox(height: AppSpacing.lg),
         if (state.errorMessage != null && state.items.isEmpty)
           SizedBox(
@@ -609,8 +611,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
               title: 'Unable to load payments',
               message: state.errorMessage,
               actionLabel: 'Try again',
-              onAction: () =>
-                  ref.read(hubPaymentsProvider.notifier).refresh(),
+              onAction: () => ref.read(hubPaymentsProvider.notifier).refresh(),
             ),
           )
         else if (state.isEmpty)
@@ -681,13 +682,13 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                   onPrev: state.page <= 0
                       ? null
                       : () => ref
-                          .read(hubPaymentsProvider.notifier)
-                          .goToPage(state.page - 1),
+                            .read(hubPaymentsProvider.notifier)
+                            .goToPage(state.page - 1),
                   onNext: !state.hasMore
                       ? null
                       : () => ref
-                          .read(hubPaymentsProvider.notifier)
-                          .goToPage(state.page + 1),
+                            .read(hubPaymentsProvider.notifier)
+                            .goToPage(state.page + 1),
                 ),
               ],
             ),
@@ -780,13 +781,13 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                 onPrev: state.page <= 0
                     ? null
                     : () => ref
-                        .read(hubPaymentsProvider.notifier)
-                        .goToPage(state.page - 1),
+                          .read(hubPaymentsProvider.notifier)
+                          .goToPage(state.page - 1),
                 onNext: !state.hasMore
                     ? null
                     : () => ref
-                        .read(hubPaymentsProvider.notifier)
-                        .goToPage(state.page + 1),
+                          .read(hubPaymentsProvider.notifier)
+                          .goToPage(state.page + 1),
               ),
             ),
           ),
@@ -794,10 +795,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     ];
   }
 
-  List<Widget> _buildChequesBody(
-    HubChequesState state,
-    String currencySymbol,
-  ) {
+  List<Widget> _buildChequesBody(HubChequesState state, String currencySymbol) {
     return [
       _ChequesToolbar(
         searchController: _chequeSearchController,
@@ -857,8 +855,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
               title: 'Unable to load cheques',
               message: state.errorMessage,
               actionLabel: 'Try again',
-              onAction: () =>
-                  ref.read(hubChequesProvider.notifier).refresh(),
+              onAction: () => ref.read(hubChequesProvider.notifier).refresh(),
             ),
           )
         else if (state.isEmpty)
@@ -935,6 +932,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                             label: chequeForwardActionLabel(
                               _nextChequeAction(cheque)!,
                             ),
+                            tooltip: chequeForwardActionHint(
+                              _nextChequeAction(cheque)!,
+                            ),
                             expanded: true,
                             onPressed: state.isSaving
                                 ? null
@@ -952,13 +952,13 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                   onPrev: state.page <= 0
                       ? null
                       : () => ref
-                          .read(hubChequesProvider.notifier)
-                          .goToPage(state.page - 1),
+                            .read(hubChequesProvider.notifier)
+                            .goToPage(state.page - 1),
                   onNext: !state.hasMore
                       ? null
                       : () => ref
-                          .read(hubChequesProvider.notifier)
-                          .goToPage(state.page + 1),
+                            .read(hubChequesProvider.notifier)
+                            .goToPage(state.page + 1),
                 ),
               ],
             ),
@@ -1053,6 +1053,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                                 label: chequeForwardActionLabel(
                                   _nextChequeAction(cheque)!,
                                 ),
+                                tooltip: chequeForwardActionHint(
+                                  _nextChequeAction(cheque)!,
+                                ),
                                 size: SelloButtonSize.small,
                                 onPressed: state.isSaving
                                     ? null
@@ -1068,13 +1071,13 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                 onPrev: state.page <= 0
                     ? null
                     : () => ref
-                        .read(hubChequesProvider.notifier)
-                        .goToPage(state.page - 1),
+                          .read(hubChequesProvider.notifier)
+                          .goToPage(state.page - 1),
                 onNext: !state.hasMore
                     ? null
                     : () => ref
-                        .read(hubChequesProvider.notifier)
-                        .goToPage(state.page + 1),
+                          .read(hubChequesProvider.notifier)
+                          .goToPage(state.page + 1),
               ),
             ),
           ),
@@ -1091,23 +1094,27 @@ Widget _statusBadge(PaymentRecordStatus status) {
       PaymentRecordStatus.pending => SelloStatusTone.warning,
       PaymentRecordStatus.refunded => SelloStatusTone.info,
       PaymentRecordStatus.cancelled ||
-      PaymentRecordStatus.rejected =>
-        SelloStatusTone.danger,
+      PaymentRecordStatus.rejected => SelloStatusTone.danger,
     },
   );
 }
 
 Widget _chequeStatusBadge(ChequeSummary cheque) {
-  return SelloStatusBadge(
-    label: cheque.displayLabel,
-    tone: switch (cheque.status) {
-      ChequeStatus.awaitingCollection => SelloStatusTone.warning,
-      ChequeStatus.collected when cheque.isPendingApproval =>
-        SelloStatusTone.warning,
-      ChequeStatus.collected || ChequeStatus.deposited => SelloStatusTone.info,
-      ChequeStatus.cleared => SelloStatusTone.success,
-      ChequeStatus.bounced || ChequeStatus.cancelled => SelloStatusTone.danger,
-    },
+  return Tooltip(
+    message: cheque.statusHelpText,
+    child: SelloStatusBadge(
+      label: cheque.displayLabel,
+      tone: switch (cheque.status) {
+        ChequeStatus.awaitingCollection => SelloStatusTone.warning,
+        ChequeStatus.collected when cheque.isPendingApproval =>
+          SelloStatusTone.warning,
+        ChequeStatus.collected ||
+        ChequeStatus.deposited => SelloStatusTone.info,
+        ChequeStatus.cleared => SelloStatusTone.success,
+        ChequeStatus.bounced ||
+        ChequeStatus.cancelled => SelloStatusTone.danger,
+      },
+    ),
   );
 }
 
@@ -1286,15 +1293,8 @@ class _PaymentsToolbar extends StatelessWidget {
       ),
       child: SelloToolbarBody(
         search: search,
-        filters: [
-          status,
-          method,
-        ],
-        actions: [
-          refresh,
-          if (onRecordCheque != null) cheque,
-          receive,
-        ],
+        filters: [status, method],
+        actions: [refresh, if (onRecordCheque != null) cheque, receive],
       ),
     );
   }
@@ -1399,6 +1399,7 @@ class _ChequesToolbar extends StatelessWidget {
         : SelloButton(
             label: 'Take to bank ($selectedDepositCount)',
             icon: Icons.account_balance_outlined,
+            tooltip: chequeBatchDepositHint,
             onPressed: onDepositSelected,
           );
 
@@ -1419,12 +1420,7 @@ class _ChequesToolbar extends StatelessWidget {
       child: SelloToolbarBody(
         search: search,
         filters: [status, bank, dueToday],
-        actions: [
-          refresh,
-          ?depositSelected,
-          existing,
-          record,
-        ],
+        actions: [refresh, ?depositSelected, existing, record],
       ),
     );
   }

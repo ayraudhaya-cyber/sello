@@ -13,7 +13,7 @@ import 'package:sello/features/mobile/products/presentation/sello_product_presen
 import 'package:sello/features/orders/presentation/widgets/order_catalog_stock_chip.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
 import 'package:sello/shared/models/product_summary.dart';
-import 'package:sello/shared/utils/formatters.dart';
+import 'package:sello/shared/utils/product_catalog_display.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
 /// Sales-rep catalog — browse and present product photos to buyers.
@@ -225,6 +225,9 @@ class _CategoryChip extends StatelessWidget {
           ),
           child: Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
             style: context.texts.labelLarge?.copyWith(
               color: selected ? Colors.white : AppColors.textPrimary,
               fontWeight: FontWeight.w600,
@@ -250,14 +253,16 @@ class _CatalogProductCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(productFieldConfigProvider).valueOrNull;
-    final defaultReorder =
-        ref.watch(selloCompanySettingsProvider).valueOrNull?.defaultReorderLevel;
+    final defaultReorder = ref
+        .watch(selloCompanySettingsProvider)
+        .valueOrNull
+        ?.defaultReorderLevel;
     final reorderLevel = product.reorderLevel ?? defaultReorder;
     final currencySymbol = ref.watch(selloCurrencySymbolProvider);
     final specLine = config == null
-        ? product.sku
+        ? productCatalogIdentityHint(product)
         : () {
-            final parts = <String>[product.sku];
+            final parts = <String>[productCatalogIdentityHint(product)];
             for (final field in config.forCatalog) {
               if (field.fieldKey == 'description' ||
                   field.fieldKey == 'reorder_level') {
@@ -299,9 +304,9 @@ class _CatalogProductCard extends ConsumerWidget {
                         fit: BoxFit.cover,
                         filterQuality: FilterQuality.medium,
                         gaplessPlayback: true,
-                        cacheWidth: (320 *
-                                MediaQuery.devicePixelRatioOf(context))
-                            .round(),
+                        cacheWidth:
+                            (320 * MediaQuery.devicePixelRatioOf(context))
+                                .round(),
                         errorBuilder: (_, _, _) =>
                             _Monogram(name: product.name),
                       )
@@ -357,10 +362,7 @@ class _CatalogProductCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    SelloFormatters.currency(
-                      product.sellingPrice,
-                      symbol: currencySymbol,
-                    ),
+                    productCatalogPriceLabel(product, symbol: currencySymbol),
                     style: context.texts.bodyMedium?.copyWith(
                       color: context.brandAccent,
                       fontWeight: FontWeight.w600,

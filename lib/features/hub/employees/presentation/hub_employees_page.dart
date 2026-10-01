@@ -1036,7 +1036,10 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
           SelloDialogSection(
             title: 'Personal Information',
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (_avatarBytes != null)
                     ClipRRect(
@@ -1055,15 +1058,13 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                       width: 72,
                       height: 72,
                     ),
-                  const SizedBox(width: 16),
                   SelloButton(
                     label: _picking ? 'Processing…' : 'Upload photo',
                     variant: SelloButtonVariant.outline,
                     size: SelloButtonSize.small,
                     onPressed: _picking ? null : _pickAvatar,
                   ),
-                  if (previewUrl != null || _avatarBytes != null) ...[
-                    const SizedBox(width: 8),
+                  if (previewUrl != null || _avatarBytes != null)
                     SelloButton(
                       label: 'Remove',
                       variant: SelloButtonVariant.ghost,
@@ -1073,7 +1074,6 @@ class _EmployeeEditorDialogState extends State<_EmployeeEditorDialog> {
                         _clearAvatar = true;
                       }),
                     ),
-                  ],
                 ],
               ),
               SelloTextField(

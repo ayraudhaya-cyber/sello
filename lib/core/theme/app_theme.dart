@@ -277,6 +277,7 @@ abstract final class AppTheme {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.bottomSheetAll),
+        // One handle for every sheet. Do not also draw a custom pill.
         showDragHandle: true,
       ),
       snackBarTheme: SnackBarThemeData(

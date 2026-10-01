@@ -10,6 +10,7 @@ import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_variant.dart';
+import 'package:sello/shared/widgets/products/product_options_readonly_list.dart';
 
 Widget _wrap(Widget child) {
   return MaterialApp(
@@ -192,6 +193,53 @@ void main() {
       final nameTop = tester.getTopLeft(find.text('20"')).dy;
       final addTop = tester.getTopLeft(find.byTooltip('Add to order')).dy;
       expect(nameTop, lessThan(addTop));
+    });
+  });
+
+  group('present sheet', () {
+    testWidgets('lists sellable options instead of a single parent price', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          ProductOptionsReadonlyList(
+            options: [
+              ProductVariant(
+                id: 'v-red',
+                companyId: 'co',
+                productId: 'p1',
+                sku: 'TESTP3RED',
+                sellingPrice: 200,
+                label: 'red',
+                isDefault: true,
+                isActive: true,
+                availableStockQuantity: 0,
+              ),
+              ProductVariant(
+                id: 'v-green',
+                companyId: 'co',
+                productId: 'p1',
+                sku: 'TESTP3GRE',
+                sellingPrice: 450,
+                label: 'green',
+                isDefault: false,
+                isActive: true,
+                availableStockQuantity: 80,
+              ),
+            ],
+            currencySymbol: 'Rs',
+            unitLabel: 'piece',
+          ),
+        ),
+      );
+
+      expect(find.text('Options'), findsOneWidget);
+      expect(find.text('red'), findsOneWidget);
+      expect(find.text('green'), findsOneWidget);
+      expect(find.text('TESTP3RED'), findsOneWidget);
+      expect(find.text('TESTP3GRE'), findsOneWidget);
+      expect(find.text('0 piece'), findsOneWidget);
+      expect(find.text('80 piece'), findsOneWidget);
     });
   });
 

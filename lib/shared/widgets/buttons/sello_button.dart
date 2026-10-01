@@ -21,6 +21,7 @@ class SelloButton extends StatelessWidget {
     this.icon,
     this.expanded = false,
     this.loading = false,
+    this.tooltip,
   });
 
   final String label;
@@ -30,11 +31,12 @@ class SelloButton extends StatelessWidget {
   final IconData? icon;
   final bool expanded;
   final bool loading;
+  final String? tooltip;
 
   BorderRadius get _radius => switch (size) {
-        SelloButtonSize.small => AppRadius.buttonSmAll,
-        SelloButtonSize.medium || SelloButtonSize.large => AppRadius.buttonAll,
-      };
+    SelloButtonSize.small => AppRadius.buttonSmAll,
+    SelloButtonSize.medium || SelloButtonSize.large => AppRadius.buttonAll,
+  };
 
   bool get _isPrimary =>
       variant == SelloButtonVariant.primary ||
@@ -49,10 +51,12 @@ class SelloButton extends StatelessWidget {
     };
     final padding = switch (size) {
       SelloButtonSize.small => const EdgeInsets.symmetric(horizontal: 12),
-      SelloButtonSize.medium =>
-        const EdgeInsets.symmetric(horizontal: AppSpacing.mdPlus),
-      SelloButtonSize.large =>
-        const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      SelloButtonSize.medium => const EdgeInsets.symmetric(
+        horizontal: AppSpacing.mdPlus,
+      ),
+      SelloButtonSize.large => const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+      ),
     };
     final iconSize = size == SelloButtonSize.small ? 16.0 : 18.0;
     final shape = RoundedRectangleBorder(borderRadius: _radius);
@@ -64,21 +68,38 @@ class SelloButton extends StatelessWidget {
             child: CircularProgressIndicator(
               strokeWidth: 2,
               strokeCap: StrokeCap.round,
-              color: variant == SelloButtonVariant.outline ||
+              color:
+                  variant == SelloButtonVariant.outline ||
                       variant == SelloButtonVariant.ghost
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onPrimary,
             ),
           )
         : Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
                 Icon(icon, size: iconSize),
                 const SizedBox(width: 6),
               ],
-              Text(label, overflow: TextOverflow.ellipsis, maxLines: 1),
+              if (expanded)
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    softWrap: false,
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else
+                Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  softWrap: false,
+                ),
             ],
           );
 
@@ -101,9 +122,7 @@ class SelloButton extends StatelessWidget {
           minimumSize: WidgetStatePropertyAll(
             Size(expanded ? double.infinity : 64, height),
           ),
-          maximumSize: WidgetStatePropertyAll(
-            Size(double.infinity, height),
-          ),
+          maximumSize: WidgetStatePropertyAll(Size(double.infinity, height)),
           padding: WidgetStatePropertyAll(padding),
           shape: WidgetStatePropertyAll(shape),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -120,54 +139,56 @@ class SelloButton extends StatelessWidget {
 
       final materialButton = switch (variant) {
         SelloButtonVariant.secondary => FilledButton.tonal(
-            onPressed: loading ? null : onPressed,
-            style: materialStyle(),
-            child: child,
-          ),
+          onPressed: loading ? null : onPressed,
+          style: materialStyle(),
+          child: child,
+        ),
         SelloButtonVariant.outline => OutlinedButton(
-            onPressed: loading ? null : onPressed,
-            style: materialStyle().copyWith(
-              side: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return BorderSide(
-                    color: AppColors.outline.withValues(alpha: 0.85),
-                  );
-                }
-                return const BorderSide(color: AppColors.outlineStrong);
-              }),
-              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return AppColors.textFaint;
-                }
-                return AppColors.textPrimary;
-              }),
-            ),
-            child: child,
+          onPressed: loading ? null : onPressed,
+          style: materialStyle().copyWith(
+            side: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.disabled)) {
+                return BorderSide(
+                  color: AppColors.outline.withValues(alpha: 0.85),
+                );
+              }
+              return const BorderSide(color: AppColors.outlineStrong);
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.disabled)) {
+                return AppColors.textFaint;
+              }
+              return AppColors.textPrimary;
+            }),
           ),
+          child: child,
+        ),
         SelloButtonVariant.ghost => TextButton(
-            onPressed: loading ? null : onPressed,
-            style: materialStyle(),
-            child: child,
-          ),
+          onPressed: loading ? null : onPressed,
+          style: materialStyle(),
+          child: child,
+        ),
         SelloButtonVariant.danger => FilledButton(
-            onPressed: loading ? null : onPressed,
-            style: materialStyle(
-              backgroundColor: AppColors.error,
-              foregroundColor: AppColors.onError,
-            ),
-            child: child,
+          onPressed: loading ? null : onPressed,
+          style: materialStyle(
+            backgroundColor: AppColors.error,
+            foregroundColor: AppColors.onError,
           ),
-        SelloButtonVariant.primary || SelloButtonVariant.gradient =>
-          const SizedBox.shrink(),
+          child: child,
+        ),
+        SelloButtonVariant.primary ||
+        SelloButtonVariant.gradient => const SizedBox.shrink(),
       };
 
       button = SizedBox(height: height, child: materialButton);
     }
 
-    if (expanded && !_isPrimary) {
-      return SizedBox(width: double.infinity, child: button);
-    }
-    return button;
+    final built = expanded && !_isPrimary
+        ? SizedBox(width: double.infinity, child: button)
+        : button;
+    final hint = tooltip?.trim();
+    if (hint == null || hint.isEmpty) return built;
+    return Tooltip(message: hint, child: built);
   }
 }
 
@@ -209,24 +230,17 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: _enabled ? (_) => setState(() => _hovered = true) : null,
-      onExit: _enabled
-          ? (_) => setState(() {
-                _hovered = false;
-                _pressed = false;
-              })
-          : null,
-      cursor: _enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
-        onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tightFill =
+            constraints.maxWidth.isFinite &&
+            constraints.minWidth >= constraints.maxWidth - 0.5 &&
+            constraints.maxWidth > 0;
+        final fill = widget.expanded || tightFill;
+        final button = AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
-          width: widget.expanded ? double.infinity : null,
+          width: fill ? double.infinity : null,
           height: widget.height,
           padding: widget.padding,
           decoration: BoxDecoration(
@@ -256,8 +270,37 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
               child: Center(child: widget.child),
             ),
           ),
-        ),
-      ),
+        );
+
+        return MouseRegion(
+          onEnter: _enabled ? (_) => setState(() => _hovered = true) : null,
+          onExit: _enabled
+              ? (_) => setState(() {
+                  _hovered = false;
+                  _pressed = false;
+                })
+              : null,
+          cursor: _enabled
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
+          child: GestureDetector(
+            onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapCancel: _enabled
+                ? () => setState(() => _pressed = false)
+                : null,
+            onTap: widget.onPressed,
+            child: fill
+                ? button
+                : Align(
+                    alignment: Alignment.center,
+                    widthFactor: 1,
+                    heightFactor: 1,
+                    child: button,
+                  ),
+          ),
+        );
+      },
     );
   }
 }

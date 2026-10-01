@@ -11,6 +11,7 @@ abstract final class CollectionsReportExcelExporter {
     'Sales Rep',
     'Document Type',
     'Document No.',
+    'Old invoice / reference',
     'Date',
     'Aging (days)',
     'Open Balance',
@@ -38,8 +39,9 @@ abstract final class CollectionsReportExcelExporter {
       _stringCell(buffer, invoice.customerName);
       _stringCell(buffer, invoice.customerPhone ?? '');
       _stringCell(buffer, invoice.salesRepName);
-      _stringCell(buffer, kCollectionsDocumentType);
+      _stringCell(buffer, invoice.documentType);
       _stringCell(buffer, invoice.orderNumber);
+      _stringCell(buffer, invoice.referenceNumber ?? '');
       _stringCell(buffer, SelloFormatters.date(invoice.orderedAt));
       _numberCell(buffer, invoice.agingDays);
       _numberCell(buffer, invoice.openBalance);

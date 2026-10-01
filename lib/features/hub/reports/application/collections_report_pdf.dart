@@ -140,6 +140,7 @@ abstract final class CollectionsReportPdf {
       headers: const [
         'Invoice',
         'No.',
+        'Old invoice / reference',
         'Date',
         'Aging (days)',
         'Open Balance',
@@ -147,8 +148,9 @@ abstract final class CollectionsReportPdf {
       data: [
         for (final invoice in group.invoices)
           [
-            kCollectionsDocumentType,
+            invoice.documentType,
             invoice.orderNumber,
+            invoice.referenceNumber ?? '',
             SelloFormatters.date(invoice.orderedAt),
             '${invoice.agingDays}',
             money(invoice.openBalance),
@@ -163,12 +165,12 @@ abstract final class CollectionsReportPdf {
       cellStyle: const pw.TextStyle(fontSize: 8, color: _secondary),
       cellAlignment: pw.Alignment.centerLeft,
       cellAlignments: {
-        3: pw.Alignment.centerRight,
         4: pw.Alignment.centerRight,
+        5: pw.Alignment.centerRight,
       },
       headerAlignments: {
-        3: pw.Alignment.centerRight,
         4: pw.Alignment.centerRight,
+        5: pw.Alignment.centerRight,
       },
       border: pw.TableBorder(
         horizontalInside: const pw.BorderSide(color: _line, width: 0.4),
@@ -176,10 +178,11 @@ abstract final class CollectionsReportPdf {
       ),
       columnWidths: {
         0: const pw.FlexColumnWidth(1.1),
-        1: const pw.FlexColumnWidth(1.4),
-        2: const pw.FlexColumnWidth(1.3),
-        3: const pw.FlexColumnWidth(1.1),
-        4: const pw.FlexColumnWidth(1.4),
+        1: const pw.FlexColumnWidth(1.3),
+        2: const pw.FlexColumnWidth(1.4),
+        3: const pw.FlexColumnWidth(1.2),
+        4: const pw.FlexColumnWidth(1.0),
+        5: const pw.FlexColumnWidth(1.3),
       },
     );
   }

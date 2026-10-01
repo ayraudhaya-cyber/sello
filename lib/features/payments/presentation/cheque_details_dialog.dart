@@ -77,8 +77,9 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
       return;
     }
     try {
-      final detail =
-          await ref.read(paymentRepositoryProvider).fetchById(paymentId);
+      final detail = await ref
+          .read(paymentRepositoryProvider)
+          .fetchById(paymentId);
       if (!mounted) return;
       setState(() => _relatedPayment = detail);
     } catch (_) {
@@ -92,8 +93,7 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
       if (mounted) setState(() => _photoUrl = null);
       return;
     }
-    final url =
-        await ref.read(chequeRepositoryProvider).signChequePhoto(path);
+    final url = await ref.read(chequeRepositoryProvider).signChequePhoto(path);
     if (!mounted) return;
     setState(() => _photoUrl = url);
   }
@@ -263,12 +263,14 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
       canCollect: widget.canCollect && widget.onCollect != null,
       canManageClearance: widget.canManageClearance,
     );
-    final showBounce = chequeShowsBounce(
+    final showBounce =
+        chequeShowsBounce(
           cheque: cheque,
           canManageClearance: widget.canManageClearance,
         ) &&
         widget.onBounce != null;
-    final showCancel = chequeShowsCancel(
+    final showCancel =
+        chequeShowsCancel(
           cheque: cheque,
           canCollect: widget.canCollect,
           canManageClearance: widget.canManageClearance,
@@ -294,20 +296,21 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: SelloStatusBadge(
-              label: cheque.displayLabel,
-              tone: switch (status) {
-                ChequeStatus.awaitingCollection => SelloStatusTone.warning,
-                ChequeStatus.collected when cheque.isPendingApproval =>
-                  SelloStatusTone.warning,
-                ChequeStatus.collected ||
-                ChequeStatus.deposited =>
-                  SelloStatusTone.info,
-                ChequeStatus.cleared => SelloStatusTone.success,
-                ChequeStatus.bounced ||
-                ChequeStatus.cancelled =>
-                  SelloStatusTone.danger,
-              },
+            child: Tooltip(
+              message: cheque.statusHelpText,
+              child: SelloStatusBadge(
+                label: cheque.displayLabel,
+                tone: switch (status) {
+                  ChequeStatus.awaitingCollection => SelloStatusTone.warning,
+                  ChequeStatus.collected when cheque.isPendingApproval =>
+                    SelloStatusTone.warning,
+                  ChequeStatus.collected ||
+                  ChequeStatus.deposited => SelloStatusTone.info,
+                  ChequeStatus.cleared => SelloStatusTone.success,
+                  ChequeStatus.bounced ||
+                  ChequeStatus.cancelled => SelloStatusTone.danger,
+                },
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -473,10 +476,7 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
           ),
         ],
       ),
-      footer: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.end,
+      footer: SelloButtonBar(
         children: [
           SelloButton(
             label: 'Close',
@@ -487,18 +487,20 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
             SelloButton(
               label: 'Bank returned it',
               variant: SelloButtonVariant.outline,
+              tooltip: chequeBounceActionHint,
               onPressed: _busy ? null : _bounce,
             ),
           if (showCancel)
             SelloButton(
               label: 'Cancel',
               variant: SelloButtonVariant.ghost,
+              tooltip: chequeCancelActionHint,
               onPressed: _busy ? null : _cancelCheque,
             ),
           if (next != null)
             SelloButton(
               label: _busy ? 'Working…' : chequeForwardActionLabel(next),
-              expanded: isMobile,
+              tooltip: chequeForwardActionHint(next),
               onPressed: _busy ? null : () => _runForward(next),
             ),
         ],
@@ -553,9 +555,8 @@ class _ReasonDialogState extends State<_ReasonDialog> {
       footer: SelloDialogFooter(
         cancelLabel: 'Back',
         cancelVariant: SelloButtonVariant.outline,
-        onCancel: () => Navigator.of(context).pop(
-          const _ReasonResult(submitted: false),
-        ),
+        onCancel: () =>
+            Navigator.of(context).pop(const _ReasonResult(submitted: false)),
         primaryLabel: widget.confirmLabel,
         onPrimary: () => Navigator.of(context).pop(
           _ReasonResult(
@@ -590,10 +591,7 @@ class _RelatedDocumentsBlock extends StatelessWidget {
           ),
         if (documents.paymentNumber != null) ...[
           if (documents.orderNumbers.isNotEmpty) const SizedBox(height: 14),
-          _RelatedField(
-            label: 'Payment',
-            value: documents.paymentNumber!,
-          ),
+          _RelatedField(label: 'Payment', value: documents.paymentNumber!),
         ],
       ],
     );

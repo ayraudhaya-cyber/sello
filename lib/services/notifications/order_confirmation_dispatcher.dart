@@ -841,3 +841,169 @@ class CollectionAcknowledgementPrepareResult {
     );
   }
 }
+
+/// Applied payment SMS for collections allocated to opening-balance AR.
+///
+/// Reuses [OutboundSmsSender] + unique `receipt` events. Does not send for
+/// pending collections or order-only payments, so existing order collection
+/// SMS (pending acknowledgement only) stays unchanged.
+class PaymentReceivedDispatcher {
+  PaymentReceivedDispatcher({
+    required this.prepare,
+    required this.recordDispatch,
+    this.policies = OutboundNotificationPolicies.defaults,
+    this.policiesResolver,
+    this.smsSender,
+  });
+
+  final Future<PaymentReceiptPrepareResult?> Function(String paymentId) prepare;
+  final Future<bool> Function({
+    required String eventId,
+    required OutboundChannel channel,
+    required OutboundRecipientKind recipientKind,
+    required String recipientKey,
+    String? address,
+    OutboundDispatchStatus status,
+    String? skipReason,
+  }) recordDispatch;
+  final OutboundNotificationPolicies policies;
+  final Future<OutboundNotificationPolicies> Function()? policiesResolver;
+  final OutboundSmsSender? smsSender;
+
+  Future<void> dispatch(String paymentId) async {
+    final resolver = policiesResolver;
+    final effectivePolicies =
+        resolver == null ? policies : await resolver();
+    final receiptPolicy =
+        effectivePolicies.policyFor(OutboundNotificationType.receipt);
+    if (!effectivePolicies.smsEnabled || !receiptPolicy.sms) return;
+
+    final prepared = await prepare(paymentId);
+    if (prepared == null || !prepared.ok || prepared.eventId.isEmpty) return;
+
+    final sender = smsSender;
+    if (sender == null) return;
+
+    final customer = prepared.customer;
+    if (customer == null || customer.id.isEmpty) {
+      await recordDispatch(
+        eventId: prepared.eventId,
+        channel: OutboundChannel.sms,
+        recipientKind: OutboundRecipientKind.customer,
+        recipientKey: 'customer:missing',
+        address: null,
+        status: OutboundDispatchStatus.skipped,
+        skipReason: 'Customer record is missing.',
+      );
+      return;
+    }
+
+    final sms = MessagingPhone.preferredSms(
+      customer.phone,
+      customer.whatsapp,
+    );
+    final symbol = SelloFormatters.currencySymbol(prepared.currency);
+    final amountLabel =
+        SelloFormatters.currency(prepared.amount, symbol: symbol);
+    final body = OutboundMessageTemplate.openingBalancePaymentReceived(
+      amountLabel: amountLabel,
+      oldInvoiceReference: prepared.openingReference,
+      businessName: prepared.companyName,
+    );
+
+    if (sms == null || sms.isEmpty) {
+      await recordDispatch(
+        eventId: prepared.eventId,
+        channel: OutboundChannel.sms,
+        recipientKind: OutboundRecipientKind.customer,
+        recipientKey: 'customer:${customer.id}',
+        address: null,
+        status: OutboundDispatchStatus.skipped,
+        skipReason: 'No usable SMS number.',
+      );
+      return;
+    }
+
+    try {
+      await sender.send(
+        OutboundSmsRequest(
+          eventId: prepared.eventId,
+          recipientKind: OutboundRecipientKind.customer,
+          recipientKey: 'customer:${customer.id}',
+          recipient: sms,
+          message: body,
+        ),
+      );
+    } catch (_) {}
+  }
+}
+
+class PaymentReceiptPrepareResult {
+  const PaymentReceiptPrepareResult({
+    required this.ok,
+    required this.alreadyPrepared,
+    required this.eventId,
+    required this.amount,
+    required this.currency,
+    required this.companyName,
+    required this.customerName,
+    this.openingReference,
+    this.customer,
+  });
+
+  final bool ok;
+  final bool alreadyPrepared;
+  final String eventId;
+  final num amount;
+  final String currency;
+  final String companyName;
+  final String customerName;
+  final String? openingReference;
+  final OrderConfirmationContact? customer;
+
+  factory PaymentReceiptPrepareResult.fromJson(Map<String, dynamic> json) {
+    if (json['ok'] == false) {
+      return const PaymentReceiptPrepareResult(
+        ok: false,
+        alreadyPrepared: false,
+        eventId: '',
+        amount: 0,
+        currency: 'USD',
+        companyName: '',
+        customerName: '',
+      );
+    }
+
+    final payment = json['payment'];
+    final paymentMap = payment is Map
+        ? Map<String, dynamic>.from(payment)
+        : <String, dynamic>{};
+    final customerJson = json['customer'];
+    OrderConfirmationContact? parseContact(dynamic raw) {
+      if (raw is Map<String, dynamic>) {
+        return OrderConfirmationContact.fromJson(raw);
+      }
+      if (raw is Map) {
+        return OrderConfirmationContact.fromJson(
+          Map<String, dynamic>.from(raw),
+        );
+      }
+      return null;
+    }
+
+    final ref = json['opening_reference']?.toString().trim();
+    return PaymentReceiptPrepareResult(
+      ok: true,
+      alreadyPrepared: json['already_prepared'] == true,
+      eventId: json['event_id']?.toString() ?? '',
+      amount: paymentMap['amount'] is num
+          ? paymentMap['amount'] as num
+          : num.tryParse('${paymentMap['amount']}') ?? 0,
+      currency: paymentMap['currency']?.toString() ?? 'USD',
+      companyName: paymentMap['company_name']?.toString() ?? 'Sello',
+      customerName: paymentMap['customer_name']?.toString() ?? 'Customer',
+      openingReference: (ref == null || ref.isEmpty) ? null : ref,
+      customer: parseContact(customerJson),
+    );
+  }
+}

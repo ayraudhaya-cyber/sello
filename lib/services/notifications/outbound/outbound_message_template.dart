@@ -62,6 +62,13 @@ abstract final class OutboundMessageTemplate {
       'Amount: {{collection_amount}}'
       '{{#receipt_link}}\n\nView receipt: {{receipt_link}}{{/receipt_link}}';
 
+  /// Applied opening-balance collection. Intentionally omits Sello invoice,
+  /// order date, aging, adjustment id, sales-rep, and allocation details.
+  static const openingBalancePaymentReceivedDefault =
+      'Payment received: {{collection_amount}}'
+      '{{#old_invoice_reference}}\nReference: {{old_invoice_reference}}{{/old_invoice_reference}}'
+      '{{#business_name}}\n\n{{business_name}}{{/business_name}}';
+
   static String defaultFor(OutboundNotificationType type) => switch (type) {
         OutboundNotificationType.orderConfirmation => orderConfirmationDefault,
         OutboundNotificationType.orderNotification => orderNotificationDefault,
@@ -72,6 +79,21 @@ abstract final class OutboundMessageTemplate {
         OutboundNotificationType.invoice => invoiceDefault,
         OutboundNotificationType.receipt => receiptDefault,
       };
+
+  static String openingBalancePaymentReceived({
+    required String amountLabel,
+    String? oldInvoiceReference,
+    String? businessName,
+  }) {
+    return render(
+      openingBalancePaymentReceivedDefault,
+      values: {
+        'collection_amount': amountLabel,
+        'old_invoice_reference': oldInvoiceReference,
+        'business_name': businessName,
+      },
+    );
+  }
 
   static String render(
     String template, {

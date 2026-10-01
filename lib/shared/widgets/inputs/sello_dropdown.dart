@@ -161,15 +161,6 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.outlineStrong,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Align(
@@ -198,9 +189,9 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
                           borderRadius: AppRadius.controlAll,
                           onTap: item.enabled
                               ? () => Navigator.pop(
-                                    context,
-                                    _SheetResult<T>(item.value),
-                                  )
+                                  context,
+                                  _SheetResult<T>(item.value),
+                                )
                               : null,
                           child: SizedBox(
                             height: _sheetRowHeight,
@@ -220,8 +211,8 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
                                             : FontWeight.w500,
                                         color: item.enabled
                                             ? (isSelected
-                                                ? context.brandAccent
-                                                : AppColors.textPrimary)
+                                                  ? context.brandAccent
+                                                  : AppColors.textPrimary)
                                             : AppColors.textFaint,
                                       ),
                                       child: item.child,
@@ -275,7 +266,8 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
       setState(() {});
       return KeyEventResult.handled;
     }
-    final opensMenu = key == LogicalKeyboardKey.arrowDown ||
+    final opensMenu =
+        key == LogicalKeyboardKey.arrowDown ||
         key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.space;
@@ -432,9 +424,7 @@ class _SelloDropdownState<T> extends State<SelloDropdown<T>> {
         _showingHint ? '' : _displayText,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: context.texts.bodyMedium?.copyWith(
-          color: AppColors.textPrimary,
-        ),
+        style: context.texts.bodyMedium?.copyWith(color: AppColors.textPrimary),
       ),
     );
   }
@@ -484,7 +474,9 @@ class _DesktopMenuOverlayState<T> extends State<_DesktopMenuOverlay<T>> {
   @override
   void initState() {
     super.initState();
-    final selected = widget.items.indexWhere((item) => item.value == widget.value);
+    final selected = widget.items.indexWhere(
+      (item) => item.value == widget.value,
+    );
     _activeIndex = selected >= 0 ? selected : 0;
     _activeIndex = selloCycleEnabledIndex(
       current: _activeIndex - 1,
@@ -570,10 +562,12 @@ class _DesktopMenuOverlayState<T> extends State<_DesktopMenuOverlay<T>> {
         CompositedTransformFollower(
           link: widget.link,
           showWhenUnlinked: false,
-          targetAnchor:
-              widget.openBelow ? Alignment.bottomLeft : Alignment.topLeft,
-          followerAnchor:
-              widget.openBelow ? Alignment.topLeft : Alignment.bottomLeft,
+          targetAnchor: widget.openBelow
+              ? Alignment.bottomLeft
+              : Alignment.topLeft,
+          followerAnchor: widget.openBelow
+              ? Alignment.topLeft
+              : Alignment.bottomLeft,
           offset: Offset(0, widget.openBelow ? widget.gap : -widget.gap),
           child: Material(
             color: AppColors.surface,
@@ -609,9 +603,7 @@ class _DesktopMenuOverlayState<T> extends State<_DesktopMenuOverlay<T>> {
                         item: item,
                         isSelected: isSelected,
                         isHovered: isHovered,
-                        onHover: item.enabled
-                            ? () => _setActive(index)
-                            : null,
+                        onHover: item.enabled ? () => _setActive(index) : null,
                         onSelected: widget.onSelected,
                       );
                     },
@@ -681,13 +673,14 @@ class _DesktopMenuRow<T> extends StatelessWidget {
                       style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
                         fontSize: 13.5,
-                        fontWeight:
-                            emphasize ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: emphasize
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         color: !enabled
                             ? AppColors.textFaint
                             : (emphasize
-                                ? context.brandAccent
-                                : AppColors.textPrimary),
+                                  ? context.brandAccent
+                                  : AppColors.textPrimary),
                       ),
                       child: item.child,
                     ),

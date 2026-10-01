@@ -150,7 +150,9 @@ class _AddExistingChequeDialogState
       }
 
       final tempKey = 'draft-${DateTime.now().millisecondsSinceEpoch}';
-      final path = await ref.read(chequeRepositoryProvider).uploadChequePhoto(
+      final path = await ref
+          .read(chequeRepositoryProvider)
+          .uploadChequePhoto(
             companyId: companyId,
             chequeKey: tempKey,
             bytes: prepared.bytes,
@@ -250,9 +252,7 @@ class _AddExistingChequeDialogState
           value == null ? 'Select date' : SelloFormatters.date(value),
           style: TextStyle(
             fontFamily: AppTypography.fontFamily,
-            color: value == null
-                ? AppColors.textFaint
-                : AppColors.textPrimary,
+            color: value == null ? AppColors.textFaint : AppColors.textPrimary,
           ),
         ),
       ),
@@ -323,11 +323,7 @@ class _AddExistingChequeDialogState
             },
           ),
           const SizedBox(height: 14),
-          SelloTextField(
-            controller: _holder,
-            label: 'Holder',
-            required: true,
-          ),
+          SelloTextField(controller: _holder, label: 'Holder', required: true),
           const SizedBox(height: 8),
           SelloDialogSection(
             title: 'Cheque details',
@@ -336,8 +332,9 @@ class _AddExistingChequeDialogState
                 controller: _amount,
                 label: 'Amount',
                 required: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onChanged: (_) => setState(() => _error = null),
               ),
               const SizedBox(height: 12),
@@ -372,30 +369,33 @@ class _AddExistingChequeDialogState
                 runSpacing: 8,
                 children: [
                   for (final status in _existingChequeStatuses)
-                    ChoiceChip(
-                      label: Text(status.shortLabel),
-                      selected: _status == status,
-                      onSelected: (selected) {
-                        if (!selected) return;
-                        setState(() {
-                          _status = status;
-                          _error = null;
-                        });
-                      },
-                      selectedColor: context.brandAccentContainer,
-                      labelStyle: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontWeight: FontWeight.w600,
-                        color: _status == status
-                            ? context.brandAccent
-                            : AppColors.textSecondary,
+                    Tooltip(
+                      message: status.helpText,
+                      child: ChoiceChip(
+                        label: Text(status.shortLabel),
+                        selected: _status == status,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() {
+                            _status = status;
+                            _error = null;
+                          });
+                        },
+                        selectedColor: context.brandAccentContainer,
+                        labelStyle: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontWeight: FontWeight.w600,
+                          color: _status == status
+                              ? context.brandAccent
+                              : AppColors.textSecondary,
+                        ),
+                        side: BorderSide(
+                          color: _status == status
+                              ? context.brandAccent.withValues(alpha: 0.35)
+                              : AppColors.outlinePanel,
+                        ),
+                        backgroundColor: AppColors.surface,
                       ),
-                      side: BorderSide(
-                        color: _status == status
-                            ? context.brandAccent.withValues(alpha: 0.35)
-                            : AppColors.outlinePanel,
-                      ),
-                      backgroundColor: AppColors.surface,
                     ),
                 ],
               ),
@@ -459,9 +459,7 @@ class _AddExistingChequeDialogState
                   onRemove: _photoBytes == null ? null : _clearPhoto,
                   uploadLabel: _uploadingPhoto ? 'Uploading…' : 'Add photo',
                   height: 140,
-                  hints: const [
-                    'Optional photo of the physical cheque',
-                  ],
+                  hints: const ['Optional photo of the physical cheque'],
                 ),
                 const SizedBox(height: 12),
                 SelloTextField(

@@ -21,7 +21,7 @@ String? _stringValue(dynamic value) {
 }
 
 String? _embedName(dynamic value, String key) {
-  if (value is Map<String, dynamic>) return _stringValue(value[key]);
+  if (value is Map) return _stringValue(value[key]);
   if (value is List && value.isNotEmpty && value.first is Map) {
     return _stringValue((value.first as Map)[key]);
   }
@@ -31,27 +31,67 @@ String? _embedName(dynamic value, String key) {
 class PaymentAllocation extends Equatable {
   const PaymentAllocation({
     required this.id,
-    required this.orderId,
     required this.amount,
+    this.orderId,
     this.orderNumber,
+    this.receivableAdjustmentId,
+    this.adjustmentNumber,
+    this.adjustmentReferenceNumber,
   });
 
   final String id;
-  final String orderId;
+  final String? orderId;
   final num amount;
   final String? orderNumber;
+  final String? receivableAdjustmentId;
+  final String? adjustmentNumber;
+
+  /// Pre-Sello invoice / reference on an opening-balance allocation.
+  final String? adjustmentReferenceNumber;
+
+  bool get isOpeningBalance =>
+      receivableAdjustmentId != null && receivableAdjustmentId!.isNotEmpty;
+
+  /// Order number, or "Opening balance · OB-…" for adjustment allocations.
+  String get displayLabel {
+    if (isOpeningBalance) {
+      final number = adjustmentNumber?.trim();
+      if (number != null && number.isNotEmpty) {
+        return 'Opening balance · $number';
+      }
+      return 'Opening balance';
+    }
+    final order = orderNumber?.trim();
+    if (order != null && order.isNotEmpty) return order;
+    return orderId ?? '';
+  }
 
   factory PaymentAllocation.fromJson(Map<String, dynamic> json) {
     return PaymentAllocation(
       id: json['id'] as String,
-      orderId: json['order_id'] as String,
+      orderId: json['order_id'] as String?,
       amount: _numValue(json['amount']),
       orderNumber: _embedName(json['orders'], 'order_number'),
+      receivableAdjustmentId: json['receivable_adjustment_id'] as String?,
+      adjustmentNumber: _embedName(
+        json['customer_receivable_adjustments'],
+        'adjustment_number',
+      ),
+      adjustmentReferenceNumber: _embedName(
+        json['customer_receivable_adjustments'],
+        'reference_number',
+      ),
     );
   }
 
   @override
-  List<Object?> get props => [id, orderId, amount];
+  List<Object?> get props => [
+        id,
+        orderId,
+        amount,
+        receivableAdjustmentId,
+        adjustmentReferenceNumber,
+      ];
 }
 
 class PaymentSummary extends Equatable {
@@ -180,12 +220,38 @@ class PaymentDashboardStats {
 }
 
 class PaymentAllocationInput {
-  const PaymentAllocationInput({required this.orderId, required this.amount});
+  const PaymentAllocationInput({
+    this.orderId,
+    this.receivableAdjustmentId,
+    required this.amount,
+  });
 
-  final String orderId;
+  factory PaymentAllocationInput.fromReceivable(
+    ReceivableOrder receivable,
+    num amount,
+  ) {
+    if (receivable.isOpeningBalance) {
+      return PaymentAllocationInput(
+        receivableAdjustmentId: receivable.id,
+        amount: amount,
+      );
+    }
+    return PaymentAllocationInput(orderId: receivable.id, amount: amount);
+  }
+
+  final String? orderId;
+  final String? receivableAdjustmentId;
   final num amount;
 
-  Map<String, dynamic> toJson() => {'order_id': orderId, 'amount': amount};
+  Map<String, dynamic> toJson() {
+    if (receivableAdjustmentId != null && receivableAdjustmentId!.isNotEmpty) {
+      return {
+        'receivable_adjustment_id': receivableAdjustmentId,
+        'amount': amount,
+      };
+    }
+    return {'order_id': orderId, 'amount': amount};
+  }
 }
 
 class ReceivePaymentInput {
@@ -267,7 +333,9 @@ class OrderCollectionBalance {
       (total - amountPaid - amountPending).clamp(0, double.infinity);
 }
 
-/// Outstanding order row for the receive-payment picker.
+enum ReceivableKind { openingBalance, order }
+
+/// Outstanding order or opening-balance row for the receive-payment picker.
 class ReceivableOrder {
   const ReceivableOrder({
     required this.id,
@@ -275,13 +343,26 @@ class ReceivableOrder {
     required this.total,
     required this.amountPaid,
     required this.orderedAt,
+    this.kind = ReceivableKind.order,
+    this.referenceNumber,
   });
 
   final String id;
   final String orderNumber;
   final num total;
   final num amountPaid;
+
+  /// Order [orderedAt], or opening-balance [recognizedAt].
   final DateTime orderedAt;
+  final ReceivableKind kind;
+
+  /// Pre-Sello invoice / reference on opening-balance receivables.
+  final String? referenceNumber;
+
+  bool get isOpeningBalance => kind == ReceivableKind.openingBalance;
 
   num get remaining => (total - amountPaid).clamp(0, double.infinity);
+
+  String get pickerTitle =>
+      isOpeningBalance ? 'Opening balance' : orderNumber;
 }

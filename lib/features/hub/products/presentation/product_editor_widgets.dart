@@ -152,17 +152,21 @@ class _TabPill extends StatelessWidget {
             boxShadow: selected ? AppShadows.level1 : null,
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                tab.label,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                  color: selected
-                      ? context.brandAccent
-                      : AppColors.textSecondary,
+              Flexible(
+                child: Text(
+                  tab.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13.5,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    color: selected
+                        ? context.brandAccent
+                        : AppColors.textSecondary,
+                  ),
                 ),
               ),
               if (tab.hasError) ...[

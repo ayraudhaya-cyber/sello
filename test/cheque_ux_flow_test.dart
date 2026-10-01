@@ -7,7 +7,6 @@ import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
 import 'package:sello/shared/models/payment_summary.dart';
-import 'package:sello/shared/utils/customer_search.dart';
 
 void main() {
   CustomerSummary customer({
@@ -207,6 +206,52 @@ void main() {
       expect(ChequeStatus.deposited.shortLabel, 'At the bank');
       expect(ChequeStatus.cleared.shortLabel, 'Bank paid');
       expect(ChequeStatus.bounced.shortLabel, 'Bank returned');
+    });
+
+    test('status hover hints say when each status applies', () {
+      expect(
+        ChequeStatus.awaitingCollection.helpText,
+        'The customer has not given you this cheque yet.',
+      );
+      expect(
+        ChequeStatus.collected.helpText,
+        'You have the cheque. It is not at the bank yet.',
+      );
+      expect(
+        ChequeStatus.deposited.helpText,
+        'The cheque is at your bank. Waiting for the bank to pay it.',
+      );
+      expect(
+        ChequeStatus.cleared.helpText,
+        'The bank paid this cheque. The money is in.',
+      );
+      expect(
+        ChequeStatus.bounced.helpText,
+        'The bank sent this cheque back unpaid.',
+      );
+    });
+
+    test('status action hover hints say when to tap', () {
+      expect(
+        chequeForwardActionHint(ChequeForwardAction.collect),
+        'Use this when the customer has given you the cheque.',
+      );
+      expect(
+        chequeForwardActionHint(ChequeForwardAction.deposit),
+        'Use this after you take the cheque to your bank.',
+      );
+      expect(
+        chequeForwardActionHint(ChequeForwardAction.clear),
+        'Use this when the bank has paid the cheque into your account.',
+      );
+      expect(
+        chequeBounceActionHint,
+        'Use this if the bank sent the cheque back unpaid.',
+      );
+      expect(
+        chequeCancelActionHint,
+        'Use this if this cheque will not be used.',
+      );
     });
 
     test('waiting to receive shows Mark received only', () {

@@ -1,6 +1,9 @@
+import 'package:sello/features/payments/application/order_collection_association.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
+
+export 'package:sello/features/payments/application/order_collection_association.dart';
 
 /// Rules for collecting against an existing order. No new sale is created.
 abstract final class OrderCollectionRules {
@@ -17,14 +20,25 @@ abstract final class OrderCollectionRules {
         paymentStatus == PaymentStatus.partial;
   }
 
+  /// Hides Record collection when remaining is already covered, including
+  /// pending-approval allocations reserved against this order.
+  static bool canOfferRecordCollection({
+    required OrderStatus status,
+    required PaymentStatus paymentStatus,
+    required num total,
+    required num outstanding,
+  }) {
+    return OrderCollectionAssociation.canOfferRecordCollection(
+      status: status,
+      paymentStatus: paymentStatus,
+      total: total,
+      outstanding: outstanding,
+    );
+  }
+
   /// Cash, card, and bank settle through [receive_payment].
   /// Cheque is recorded on the same order through the cheque ledger.
-  static const methods = <PaymentMethod>[
-    PaymentMethod.cash,
-    PaymentMethod.card,
-    PaymentMethod.bankTransfer,
-    PaymentMethod.cheque,
-  ];
+  static const methods = OrderCollectionAssociation.supportedMethods;
 
   static String? validateAmount({
     required num? amount,
@@ -37,6 +51,31 @@ abstract final class OrderCollectionRules {
       return 'Amount is more than the outstanding balance.';
     }
     return null;
+  }
+
+  static String? validateNewCollection({
+    required PaymentMethod method,
+    required num? amount,
+    required num remaining,
+    AssociatedChequeMatch? match,
+  }) {
+    if (OrderCollectionAssociation.shouldUseExistingCheque(
+      method: method,
+      match: match,
+    )) {
+      return null;
+    }
+    final ceiling = OrderCollectionAssociation.newCollectionCeiling(
+      remaining: remaining,
+      method: method,
+      match: match,
+    );
+    if (ceiling <= 0.001 && match != null && match.usesExisting) {
+      return match.action == AssociatedChequeAction.collectExisting
+          ? 'Collect the existing cheque instead of recording another collection.'
+          : 'Apply the existing cheque instead of recording another collection.';
+    }
+    return validateAmount(amount: amount, outstanding: ceiling);
   }
 
   static String? validateCheque({

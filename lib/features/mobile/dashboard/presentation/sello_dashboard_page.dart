@@ -10,15 +10,12 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_consider_customers_provider.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_home_provider.dart';
-import 'package:sello/features/notifications/application/notifications_provider.dart';
-import 'package:sello/features/notifications/presentation/notification_center_panel.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/data/sri_lanka_areas.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/intelligence_insight.dart';
 import 'package:sello/shared/models/sales_day.dart';
-import 'package:sello/shared/providers/branding_provider.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -67,17 +64,17 @@ class SelloDashboardPage extends ConsumerWidget {
     final activeStop = active == null
         ? null
         : (day.visits
-                .where((s) => s.customerId == active.customerId)
-                .firstOrNull ??
-            FieldVisitStop(
-              id: active.id,
-              customerId: active.customerId,
-              customerVisitId: active.id,
-              customerName: active.customerName ?? 'Customer',
-              origin: VisitOrigin.unplanned,
-              status: VisitStopStatus.inProgress,
-              badge: VisitBadgeKind.unplanned,
-            ));
+                  .where((s) => s.customerId == active.customerId)
+                  .firstOrNull ??
+              FieldVisitStop(
+                id: active.id,
+                customerId: active.customerId,
+                customerVisitId: active.id,
+                customerName: active.customerName ?? 'Customer',
+                origin: VisitOrigin.unplanned,
+                status: VisitStopStatus.inProgress,
+                badge: VisitBadgeKind.unplanned,
+              ));
 
     final preview = day.homePlanPreview(maxItems: 3);
     final hidden = day.homePlanHiddenCount(maxItems: 3);
@@ -91,82 +88,75 @@ class SelloDashboardPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _HomeHero(
-              day: day,
-              currencySymbol: currency,
-            ),
+            _HomeHero(day: day, currencySymbol: currency),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.fromLTRB(pad, 8, pad, 20),
                 children: [
-                    _HomeStoreSearch(
-                      nearArea: nearArea,
-                      onPickArea: () => _pickNearArea(context, ref),
-                      onOpenCustomer: (customer) => openVisit(
-                        customerId: customer.id,
-                        name: customer.name,
-                      ),
-                      onSeeAll: (query) => context.go(
-                        query.trim().isEmpty
-                            ? RoutePaths.selloCustomers
-                            : '${RoutePaths.selloCustomers}'
+                  _HomeStoreSearch(
+                    nearArea: nearArea,
+                    onPickArea: () => _pickNearArea(context, ref),
+                    onOpenCustomer: (customer) =>
+                        openVisit(customerId: customer.id, name: customer.name),
+                    onSeeAll: (query) => context.go(
+                      query.trim().isEmpty
+                          ? RoutePaths.selloCustomers
+                          : '${RoutePaths.selloCustomers}'
                                 '?q=${Uri.encodeComponent(query.trim())}',
-                      ),
-                      onSearchProducts: (query) => context.go(
-                        query.trim().isEmpty
-                            ? RoutePaths.selloProducts
-                            : '${RoutePaths.selloProducts}'
+                    ),
+                    onSearchProducts: (query) => context.go(
+                      query.trim().isEmpty
+                          ? RoutePaths.selloProducts
+                          : '${RoutePaths.selloProducts}'
                                 '?q=${Uri.encodeComponent(query.trim())}',
-                      ),
-                      onWalkIn: () =>
-                          context.go('${RoutePaths.selloVisit}?walkin=1'),
                     ),
-                    if (activeStop != null) ...[
-                      const SizedBox(height: 14),
-                      _ContinueVisit(
-                        shopName: activeStop.customerName,
-                        onContinue: () => openStop(activeStop),
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    if (day.hasVisitPlan) ...[
-                      _TodaysPlanSection(
-                        day: day,
-                        preview: preview,
-                        hiddenCount: hidden,
-                        onOpenStop: openStop,
-                        onViewAll: () => _showFullPlan(
-                          context,
-                          day: day,
-                          onOpenStop: openStop,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                    _CustomersToConsider(
-                      customers: consider.valueOrNull ?? const [],
-                      loading: consider.isLoading,
-                      onOpen: (customer) => openVisit(
-                        customerId: customer.id,
-                        name: customer.name,
-                      ),
-                      onSeeAll: () => context.go(RoutePaths.selloCustomers),
+                    onWalkIn: () =>
+                        context.go('${RoutePaths.selloVisit}?walkin=1'),
+                  ),
+                  if (activeStop != null) ...[
+                    const SizedBox(height: 14),
+                    _ContinueVisit(
+                      shopName: activeStop.customerName,
+                      onContinue: () => openStop(activeStop),
                     ),
-                    if (day.intelligenceHints.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      SelloIntelligenceBanner(
-                        insights: _fieldInsights(day.intelligenceHints),
-                        maxVisible: 2,
-                        onInsightAction: (insight) {
-                          final role = session?.appRole;
-                          if (role == null) return;
-                          context.go(insight.routeFor(role));
-                        },
-                      ),
-                    ],
                   ],
-                ),
+                  const SizedBox(height: 22),
+                  if (day.hasVisitPlan) ...[
+                    _TodaysPlanSection(
+                      day: day,
+                      preview: preview,
+                      hiddenCount: hidden,
+                      onOpenStop: openStop,
+                      onViewAll: () => _showFullPlan(
+                        context,
+                        day: day,
+                        onOpenStop: openStop,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  _CustomersToConsider(
+                    customers: consider.valueOrNull ?? const [],
+                    loading: consider.isLoading,
+                    onOpen: (customer) =>
+                        openVisit(customerId: customer.id, name: customer.name),
+                    onSeeAll: () => context.go(RoutePaths.selloCustomers),
+                  ),
+                  if (day.intelligenceHints.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    SelloIntelligenceBanner(
+                      insights: _fieldInsights(day.intelligenceHints),
+                      maxVisible: 2,
+                      onInsightAction: (insight) {
+                        final role = session?.appRole;
+                        if (role == null) return;
+                        context.go(insight.routeFor(role));
+                      },
+                    ),
+                  ],
+                ],
               ),
+            ),
             Padding(
               padding: EdgeInsets.fromLTRB(pad, 10, pad, 12),
               child: _VisitShopAction(onVisitShop: visitAShop),
@@ -181,16 +171,17 @@ class SelloDashboardPage extends ConsumerWidget {
     List<IntelligenceInsight> hints,
   ) {
     final field = hints
-        .where((h) => switch (h.category) {
-              IntelligenceCategory.customers ||
-              IntelligenceCategory.customerVisits ||
-              IntelligenceCategory.schedules ||
-              IntelligenceCategory.payments ||
-              IntelligenceCategory.orders ||
-              IntelligenceCategory.recommendations =>
-                true,
-              _ => false,
-            })
+        .where(
+          (h) => switch (h.category) {
+            IntelligenceCategory.customers ||
+            IntelligenceCategory.customerVisits ||
+            IntelligenceCategory.schedules ||
+            IntelligenceCategory.payments ||
+            IntelligenceCategory.orders ||
+            IntelligenceCategory.recommendations => true,
+            _ => false,
+          },
+        )
         .toList(growable: false);
     return field.isNotEmpty ? field : hints;
   }
@@ -220,17 +211,6 @@ class SelloDashboardPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.outlinePanel,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 const Text(
                   'Near',
                   style: TextStyle(
@@ -268,9 +248,9 @@ class SelloDashboardPage extends ConsumerWidget {
       },
     );
     if (picked == null) return;
-    ref.read(selloHomeNearAreaProvider.notifier).setArea(
-          picked.isEmpty ? null : picked,
-        );
+    ref
+        .read(selloHomeNearAreaProvider.notifier)
+        .setArea(picked.isEmpty ? null : picked);
   }
 
   static Future<void> _showFullPlan(
@@ -295,17 +275,6 @@ class SelloDashboardPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.outlinePanel,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 Row(
                   children: [
                     const Expanded(
@@ -363,19 +332,14 @@ class SelloDashboardPage extends ConsumerWidget {
   }
 }
 
-class _HomeHero extends ConsumerWidget {
-  const _HomeHero({
-    required this.day,
-    required this.currencySymbol,
-  });
+class _HomeHero extends StatelessWidget {
+  const _HomeHero({required this.day, required this.currencySymbol});
 
   final SalesDaySnapshot day;
   final String currencySymbol;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final top = MediaQuery.paddingOf(context).top;
-    final branding = ref.watch(brandingProvider);
+  Widget build(BuildContext context) {
     final orders = day.activity.ordersCreated;
     final visits = day.hasVisitPlan
         ? day.plannedCount
@@ -388,26 +352,9 @@ class _HomeHero extends ConsumerWidget {
     final visitsLabel = '$visits ${visits == 1 ? 'Visit' : 'Visits'}';
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, top + 8, 20, 4),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: BrandedLogo(
-                    size: 32,
-                    maxWidth: 148,
-                    branding: branding,
-                    onLightSurface: true,
-                  ),
-                ),
-              ),
-              const _HomeNotificationButton(),
-            ],
-          ),
-          const SizedBox(height: 28),
           Text(
             'Collected Today',
             style: TextStyle(
@@ -460,51 +407,6 @@ class _HeroPill extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
           color: AppColors.textSecondary,
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeNotificationButton extends ConsumerWidget {
-  const _HomeNotificationButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final unread = ref.watch(
-      notificationsProvider.select((s) => s.unreadCount),
-    );
-    final hasUnread = unread > 0;
-
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: () => openNotificationCenter(context),
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 42,
-          height: 42,
-          child: Center(
-            child: Badge(
-              isLabelVisible: hasUnread,
-              label: Text(
-                unread > 9 ? '9+' : '$unread',
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              backgroundColor: AppColors.attention,
-              child: Icon(
-                hasUnread
-                    ? Icons.notifications_rounded
-                    : Icons.notifications_none_rounded,
-                size: 22,
-                color: AppColors.textTertiary,
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -598,78 +500,78 @@ class _HomeStoreSearchState extends ConsumerState<_HomeStoreSearch> {
               border: Border.all(color: AppColors.outlinePanel),
             ),
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _controller,
-                textInputAction: TextInputAction.search,
-                onChanged: _onChanged,
-                onSubmitted: widget.onSeeAll,
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w500,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Search stores, customers, products...',
-                  hintStyle: TextStyle(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _controller,
+                  textInputAction: TextInputAction.search,
+                  onChanged: _onChanged,
+                  onSubmitted: widget.onSeeAll,
+                  style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 15.5,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textTertiary,
                   ),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    color: AppColors.textTertiary,
+                  decoration: const InputDecoration(
+                    hintText: 'Search stores, customers, products...',
+                    hintStyle: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textTertiary,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: AppColors.textTertiary,
+                    ),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
                   ),
-                  filled: true,
-                  fillColor: Colors.transparent,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
                 ),
-              ),
-              const Divider(height: 1, color: Color(0xFFE6E4EE)),
-              InkWell(
-                onTap: widget.onPickArea,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.place_outlined,
-                        size: 18,
-                        color: AppColors.textTertiary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Near: $nearLabel',
-                          style: const TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
+                const Divider(height: 1, color: Color(0xFFE6E4EE)),
+                InkWell(
+                  onTap: widget.onPickArea,
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(14),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.place_outlined,
+                          size: 18,
+                          color: AppColors.textTertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Near: $nearLabel',
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
-                      ),
-                      const Icon(
-                        Icons.expand_more_rounded,
-                        size: 20,
-                        color: AppColors.textTertiary,
-                      ),
-                    ],
+                        const Icon(
+                          Icons.expand_more_rounded,
+                          size: 20,
+                          color: AppColors.textTertiary,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
             ),
           ),
         ),
@@ -802,20 +704,14 @@ class _CustomersToConsider extends StatelessWidget {
           )
         else
           for (final customer in customers)
-            _ConsiderRow(
-              customer: customer,
-              onTap: () => onOpen(customer),
-            ),
+            _ConsiderRow(customer: customer, onTap: () => onOpen(customer)),
       ],
     );
   }
 }
 
 class _ConsiderRow extends StatelessWidget {
-  const _ConsiderRow({
-    required this.customer,
-    required this.onTap,
-  });
+  const _ConsiderRow({required this.customer, required this.onTap});
 
   final CustomerSummary customer;
   final VoidCallback onTap;
@@ -845,9 +741,9 @@ class _ConsiderRow extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: _avatarFor(customer.id.isNotEmpty
-                    ? customer.id
-                    : customer.name),
+                color: _avatarFor(
+                  customer.id.isNotEmpty ? customer.id : customer.name,
+                ),
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
@@ -900,9 +796,7 @@ class _ConsiderRow extends StatelessWidget {
 
   static String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2 &&
-        parts.first.isNotEmpty &&
-        parts[1].isNotEmpty) {
+    if (parts.length >= 2 && parts.first.isNotEmpty && parts[1].isNotEmpty) {
       return '${parts.first[0]}${parts[1][0]}'.toUpperCase();
     }
     final trimmed = name.trim();
@@ -913,7 +807,8 @@ class _ConsiderRow extends StatelessWidget {
   static String _contextLine(CustomerSummary customer) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final due = customer.nextVisitAt != null &&
+    final due =
+        customer.nextVisitAt != null &&
         !DateTime(
           customer.nextVisitAt!.year,
           customer.nextVisitAt!.month,
@@ -945,10 +840,7 @@ class _ConsiderRow extends StatelessWidget {
 }
 
 class _ContinueVisit extends StatelessWidget {
-  const _ContinueVisit({
-    required this.shopName,
-    required this.onContinue,
-  });
+  const _ContinueVisit({required this.shopName, required this.onContinue});
 
   final String shopName;
   final VoidCallback onContinue;
@@ -1037,73 +929,73 @@ class _VisitShopAction extends StatelessWidget {
     return SizedBox(
       height: 68,
       child: Material(
-      color: _surface,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onVisitShop,
+        color: _surface,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 12, 0),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.22),
-                  borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onVisitShop,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 12, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.storefront_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.storefront_outlined,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Visit a shop',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Visit a shop',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Planned, nearby, or new',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.55),
+                      Text(
+                        'Planned, nearby, or new',
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.55),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: _accent,
-                  shape: BoxShape.circle,
+                const SizedBox(width: 8),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: _accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.arrow_forward_rounded,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -1134,90 +1026,88 @@ class _TodaysPlanSection extends StatelessWidget {
     final trailing = !day.hasVisitPlan
         ? null
         : (day.plannedCount == 0 && day.hasAssignedArea)
-            ? null
-            : (remaining == 0 ? 'Done' : '$remaining remaining');
+        ? null
+        : (remaining == 0 ? 'Done' : '$remaining remaining');
 
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  day.plannedCount == 0 && day.hasAssignedArea
-                      ? "Today's plan"
-                      : "Today's plan · ${day.plannedCount} "
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                day.plannedCount == 0 && day.hasAssignedArea
+                    ? "Today's plan"
+                    : "Today's plan · ${day.plannedCount} "
                           '${day.plannedCount == 1 ? 'stop' : 'stops'}',
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            if (trailing != null)
+              Text(
+                trailing == 'Done'
+                    ? 'Done'
+                    : day.plannedCompletedCount > 0
+                    ? '${day.plannedCompletedCount} completed'
+                    : trailing,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (preview.isEmpty && day.hasAssignedArea && day.plannedCount == 0)
+          _QuietNote(
+            heading: day.assignedArea!,
+            detail: 'Discover shops and build your day as you go.',
+            icon: Icons.explore_outlined,
+          )
+        else if (preview.isEmpty && day.isPlanComplete)
+          const _QuietNote(
+            heading: 'Plan done',
+            detail: 'Keep visiting if you need to.',
+            icon: Icons.check_circle_outline_rounded,
+          )
+        else ...[
+          for (final stop in preview)
+            _PlanRow(
+              stop: stop,
+              emphasize: stop.isInProgress,
+              onTap: () => onOpenStop(stop),
+            ),
+          if (hiddenCount > 0 || day.todaysRoute.length > preview.length) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: onViewAll,
+                style: TextButton.styleFrom(
+                  foregroundColor: context.brandAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(
+                  hiddenCount > 0 ? 'View all · $hiddenCount more' : 'View all',
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
-                    fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
+                    fontSize: 14,
                   ),
                 ),
               ),
-              if (trailing != null)
-                Text(
-                  trailing == 'Done'
-                      ? 'Done'
-                      : day.plannedCompletedCount > 0
-                          ? '${day.plannedCompletedCount} completed'
-                          : trailing,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          if (preview.isEmpty && day.hasAssignedArea && day.plannedCount == 0)
-            _QuietNote(
-              heading: day.assignedArea!,
-              detail: 'Discover shops and build your day as you go.',
-              icon: Icons.explore_outlined,
-            )
-          else if (preview.isEmpty && day.isPlanComplete)
-            const _QuietNote(
-              heading: 'Plan done',
-              detail: 'Keep visiting if you need to.',
-              icon: Icons.check_circle_outline_rounded,
-            )
-          else ...[
-            for (final stop in preview)
-              _PlanRow(
-                stop: stop,
-                emphasize: stop.isInProgress,
-                onTap: () => onOpenStop(stop),
-              ),
-            if (hiddenCount > 0 || day.todaysRoute.length > preview.length) ...[
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: onViewAll,
-                  style: TextButton.styleFrom(
-                    foregroundColor: context.brandAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  child: Text(
-                    hiddenCount > 0
-                        ? 'View all · $hiddenCount more'
-                        : 'View all',
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ],
         ],
+      ],
     );
   }
 }
@@ -1237,27 +1127,25 @@ class _PlanRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, color, label) = switch (stop.status) {
       VisitStopStatus.completed => (
-          Icons.check_circle_rounded,
-          AppColors.success,
-          stop.isUnplanned ? 'Completed · Walk-in' : 'Completed',
-        ),
+        Icons.check_circle_rounded,
+        AppColors.success,
+        stop.isUnplanned ? 'Completed · Walk-in' : 'Completed',
+      ),
       VisitStopStatus.inProgress => (
-          Icons.play_circle_filled_rounded,
-          context.brandAccent,
-          'In progress',
-        ),
+        Icons.play_circle_filled_rounded,
+        context.brandAccent,
+        'In progress',
+      ),
       VisitStopStatus.skipped => (
-          Icons.schedule_rounded,
-          AppColors.warning,
-          'Skipped · come back later',
-        ),
+        Icons.schedule_rounded,
+        AppColors.warning,
+        'Skipped · come back later',
+      ),
       VisitStopStatus.pending => (
-          Icons.circle_outlined,
-          AppColors.textFaint,
-          stop.isUnplanned
-              ? 'Unplanned'
-              : (stop.placeLabel ?? "On today's plan"),
-        ),
+        Icons.circle_outlined,
+        AppColors.textFaint,
+        stop.isUnplanned ? 'Unplanned' : (stop.placeLabel ?? "On today's plan"),
+      ),
     };
 
     final subtitle = [
@@ -1308,10 +1196,7 @@ class _PlanRow extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textFaint,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textFaint),
           ],
         ),
       ),

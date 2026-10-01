@@ -16,6 +16,28 @@ String chequeForwardActionLabel(ChequeForwardAction action) {
   };
 }
 
+/// Hover hint for the next status button — when to tap it.
+String chequeForwardActionHint(ChequeForwardAction action) {
+  return switch (action) {
+    ChequeForwardAction.collect =>
+      'Use this when the customer has given you the cheque.',
+    ChequeForwardAction.approve =>
+      'Use this after you have checked the cheque. This will change what the customer owes.',
+    ChequeForwardAction.deposit =>
+      'Use this after you take the cheque to your bank.',
+    ChequeForwardAction.clear =>
+      'Use this when the bank has paid the cheque into your account.',
+  };
+}
+
+const chequeBounceActionHint =
+    'Use this if the bank sent the cheque back unpaid.';
+
+const chequeCancelActionHint = 'Use this if this cheque will not be used.';
+
+const chequeBatchDepositHint =
+    'Use this after you take the selected cheques to your bank.';
+
 /// Collect / Deposit / Clear are reversible under current rules and skip a
 /// confirm dialog. Approve applies balances and still requires confirmation.
 bool chequeForwardActionNeedsConfirmation(ChequeForwardAction action) {
@@ -115,7 +137,9 @@ ChequeRelatedDocuments chequeRelatedDocuments({
   final numbers = <String>[];
   final seen = <String>{};
   for (final alloc in allocations) {
-    final label = chequeUserFacingLabel(alloc.orderNumber);
+    final label = chequeUserFacingLabel(
+      alloc.isOpeningBalance ? alloc.displayLabel : alloc.orderNumber,
+    );
     if (label == null) continue;
     if (seen.add(label)) numbers.add(label);
   }
@@ -163,10 +187,7 @@ num? preferredChequeDefaultAmount({
 num chequeOrderSelectionAmount(ReceivableOrder order) =>
     order.remaining > 0 ? order.remaining : 0;
 
-num clampChequeOrderAllocation({
-  required num amount,
-  required num remaining,
-}) {
+num clampChequeOrderAllocation({required num amount, required num remaining}) {
   if (amount <= 0) return 0;
   if (remaining <= 0) return 0;
   return amount > remaining ? remaining : amount;
@@ -213,9 +234,7 @@ List<PaymentAllocationInput> fifoChequeAllocations({
     if (remaining <= 0) break;
     final take = order.remaining.clamp(0, remaining);
     if (take > 0) {
-      allocations.add(
-        PaymentAllocationInput(orderId: order.id, amount: take),
-      );
+      allocations.add(PaymentAllocationInput.fromReceivable(order, take));
       remaining -= take;
     }
   }

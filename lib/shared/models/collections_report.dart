@@ -11,6 +11,8 @@ const String kCollectionsReportQuestion =
 /// Document type shown on the Collections Report (customer-facing).
 const String kCollectionsDocumentType = 'Invoice';
 
+const String kCollectionsOpeningBalanceDocumentType = 'Opening balance';
+
 const Set<String> kCollectionsEligibleOrderStatuses = {
   'placed',
   'partially_delivered',
@@ -50,6 +52,8 @@ class CollectionsReportInvoice extends Equatable {
     required this.openBalance,
     required this.agingDays,
     this.customerPhone,
+    this.documentType = kCollectionsDocumentType,
+    this.referenceNumber,
   });
 
   final String orderId;
@@ -62,6 +66,10 @@ class CollectionsReportInvoice extends Equatable {
   final String salesRepName;
   final num openBalance;
   final int agingDays;
+  final String documentType;
+
+  /// Pre-Sello invoice / reference. Never replaces [orderNumber].
+  final String? referenceNumber;
 
   @override
   List<Object?> get props => [
@@ -75,6 +83,8 @@ class CollectionsReportInvoice extends Equatable {
         salesRepName,
         openBalance,
         agingDays,
+        documentType,
+        referenceNumber,
       ];
 }
 
@@ -283,6 +293,52 @@ abstract final class CollectionsReportMath {
       salesRepName: salesRepName,
       openBalance: open,
       agingDays: agingDays(orderedAt: orderedAt, asOfDate: asOfDate),
+    );
+  }
+
+  /// Opening-balance rows are company AR, not a sales-rep invoice.
+  /// Include them only when no specific rep filter is applied.
+  static bool includeOpeningBalanceForSalesReps(List<String> selectedIds) {
+    return selectedIds.isEmpty;
+  }
+
+  static CollectionsReportInvoice? considerOpeningBalance({
+    required String adjustmentId,
+    required String adjustmentNumber,
+    required DateTime recognizedAt,
+    required num amount,
+    required String customerId,
+    required String customerName,
+    String? customerPhone,
+    required List<CollectionsReportAllocation> allocations,
+    required DateTime asOfDate,
+    List<String> selectedEmployeeIds = const [],
+    String? referenceNumber,
+  }) {
+    if (!includeOpeningBalanceForSalesReps(selectedEmployeeIds)) {
+      return null;
+    }
+    final cutoff = asOfEndUtc(asOfDate);
+    if (recognizedAt.isAfter(cutoff)) return null;
+    final open = openBalanceAsOf(
+      total: amount,
+      allocations: allocations,
+      asOfEndUtc: cutoff,
+    );
+    if (open == null) return null;
+    return CollectionsReportInvoice(
+      orderId: adjustmentId,
+      orderNumber: adjustmentNumber,
+      orderedAt: recognizedAt,
+      customerId: customerId,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      salesRepId: '',
+      salesRepName: '—',
+      openBalance: open,
+      agingDays: agingDays(orderedAt: recognizedAt, asOfDate: asOfDate),
+      documentType: kCollectionsOpeningBalanceDocumentType,
+      referenceNumber: referenceNumber,
     );
   }
 

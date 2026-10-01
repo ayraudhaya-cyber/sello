@@ -42,6 +42,14 @@ class PermissionService {
   /// Field-visit assignee eligibility — shared IAM, not schedule-specific.
   bool get canPerformFieldVisits => _profile.canPerformFieldVisits;
 
+  /// Owner / Manager / Administrator — Hub financial mutations (opening AR).
+  bool get canRecordOpeningBalanceAdjustment {
+    final code = _profile.roleCode.trim().toLowerCase();
+    return code == 'owner' ||
+        code == 'manager' ||
+        code == 'administrator';
+  }
+
   /// Owner / administrator can edit company settings. Managers are view-only.
   bool get canEditCompanySettings => canEdit(AppModule.settings);
 

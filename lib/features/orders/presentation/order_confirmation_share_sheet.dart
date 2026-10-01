@@ -158,10 +158,7 @@ class _OrderConfirmationShareDialogState
   Future<void> _onSmsPressed(OrderConfirmationAction action) async {
     final handler = widget.onSendSms;
     if (handler == null) {
-      SelloSnackbars.warning(
-        context,
-        'SMS sending is not available here.',
-      );
+      SelloSnackbars.warning(context, 'SMS sending is not available here.');
       return;
     }
     setState(() => _sendingSmsKey = action.recipientKey);
@@ -179,15 +176,14 @@ class _OrderConfirmationShareDialogState
       padding: const EdgeInsets.only(bottom: 8),
       child: SelloButton(
         label: action.label,
-        icon: isSms
-            ? Icons.sms_outlined
-            : Icons.chat_bubble_outline_rounded,
-        variant: action.channel == OutboundChannel.whatsapp &&
+        icon: isSms ? Icons.sms_outlined : Icons.chat_bubble_outline_rounded,
+        variant:
+            action.channel == OutboundChannel.whatsapp &&
                 action.recipientKind == OutboundRecipientKind.customer
             ? SelloButtonVariant.primary
             : action.channel == OutboundChannel.whatsapp
-                ? SelloButtonVariant.outline
-                : SelloButtonVariant.secondary,
+            ? SelloButtonVariant.outline
+            : SelloButtonVariant.secondary,
         expanded: true,
         loading: busy,
         onPressed: () {
@@ -207,8 +203,8 @@ class _OrderConfirmationShareDialogState
     final customer = outcome.customerActions;
     final hub = outcome.hubActions;
     final salesRep = outcome.salesRepActions;
-    final showCopy = outcome.documentUrl.trim().isNotEmpty &&
-        outcome.includeDocumentLink;
+    final showCopy =
+        outcome.documentUrl.trim().isNotEmpty && outcome.includeDocumentLink;
 
     return AlertDialog(
       title: Text(widget.title),
@@ -274,22 +270,28 @@ class _OrderConfirmationShareDialogState
               const SizedBox(height: 8),
               for (final action in salesRep) _actionButton(action),
             ],
+            const SizedBox(height: 8),
+            SelloButtonBar(
+              stretch: true,
+              children: [
+                if (showCopy)
+                  SelloButton(
+                    label: widget.copyLinkLabel,
+                    variant: SelloButtonVariant.ghost,
+                    expanded: true,
+                    onPressed: () => _copyLink(context),
+                  ),
+                SelloButton(
+                  label: 'Done',
+                  variant: SelloButtonVariant.secondary,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
           ],
         ),
       ),
-      actions: [
-        if (showCopy)
-          SelloButton(
-            label: widget.copyLinkLabel,
-            variant: SelloButtonVariant.ghost,
-            onPressed: () => _copyLink(context),
-          ),
-        SelloButton(
-          label: 'Done',
-          variant: SelloButtonVariant.secondary,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ],
     );
   }
 }

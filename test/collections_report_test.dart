@@ -305,6 +305,7 @@ void main() {
         'Sales Rep',
         'Document Type',
         'Document No.',
+        'Old invoice / reference',
         'Date',
         'Aging (days)',
         'Open Balance',
@@ -317,6 +318,7 @@ void main() {
       expect(xml, contains('Sales Rep'));
       expect(xml, contains('Document Type'));
       expect(xml, contains('Document No.'));
+      expect(xml, contains('Old invoice / reference'));
       expect(xml, contains('Aging (days)'));
       expect(xml, contains('Open Balance'));
       expect(xml, isNot(contains('P.O.')));

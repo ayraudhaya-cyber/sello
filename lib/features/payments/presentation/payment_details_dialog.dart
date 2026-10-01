@@ -194,12 +194,12 @@ class _PaymentDetailsDialogState extends State<PaymentDetailsDialog> {
           ),
           const SizedBox(height: _gap),
           _Section(
-            label: 'Allocated orders',
+            label: 'Allocated to',
             child: detail.allocations.isEmpty
                 ? Text(
                     payment.status.isPendingReview
-                        ? 'No order allocations — amount will apply to customer balance / wallet on approval.'
-                        : 'No order allocations — amount applied to customer balance / wallet.',
+                        ? 'No allocations — amount will apply to customer balance / wallet on approval.'
+                        : 'No allocations — amount applied to customer balance / wallet.',
                     style: _Type.label.copyWith(color: AppColors.textFaint),
                   )
                 : Column(
@@ -207,12 +207,32 @@ class _PaymentDetailsDialogState extends State<PaymentDetailsDialog> {
                       for (var i = 0; i < detail.allocations.length; i++) ...[
                         if (i > 0) const SizedBox(height: 12),
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: Text(
-                                detail.allocations[i].orderNumber ??
-                                    detail.allocations[i].orderId,
-                                style: _Type.value,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    detail.allocations[i].displayLabel,
+                                    style: _Type.value,
+                                  ),
+                                  if (detail.allocations[i].isOpeningBalance &&
+                                      (detail
+                                                  .allocations[i]
+                                                  .adjustmentReferenceNumber ??
+                                              '')
+                                          .trim()
+                                          .isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Old invoice / reference: ${detail.allocations[i].adjustmentReferenceNumber!.trim()}',
+                                      style: _Type.label.copyWith(
+                                        color: AppColors.textFaint,
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                             Text(
@@ -321,19 +341,14 @@ class _PaymentDetailsDialogState extends State<PaymentDetailsDialog> {
         ],
       ),
       footer: reviewing
-          ? Row(
-              children: [
-                SelloButton(
-                  label: 'Reject',
-                  variant: SelloButtonVariant.outline,
-                  onPressed: _busy ? null : _reject,
-                ),
-                const Spacer(),
-                SelloButton(
-                  label: _busy ? 'Working…' : 'Approve collection',
-                  onPressed: _busy ? null : _approve,
-                ),
-              ],
+          ? SelloDialogFooter(
+              cancelLabel: 'Reject',
+              cancelVariant: SelloButtonVariant.outline,
+              onCancel: _reject,
+              cancelEnabled: !_busy,
+              primaryLabel: _busy ? 'Working…' : 'Approve collection',
+              primaryLoading: _busy,
+              onPrimary: _busy ? null : _approve,
             )
           : SelloDialogFooter(
               cancelLabel: 'Close',

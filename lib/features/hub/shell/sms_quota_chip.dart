@@ -1,0 +1,149 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/hub/shell/sms_quota_provider.dart';
+
+/// Where the quota block is drawn. Hidden everywhere when this company has no token.
+enum SmsQuotaPlacement {
+  /// Desktop Hub header, just before Quick actions.
+  header,
+
+  /// Phone and tablet menu opened from the header.
+  sidebar,
+
+  /// Settings → Notifications, under the SMS channel switch.
+  settings,
+}
+
+/// Compact SMS quota. Renders nothing until the server returns a live balance.
+class SmsQuotaChip extends ConsumerWidget {
+  const SmsQuotaChip({super.key, this.placement = SmsQuotaPlacement.header});
+
+  final SmsQuotaPlacement placement;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quota = ref.watch(smsQuotaProvider).asData?.value;
+    if (quota == null) return const SizedBox.shrink();
+
+    final onDark = placement == SmsQuotaPlacement.sidebar;
+    final fraction = quota.baseline <= 0
+        ? 0.0
+        : (quota.used / quota.baseline).clamp(0.0, 1.0).toDouble();
+    final critical = quota.isCritical;
+    final barColor = critical
+        ? AppColors.attention
+        : quota.isLow
+        ? AppColors.warning
+        : onDark
+        ? AppColors.navInkStrong
+        : AppColors.primary;
+    final labelColor = critical
+        ? AppColors.attention
+        : onDark
+        ? AppColors.navInk
+        : AppColors.textTertiary;
+    final valueColor = critical
+        ? AppColors.attention
+        : onDark
+        ? AppColors.navInkStrong
+        : AppColors.textSecondary;
+    final outlineColor = critical
+        ? AppColors.attention.withValues(alpha: onDark ? 0.55 : 0.45)
+        : onDark
+        ? const Color(0x33FFFFFF)
+        : AppColors.outline;
+
+    final bar = Tooltip(
+      message: quota.tooltip,
+      waitDuration: Duration.zero,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                'SMS quota',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                  color: labelColor,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                quota.caption,
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                  color: valueColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              height: 4,
+              child: LinearProgressIndicator(
+                value: fraction,
+                minHeight: 4,
+                backgroundColor: critical
+                    ? AppColors.attention.withValues(
+                        alpha: onDark ? 0.28 : 0.16,
+                      )
+                    : onDark
+                    ? const Color(0x33FFFFFF)
+                    : AppColors.outline,
+                color: barColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return switch (placement) {
+      SmsQuotaPlacement.header => SizedBox(
+        width: 188,
+        height: 40,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: outlineColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: bar,
+          ),
+        ),
+      ),
+      SmsQuotaPlacement.sidebar => Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          0,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Divider(height: 1, color: Color(0x1FFFFFFF)),
+            const SizedBox(height: 14),
+            bar,
+          ],
+        ),
+      ),
+      SmsQuotaPlacement.settings => Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: bar,
+      ),
+    };
+  }
+}

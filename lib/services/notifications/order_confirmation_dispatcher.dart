@@ -93,6 +93,7 @@ class OrderConfirmationDispatcher {
           prepared.order.orderedAt ??
           DateTime.now().toUtc(),
       total: prepared.order.total,
+      discountAmount: prepared.order.discountAmount,
       currencyCode: prepared.order.currency,
       documentUrl: tokenUrl,
     );

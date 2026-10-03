@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
+import 'package:sello/features/hub/shell/sms_quota_chip.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/notifications/outbound/messaging_phone.dart';
@@ -83,6 +84,7 @@ class OutboundMessagingSettingsCard extends ConsumerWidget {
                             ),
                           ),
                     ),
+                    const SmsQuotaChip(placement: SmsQuotaPlacement.settings),
                     const SizedBox(height: 14),
                     SettingsCompactField(
                       label: 'SMS Sender ID',

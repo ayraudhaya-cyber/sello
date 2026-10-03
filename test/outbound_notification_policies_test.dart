@@ -182,17 +182,19 @@ void main() {
           'customer_name': 'City Mart',
           'order_number': 'SO-9',
           'order_total': 'Rs 12,500.00',
+          'discount_amount': 'Rs 500.00',
           'sales_rep_name': 'Amina',
           'invoice_link': 'https://app.sello.test/d/token',
         },
       );
 
-      expect(body, contains('Acme'));
-      expect(body, contains('City Mart'));
-      expect(body, contains('SO-9'));
-      expect(body, contains('Rs 12,500.00'));
-      expect(body, contains('Amina'));
-      expect(body, contains('View invoice: https://app.sello.test/d/token'));
+      expect(body, contains('Hi City Mart'));
+      expect(body, contains('Order SO-9 confirmed!'));
+      expect(body, contains('Order Value: Rs 12,500.00'));
+      expect(body, contains('Discount: Rs 500.00'));
+      expect(body, contains('Sales Rep: Amina'));
+      expect(body, contains('\n\nhttps://app.sello.test/d/token'));
+      expect(body, isNot(contains('View invoice')));
       expect(body.toLowerCase(), isNot(contains('sku')));
     });
 

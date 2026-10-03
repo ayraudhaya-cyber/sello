@@ -14,6 +14,7 @@ class OrderConfirmationCopy {
     required this.total,
     required this.currencyCode,
     required this.documentUrl,
+    this.discountAmount = 0,
   });
 
   final String companyName;
@@ -22,12 +23,19 @@ class OrderConfirmationCopy {
   final String salesRepName;
   final DateTime orderedAt;
   final num total;
+  final num discountAmount;
   final String currencyCode;
   final String documentUrl;
 
   String get formattedTotal {
     final symbol = SelloFormatters.currencySymbol(currencyCode);
     return SelloFormatters.currency(total, symbol: symbol);
+  }
+
+  String? get formattedDiscount {
+    if (discountAmount <= 0) return null;
+    final symbol = SelloFormatters.currencySymbol(currencyCode);
+    return SelloFormatters.currency(discountAmount, symbol: symbol);
   }
 
   String get formattedDate => SelloFormatters.date(orderedAt);
@@ -47,6 +55,7 @@ class OrderConfirmationCopy {
       'date': formattedDate,
       'order_total': formattedTotal,
       'amount': formattedTotal,
+      'discount_amount': formattedDiscount,
       'invoice_link': link,
       'document_link': link,
     };

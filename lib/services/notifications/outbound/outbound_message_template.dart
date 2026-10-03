@@ -9,12 +9,14 @@ import 'package:sello/shared/models/outbound_notification_policies.dart';
 /// existing custom templates keep working.
 abstract final class OutboundMessageTemplate {
   static const orderConfirmationDefault =
-      '{{business_name}}\n'
-      'Order {{order_number}} confirmed\n'
+      'Hi {{customer_name}}\n'
       '\n'
-      'Hi {{customer_name}}, your order totalling {{order_total}} has been placed.'
+      'Order {{order_number}} confirmed!\n'
+      '\n'
+      'Order Value: {{order_total}}'
+      '{{#discount_amount}}\nDiscount: {{discount_amount}}{{/discount_amount}}'
       '{{#sales_rep_name}}\nSales Rep: {{sales_rep_name}}{{/sales_rep_name}}'
-      '{{#invoice_link}}\n\nView invoice: {{invoice_link}}{{/invoice_link}}';
+      '{{#invoice_link}}\n\n{{invoice_link}}{{/invoice_link}}';
 
   static const orderNotificationDefault =
       '{{business_name}}\n'

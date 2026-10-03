@@ -54,10 +54,7 @@ Deno.serve(async (req) => {
     return json({ status: "skipped", reason: "invalid_recipient" }, 200);
   }
 
-  const token = Deno.env.get("TEXTLK_API_TOKEN")?.trim() ?? "";
-  if (!token) {
-    return json({ status: "failed", reason: "sms_not_configured" }, 200);
-  }
+  const envToken = Deno.env.get("TEXTLK_API_TOKEN")?.trim() ?? "";
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -68,6 +65,16 @@ Deno.serve(async (req) => {
 
   if (isVerify && !serviceKey) {
     return json({ status: "failed", reason: "activation_unavailable" }, 200);
+  }
+
+  const sendToken = await resolveTextlkToken({
+    userClient: supabase,
+    serviceKey,
+    supabaseUrl,
+    envToken,
+  });
+  if (!sendToken) {
+    return json({ status: "failed", reason: "sms_not_configured" }, 200);
   }
 
   const { data: claim, error: claimError } = isVerify
@@ -123,7 +130,7 @@ Deno.serve(async (req) => {
     const response = await fetch(TEXTLK_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${sendToken}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -198,6 +205,37 @@ Deno.serve(async (req) => {
     200,
   );
 });
+
+async function resolveTextlkToken({
+  userClient,
+  serviceKey,
+  supabaseUrl,
+  envToken,
+}: {
+  userClient: ReturnType<typeof createClient>;
+  serviceKey: string;
+  supabaseUrl: string;
+  envToken: string;
+}): Promise<string> {
+  if (!serviceKey) return envToken;
+
+  const { data: companyId } = await userClient.rpc("current_company_id");
+  const id = typeof companyId === "string" ? companyId.trim() : "";
+  if (!id) return envToken;
+
+  const admin = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data } = await admin
+    .from("company_sms_credentials")
+    .select("textlk_api_token")
+    .eq("company_id", id)
+    .maybeSingle();
+  const tenantToken = typeof data?.textlk_api_token === "string"
+    ? data.textlk_api_token.trim()
+    : "";
+  return tenantToken || envToken;
+}
 
 function json(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {

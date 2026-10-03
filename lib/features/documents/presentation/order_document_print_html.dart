@@ -14,48 +14,38 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
     ..writeln('<html lang="en">')
     ..writeln('<head>')
     ..writeln('<meta charset="utf-8">')
-    ..writeln('<meta name="viewport" content="width=device-width, initial-scale=1">')
-    ..writeln('<title></title>')
+    ..writeln(
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    )
+    ..writeln(
+      '<title>${_esc('${doc.kindLabel} ${doc.kindNumber}'.trim())}</title>',
+    )
     ..writeln('<style>$_printCss</style>')
     ..writeln('</head>')
     ..writeln('<body>')
     ..writeln('<div class="sheet">');
 
-  _writeIssuer(buffer, identity);
-  buffer.writeln('<div class="card">');
-  buffer.writeln('<div class="title">${_esc(doc.documentTitle)}</div>');
-  buffer.writeln('<div class="date">${_esc(date)}</div>');
-  if (!doc.purpose.isPaymentDocument && doc.collectionStatusTag != null) {
-    final cls = doc.collectionReview.showsPaymentDetails
-        ? 'status-tag approved'
-        : 'status-tag processing';
-    buffer.writeln(
-      '<div class="$cls">${_esc(doc.collectionStatusTag!)}</div>',
-    );
-  }
+  _writeHeader(buffer, identity, doc);
+  _writeBillTo(buffer, doc, date);
 
+  buffer.writeln('<div class="bill">');
   if (doc.purpose.isPaymentDocument) {
     _writePaymentBody(buffer, doc);
   } else {
     _writeOrderBody(buffer, doc);
   }
-
-  buffer.writeln('</div>'); // card
-
-  if (identity.hasTerms) {
-    buffer
-      ..writeln('<div class="terms">')
-      ..writeln('<div class="terms-label">Terms</div>')
-      ..writeln('<div class="terms-body">${_esc(identity.terms!)}</div>')
-      ..writeln('</div>');
-  }
+  buffer.writeln('</div>');
 
   buffer.writeln('<div class="thanks">Thank you for your business!</div>');
+  if (identity.hasTerms) {
+    buffer.writeln('<div class="terms">${_esc(identity.terms!)}</div>');
+  }
   if (identity.hasTagline) {
     buffer.writeln('<div class="tagline">${_esc(identity.tagline!)}</div>');
   }
+
   buffer
-    ..writeln('</div>') // sheet
+    ..writeln('</div>')
     ..writeln('<script>')
     ..writeln(r'''
 function selloPrint(){ window.focus(); window.print(); }
@@ -78,8 +68,13 @@ window.addEventListener("afterprint", function(){ try { window.close(); } catch 
   return buffer.toString();
 }
 
-void _writeIssuer(StringBuffer buffer, DocumentIssuerIdentity identity) {
-  buffer.writeln('<header class="issuer">');
+void _writeHeader(
+  StringBuffer buffer,
+  DocumentIssuerIdentity identity,
+  OrderDocument doc,
+) {
+  buffer.writeln('<header class="header">');
+  buffer.writeln('<div class="brand">');
   if (identity.showLogo && identity.logoUrl != null) {
     buffer.writeln(
       '<img class="logo" src="${_esc(identity.logoUrl!)}" alt="">',
@@ -90,6 +85,17 @@ void _writeIssuer(StringBuffer buffer, DocumentIssuerIdentity identity) {
       '<div class="business">${_esc(identity.businessName)}</div>',
     );
   }
+  buffer.writeln('</div>');
+  buffer.writeln('<div class="kind">');
+  buffer.writeln(
+    '<div class="kind-label">${_esc(doc.kindLabel.toUpperCase())}</div>',
+  );
+  if (doc.kindNumber.isNotEmpty) {
+    buffer.writeln('<div class="kind-number">${_esc(doc.kindNumber)}</div>');
+  }
+  buffer.writeln('</div>');
+  buffer.writeln('</header>');
+
   if (identity.hasContactBlock) {
     final parts = <String>[
       if (identity.address != null) identity.address!,
@@ -100,53 +106,68 @@ void _writeIssuer(StringBuffer buffer, DocumentIssuerIdentity identity) {
       '<div class="contact">${parts.map(_esc).join(' <span class="sep">|</span> ')}</div>',
     );
   }
-  buffer.writeln('</header>');
+}
+
+void _writeBillTo(StringBuffer buffer, OrderDocument doc, String date) {
+  buffer.writeln('<section class="billto">');
+  buffer.writeln('<div>');
+  buffer.writeln('<div class="label">Bill To</div>');
+  buffer.writeln('<div class="party">${_esc(doc.customerName)}</div>');
+  if (doc.customerPhone != null) {
+    buffer.writeln('<div class="party-line">${_esc(doc.customerPhone!)}</div>');
+  }
+  if (doc.customerAddress != null) {
+    buffer.writeln(
+      '<div class="party-line">${_esc(doc.customerAddress!)}</div>',
+    );
+  }
+  if (doc.salesRepName != null) {
+    buffer.writeln(
+      '<div class="party-line">Sales Rep: ${_esc(doc.salesRepName!)}</div>',
+    );
+  }
+  buffer.writeln('</div>');
+  buffer.writeln('<div class="billto-right">');
+  buffer.writeln('<div class="label">Date</div>');
+  buffer.writeln('<div class="info-value">${_esc(date)}</div>');
+  if (!doc.purpose.isPaymentDocument && doc.collectionStatusTag != null) {
+    final cls = doc.collectionReview.showsPaymentDetails
+        ? 'status-tag approved'
+        : 'status-tag processing';
+    buffer.writeln('<div class="$cls">${_esc(doc.collectionStatusTag!)}</div>');
+  }
+  buffer.writeln('</div>');
+  buffer.writeln('</section>');
 }
 
 void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
-  buffer.writeln('<div class="meta">');
-  _meta(buffer, 'Customer', doc.customerName);
-  if (doc.customerPhone != null) {
-    _meta(buffer, 'Phone', doc.customerPhone!);
-  }
-  if (doc.customerAddress != null) {
-    _meta(buffer, 'Address', doc.customerAddress!);
-  }
-  if (doc.salesRepName != null) {
-    _meta(buffer, 'Sales Rep', doc.salesRepName!);
-  }
-  if (doc.collectionReview.showsPaymentDetails) {
-    if (doc.collectionPaymentNumber != null) {
-      _meta(buffer, 'Payment', doc.collectionPaymentNumber!);
-    }
-    if (doc.collectionMethodLabel != null) {
-      _meta(buffer, 'Method', doc.collectionMethodLabel!);
-    }
-    if (doc.collectionPaymentAmount != null) {
-      _meta(buffer, 'Amount received', doc.money(doc.collectionPaymentAmount!));
-    }
-    if (doc.collectionReceivedAt != null) {
-      _meta(buffer, 'Recorded on', SelloFormatters.date(doc.collectionReceivedAt!));
-    }
-  }
-  if (doc.outstandingBalance != null) {
-    _meta(buffer, 'Outstanding balance', doc.money(doc.outstandingBalance!));
-  }
-  buffer.writeln('</div>');
-
-  buffer.writeln('<div class="section-label">Items</div>');
-  for (final line in doc.lines) {
+  buffer.writeln('<table class="lines">');
+  buffer.writeln(
+    '<thead><tr><th class="num">#</th><th>Description</th>'
+    '<th class="qty">Qty</th><th class="rate">Rate</th>'
+    '<th class="amt">Amount</th></tr></thead><tbody>',
+  );
+  for (var i = 0; i < doc.lines.length; i++) {
+    final line = doc.lines[i];
     buffer
-      ..writeln('<div class="line">')
-      ..writeln('<div class="line-main">')
-      ..writeln('<div class="line-name">${_esc(line.displayTitle)}</div>')
+      ..writeln('<tr>')
+      ..writeln('<td class="num">${i + 1}</td>')
+      ..writeln('<td>')
+      ..writeln(_esc(line.displayTitle))
       ..writeln(
-        '<div class="line-sub">${_esc(line.displayMeta(doc.money(line.unitPrice), SelloFormatters.quantity))}</div>',
+        line.sku?.trim().isNotEmpty == true
+            ? '<div class="line-sub">${_esc(line.sku!.trim())}</div>'
+            : '',
       )
-      ..writeln('</div>')
-      ..writeln('<div class="line-total">${_esc(doc.money(line.lineTotal))}</div>')
-      ..writeln('</div>');
+      ..writeln('</td>')
+      ..writeln(
+        '<td class="qty">${_esc(SelloFormatters.quantity(line.quantity))}</td>',
+      )
+      ..writeln('<td class="rate">${_esc(doc.money(line.unitPrice))}</td>')
+      ..writeln('<td class="amt">${_esc(doc.money(line.lineTotal))}</td>')
+      ..writeln('</tr>');
   }
+  buffer.writeln('</tbody></table>');
 
   buffer.writeln('<div class="totals">');
   _total(buffer, 'Subtotal', doc.money(doc.subtotal));
@@ -158,6 +179,40 @@ void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
   }
   _total(buffer, 'Total', doc.money(doc.total), emphasize: true);
   buffer.writeln('</div>');
+
+  final hasPay =
+      doc.collectionReview.showsPaymentDetails ||
+      doc.outstandingBalance != null;
+  if (hasPay) {
+    buffer.writeln('<div class="pay">');
+    buffer.writeln('<div class="label">Payment details</div>');
+    if (doc.collectionReview.showsPaymentDetails) {
+      if (doc.collectionPaymentNumber != null) {
+        _total(buffer, 'Payment', doc.collectionPaymentNumber!);
+      }
+      if (doc.collectionMethodLabel != null) {
+        _total(buffer, 'Method', doc.collectionMethodLabel!);
+      }
+      if (doc.collectionPaymentAmount != null) {
+        _total(
+          buffer,
+          'Amount received',
+          doc.money(doc.collectionPaymentAmount!),
+        );
+      }
+      if (doc.collectionReceivedAt != null) {
+        _total(
+          buffer,
+          'Recorded on',
+          SelloFormatters.date(doc.collectionReceivedAt!),
+        );
+      }
+    }
+    if (doc.outstandingBalance != null) {
+      _total(buffer, 'Outstanding balance', doc.money(doc.outstandingBalance!));
+    }
+    buffer.writeln('</div>');
+  }
 
   if (doc.notes != null) {
     buffer.writeln('<div class="notes">${_esc(doc.notes!)}</div>');
@@ -175,28 +230,18 @@ void _writePaymentBody(StringBuffer buffer, OrderDocument doc) {
     );
   }
 
-  buffer.writeln('<div class="meta">');
-  _meta(buffer, 'Customer', doc.customerName);
-  if (doc.customerPhone != null) {
-    _meta(buffer, 'Phone', doc.customerPhone!);
-  }
-  if (doc.salesRepName != null) {
-    _meta(buffer, 'Sales Rep', doc.salesRepName!);
-  }
+  buffer.writeln('<div class="totals">');
   if (method != null && method.isNotEmpty) {
-    _meta(buffer, 'Method', method);
+    _total(buffer, 'Method', method);
   }
   if (doc.reference != null) {
-    _meta(buffer, 'Reference', doc.reference!);
+    _total(buffer, 'Reference', doc.reference!);
   }
-  _meta(
+  _total(
     buffer,
     'Status',
     isPending ? 'Pending Review' : (doc.paymentStatus ?? 'Recorded'),
   );
-  buffer.writeln('</div>');
-
-  buffer.writeln('<div class="totals">');
   _total(
     buffer,
     isPending ? 'Amount submitted' : 'Amount',
@@ -208,14 +253,6 @@ void _writePaymentBody(StringBuffer buffer, OrderDocument doc) {
   if (doc.notes != null) {
     buffer.writeln('<div class="notes">${_esc(doc.notes!)}</div>');
   }
-}
-
-void _meta(StringBuffer buffer, String label, String value) {
-  buffer
-    ..writeln('<div class="meta-row">')
-    ..writeln('<span class="meta-label">${_esc(label)}</span>')
-    ..writeln('<span class="meta-value">${_esc(value)}</span>')
-    ..writeln('</div>');
 }
 
 void _total(
@@ -241,76 +278,86 @@ String _esc(String value) {
       .replaceAll("'", '&#39;');
 }
 
-const _printCss = '''
-@page { size: A4; margin: 12mm; }
+const _printCss = r'''
+@page { size: A4; margin: 14mm 14mm; }
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
   padding: 0;
   background: #fff;
-  color: #1c1917;
+  color: #191333;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 11.5px;
   line-height: 1.4;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-.sheet {
-  width: 100%;
-  max-width: 170mm;
-  margin: 0 auto;
+.sheet { width: 100%; max-width: 180mm; margin: 0 auto; }
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
 }
-.issuer {
-  text-align: center;
-  margin: 0 0 14px;
-}
+.brand { min-width: 0; }
 .logo {
   display: block;
-  margin: 0 auto 14px;
   max-width: 160px;
-  max-height: 40px;
+  max-height: 48px;
   object-fit: contain;
+  margin-bottom: 6px;
 }
 .business {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.2px;
-  margin-bottom: 10px;
-}
-.contact {
-  color: #57534e;
-  font-size: 11px;
-  line-height: 1.35;
-  margin-top: 2px;
-}
-.contact .sep {
-  color: #a8a29e;
-  padding: 0 2px;
-}
-.card {
-  border: 1px solid #e7e5e4;
-  border-radius: 10px;
-  padding: 14px 16px 12px;
-  background: #fff;
-}
-.title {
   font-size: 15px;
   font-weight: 700;
+  letter-spacing: -0.2px;
 }
-.date {
-  margin-top: 2px;
-  color: #78716c;
-  font-size: 11px;
+.kind { text-align: right; }
+.kind-label {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #6C4FF2;
 }
-.pending {
-  margin-top: 10px;
-  padding: 8px 10px;
+.kind-number {
+  font-size: 15px;
+  font-weight: 500;
+  margin-top: 1px;
+}
+.contact {
+  text-align: center;
+  background: #EFE9FE;
+  color: #3B3459;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 6px 10px;
   border-radius: 8px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #57534e;
-  font-size: 11px;
+  margin: 8px 0 12px;
 }
+.contact .sep { color: #A9A2C2; padding: 0 2px; }
+.billto {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+  background: #FBFAFE;
+  border: 1px solid #ECE8FF;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #736C90;
+  margin-bottom: 4px;
+}
+.party { font-size: 13px; font-weight: 700; }
+.party-line { color: #3B3459; margin-top: 2px; }
+.billto-right { text-align: right; }
+.info-value { font-weight: 600; }
 .status-tag {
   display: inline-block;
   margin-top: 8px;
@@ -320,8 +367,8 @@ html, body {
   font-weight: 600;
 }
 .status-tag.processing {
-  background: #faf1df;
-  color: #c9862a;
+  background: #FAF1DF;
+  color: #C9862A;
   border: 1px solid #f0dcb4;
 }
 .status-tag.approved {
@@ -329,94 +376,89 @@ html, body {
   color: #149063;
   border: 1px solid #b7e0cc;
 }
-.meta {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #e7e5e4;
+.bill {
+  border: 1px solid #ECE8FF;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 12px;
 }
-.meta-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 3px;
+.lines {
+  width: 100%;
+  border-collapse: collapse;
 }
-.meta-label {
-  width: 130px;
-  flex: 0 0 130px;
-  color: #78716c;
+.lines th {
+  text-align: left;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #736C90;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ECE8FF;
 }
-.meta-value {
-  flex: 1;
-  text-align: right;
-  font-weight: 600;
+.lines td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #F2EEFB;
+  vertical-align: top;
 }
-.section-label {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #e7e5e4;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.line {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 8px;
-}
-.line-main { flex: 1; min-width: 0; }
-.line-name { font-weight: 600; }
-.line-sub { color: #78716c; font-size: 10.5px; margin-top: 1px; }
-.line-total { font-weight: 600; white-space: nowrap; }
-.totals {
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid #e7e5e4;
-}
+.lines .num { width: 28px; color: #736C90; }
+.lines .qty, .lines .rate, .lines .amt { text-align: right; white-space: nowrap; }
+.lines .amt { font-weight: 600; }
+.line-sub { color: #736C90; font-size: 10px; margin-top: 1px; }
+.totals { padding: 10px 12px 8px; }
 .total-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 3px;
-  color: #57534e;
+  color: #3B3459;
 }
 .total-row.emphasize {
   margin-top: 6px;
-  color: #1c1917;
-  font-size: 13px;
+  color: #6C4FF2;
+  font-size: 16px;
   font-weight: 700;
 }
-.notes {
-  margin-top: 10px;
-  color: #57534e;
-  white-space: pre-wrap;
+.pay {
+  padding: 10px 12px 12px;
+  border-top: 1px solid #ECE8FF;
 }
-.terms {
-  margin-top: 12px;
-}
-.terms-label {
-  font-weight: 600;
-  color: #78716c;
+.pending {
+  margin: 10px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #FAF1DF;
+  border: 1px solid #fed7aa;
+  color: #3B3459;
   font-size: 11px;
-  margin-bottom: 4px;
 }
-.terms-body {
-  color: #57534e;
-  font-size: 10.5px;
-  line-height: 1.45;
+.notes {
+  padding: 0 12px 12px;
+  color: #3B3459;
   white-space: pre-wrap;
 }
 .thanks {
-  margin-top: 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #57534e;
+  background: #6C4FF2;
+  color: #fff;
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.terms {
+  margin-top: 16px;
+  text-align: center;
+  color: #3B3459;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 .tagline {
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 10px;
+  text-align: center;
+  font-size: 11.5px;
   font-weight: 500;
-  line-height: 1.45;
-  color: #57534e;
+  color: #3B3459;
   white-space: pre-wrap;
 }
 @media print {

@@ -65,10 +65,10 @@ enum InvoiceCollectionReview {
 
   /// External invoice tag. Empty when there is no approval-workflow collection.
   String? get statusTag => switch (this) {
-        InvoiceCollectionReview.processing => 'Processing payment',
-        InvoiceCollectionReview.approved => 'Payment approved',
-        InvoiceCollectionReview.none => null,
-      };
+    InvoiceCollectionReview.processing => 'Processing payment',
+    InvoiceCollectionReview.approved => 'Payment approved',
+    InvoiceCollectionReview.none => null,
+  };
 
   bool get showsPaymentDetails => this == InvoiceCollectionReview.approved;
 }
@@ -195,6 +195,21 @@ class OrderDocument extends Equatable {
     return orderNumber.isEmpty ? 'Order' : 'Order $orderNumber';
   }
 
+  /// Short kind shown large on the public document (Cashro-style header).
+  String get kindLabel {
+    if (isCollectionAcknowledgement) return 'Collection';
+    if (purpose == PublicDocumentPurpose.receipt) return 'Receipt';
+    return 'Invoice';
+  }
+
+  /// Number shown under [kindLabel]. Empty when none is stored.
+  String get kindNumber {
+    if (purpose.isPaymentDocument) {
+      return (paymentNumber ?? orderNumber).trim();
+    }
+    return orderNumber.trim();
+  }
+
   /// Theme accents only — issuer logo is [issuerIdentity], never the Sello mark.
   ClientBranding get branding => customBrandingEnabled
       ? ClientBranding.resolve(
@@ -205,15 +220,15 @@ class OrderDocument extends Equatable {
       : ClientBranding.sello;
 
   DocumentIssuerIdentity get issuerIdentity => DocumentIssuerIdentity.resolve(
-        companyName: companyName,
-        documentLogoUrl: documentLogoUrl,
-        showBusinessNameWithLogo: showBusinessNameWithLogo,
-        address: documentAddress,
-        phone: documentPhone,
-        email: documentEmail,
-        terms: documentTerms,
-        tagline: documentTagline,
-      );
+    companyName: companyName,
+    documentLogoUrl: documentLogoUrl,
+    showBusinessNameWithLogo: showBusinessNameWithLogo,
+    address: documentAddress,
+    phone: documentPhone,
+    email: documentEmail,
+    terms: documentTerms,
+    tagline: documentTagline,
+  );
 
   String get currencySymbol => SelloFormatters.currencySymbol(currencyCode);
 
@@ -235,15 +250,19 @@ class OrderDocument extends Equatable {
 
     final purpose = PublicDocumentPurpose.fromDb(_stringValue(json['purpose']));
     final paymentNumber = _stringValue(json['payment_number']);
-    final amount = json.containsKey('amount') ? _numValue(json['amount']) : null;
+    final amount = json.containsKey('amount')
+        ? _numValue(json['amount'])
+        : null;
     final receivedAt = _dateValue(json['received_at']);
-    final pendingReview = json['pending_review'] == true ||
+    final pendingReview =
+        json['pending_review'] == true ||
         _stringValue(json['status']) == 'pending';
 
     return OrderDocument(
       purpose: purpose,
       orderNumber: _stringValue(json['order_number']) ?? paymentNumber ?? '',
-      orderedAt: receivedAt ??
+      orderedAt:
+          receivedAt ??
           _dateValue(json['ordered_at']) ??
           DateTime.now().toUtc(),
       completedAt: _dateValue(json['completed_at']),
@@ -251,10 +270,10 @@ class OrderDocument extends Equatable {
       discountAmount: _numValue(json['discount_amount']),
       taxAmount: _numValue(json['tax_amount']),
       total: amount ?? _numValue(json['total']),
-      paymentStatus: _stringValue(json['payment_status']) ??
-          _stringValue(json['status']),
-      paymentMethod: _stringValue(json['payment_method']) ??
-          _stringValue(json['method']),
+      paymentStatus:
+          _stringValue(json['payment_status']) ?? _stringValue(json['status']),
+      paymentMethod:
+          _stringValue(json['payment_method']) ?? _stringValue(json['method']),
       notes: _stringValue(json['notes']),
       companyName: _stringValue(json['company_name']) ?? 'Business',
       companyLegalName: _stringValue(json['company_legal_name']),
@@ -299,16 +318,16 @@ class OrderDocument extends Equatable {
 
   @override
   List<Object?> get props => [
-        purpose,
-        orderNumber,
-        paymentNumber,
-        total,
-        customerName,
-        pendingReview,
-        collectionReview,
-        collectionPaymentNumber,
-        lines,
-      ];
+    purpose,
+    orderNumber,
+    paymentNumber,
+    total,
+    customerName,
+    pendingReview,
+    collectionReview,
+    collectionPaymentNumber,
+    lines,
+  ];
 }
 
 class OrderDocumentLine extends Equatable {
@@ -413,8 +432,8 @@ class OrderConfirmationPrepareResult {
         orderJson is Map<String, dynamic>
             ? orderJson
             : orderJson is Map
-                ? Map<String, dynamic>.from(orderJson)
-                : const {},
+            ? Map<String, dynamic>.from(orderJson)
+            : const {},
       ),
       customer: parseContact(customerJson),
       hubRecipients: [
@@ -439,6 +458,7 @@ class OrderConfirmationOrderSnapshot {
     required this.currency,
     required this.companyName,
     required this.customerName,
+    this.discountAmount = 0,
     this.orderedAt,
     this.completedAt,
     this.salesRepName,
@@ -446,6 +466,9 @@ class OrderConfirmationOrderSnapshot {
 
   final String number;
   final num total;
+
+  /// Resolved order discount. Zero when the sale has no discount.
+  final num discountAmount;
   final String currency;
   final String companyName;
   final String customerName;
@@ -457,6 +480,7 @@ class OrderConfirmationOrderSnapshot {
     return OrderConfirmationOrderSnapshot(
       number: _stringValue(json['number']) ?? '',
       total: _numValue(json['total']),
+      discountAmount: _numValue(json['discount_amount']),
       currency: _stringValue(json['currency']) ?? 'USD',
       companyName: _stringValue(json['company_name']) ?? 'Sello',
       customerName: _stringValue(json['customer_name']) ?? 'Customer',

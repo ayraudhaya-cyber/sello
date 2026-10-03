@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.11",
-        "build": 12,
-        "released_at": "2026-10-02",
-        "notes": "Tick the orders or opening balance you are collecting — or Select all\nRecord collection will not create a second cheque if one from this visit already exists\nYou can collect the rest of an order with a different method, such as cheque then cash\nThe catalog shows product options and the price range\nOutstanding, wallet, and credit stay fully readable on a phone"
+        "version": "1.0.12",
+        "build": 13,
+        "released_at": "2026-10-03",
+        "notes": "The SMS after a sale is a short list and includes the discount when there is one\nThe invoice link in that SMS is shorter\nThe customer invoice looks cleaner on a phone and on a computer"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.11",
-        "build": 12,
-        "released_at": "2026-10-02",
-        "notes": "Add an opening balance on a customer, and collect against it like an invoice\nThe collections report includes opening-balance rows\nReceive payment uses checkboxes — Select all, one order, or only the opening balance\nRecord collection applies an existing visit cheque instead of creating another one\nProduct options and Hub forms wrap cleanly on a phone"
+        "version": "1.0.12",
+        "build": 13,
+        "released_at": "2026-10-03",
+        "notes": "SMS quota shows in the Hub header, and in the menu on a phone or tablet\nWhen fewer than 25 SMS remain, it turns red — hover it to contact Sello on 0765644465\nSale confirmation SMS is a short list, includes the discount, and a shorter invoice link\nCustomer invoices look like a proper invoice on phone and desktop\nOn a tablet, open the menu from the header so Search and Quick actions stay on screen"
       },
       "minimum": {
         "version": "1.0.0",

@@ -7,6 +7,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/devtools/dev_experience.dart';
+import 'package:sello/features/hub/shell/sms_quota_chip.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/iam/permission_service.dart';
 import 'package:sello/shared/widgets/branding/branded_shell_app_bar.dart';
@@ -15,7 +16,7 @@ import 'package:sello/shared/widgets/icons/sello_nav_icons.dart';
 import 'package:sello/shared/widgets/layout/app_page_scaffold.dart';
 import 'package:sello/shared/widgets/navigation/sello_navigation.dart';
 
-/// Sello Hub adaptive shell — drawer on phone, dark sidebar on larger.
+/// Sello Hub adaptive shell — drawer on phone and tablet, dark sidebar on desktop.
 ///
 /// Navigation destinations are filtered by [PermissionService] so users never
 /// see modules they cannot access.
@@ -154,8 +155,8 @@ class HubShell extends ConsumerWidget {
   static List<SelloNavSection> get sections => catalog;
 
   static List<SelloNavDestination> get destinations => [
-        for (final s in catalog) ...s.destinations,
-      ];
+    for (final s in catalog) ...s.destinations,
+  ];
 
   static List<SelloNavSection> sectionsFor(PermissionService? permissions) {
     if (permissions == null) return catalog;
@@ -188,18 +189,19 @@ class HubShell extends ConsumerWidget {
       switchInCurve: AppCurves.standard,
       child: ResponsiveBuilder(
         key: ValueKey(context.windowSize),
-        mobile: (_) => _MobileHubShell(
+        mobile: (_) => _DrawerHubShell(
           navigationShell: navigationShell,
           index: index,
           sections: navSections,
           onSelect: _onSelect,
+          brandedBar: true,
         ),
-        tablet: (_) => _SidebarHubShell(
+        tablet: (_) => _DrawerHubShell(
           navigationShell: navigationShell,
           index: index,
           sections: navSections,
           onSelect: _onSelect,
-          sidebarWidth: AppSpacing.sidebarWidthCompact,
+          brandedBar: false,
         ),
         desktop: (_) => _SidebarHubShell(
           navigationShell: navigationShell,
@@ -213,12 +215,13 @@ class HubShell extends ConsumerWidget {
   }
 }
 
-class _MobileHubShell extends StatelessWidget {
-  const _MobileHubShell({
+class _DrawerHubShell extends StatelessWidget {
+  const _DrawerHubShell({
     required this.navigationShell,
     required this.index,
     required this.sections,
     required this.onSelect,
+    required this.brandedBar,
   });
 
   final StatefulNavigationShell navigationShell;
@@ -226,20 +229,26 @@ class _MobileHubShell extends StatelessWidget {
   final List<SelloNavSection> sections;
   final ValueChanged<int> onSelect;
 
+  /// Phone uses the compact branded bar. Tablet keeps the full header,
+  /// with a menu button that opens the same sidebar.
+  final bool brandedBar;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: BrandedShellAppBar(
-        hub: true,
-        actions: [
-          if (!kReleaseMode) const DevExperienceToolbarButton(),
-          const GlobalSearchControl(),
-          const NotificationBellButton(),
-          const UserProfileMenu(compact: true),
-          const SizedBox(width: AppSpacing.xs),
-        ],
-      ),
+      appBar: brandedBar
+          ? BrandedShellAppBar(
+              hub: true,
+              actions: [
+                if (!kReleaseMode) const DevExperienceToolbarButton(),
+                const GlobalSearchControl(),
+                const NotificationBellButton(),
+                const UserProfileMenu(compact: true),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+            )
+          : null,
       drawer: Drawer(
         backgroundColor: Colors.transparent,
         child: SelloSideNav(
@@ -250,9 +259,27 @@ class _MobileHubShell extends StatelessWidget {
             Navigator.of(context).pop();
             onSelect(i);
           },
+          footer: const SmsQuotaChip(placement: SmsQuotaPlacement.sidebar),
         ),
       ),
-      body: navigationShell,
+      body: brandedBar
+          ? navigationShell
+          : Column(
+              children: [
+                ShellTopBar(
+                  leading: Builder(
+                    builder: (barContext) => IconButton(
+                      tooltip: 'Menu',
+                      onPressed: () => Scaffold.of(barContext).openDrawer(),
+                      icon: const Icon(Icons.menu_rounded),
+                    ),
+                  ),
+                  showSearch: true,
+                  showQuickActions: true,
+                ),
+                Expanded(child: navigationShell),
+              ],
+            ),
     );
   }
 }
@@ -289,7 +316,11 @@ class _SidebarHubShell extends StatelessWidget {
               color: AppColors.background,
               child: Column(
                 children: [
-                  const ShellTopBar(showSearch: true, showQuickActions: true),
+                  const ShellTopBar(
+                    showSearch: true,
+                    showQuickActions: true,
+                    beforeQuickActions: SmsQuotaChip(),
+                  ),
                   Expanded(child: navigationShell),
                 ],
               ),

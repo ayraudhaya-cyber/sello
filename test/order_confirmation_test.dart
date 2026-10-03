@@ -41,18 +41,46 @@ void main() {
         salesRepName: 'Amina Perera',
         orderedAt: DateTime.utc(2026, 8, 16),
         total: 12500,
+        discountAmount: 500,
         currencyCode: 'LKR',
         documentUrl: 'https://app.sello.test/d/opaque-token',
       );
 
       final body = OrderConfirmationMessage.compose(copy);
 
-      expect(body, contains('Unitech Distributors'));
-      expect(body, contains('SO-20260816-0001'));
-      expect(body, contains('City Mart'));
-      expect(body, contains('Amina Perera'));
-      expect(body, contains('View invoice: https://app.sello.test/d/opaque-token'));
+      expect(
+        body,
+        'Hi City Mart\n'
+        '\n'
+        'Order SO-20260816-0001 confirmed!\n'
+        '\n'
+        'Order Value: Rs 12,500.00\n'
+        'Discount: Rs 500.00\n'
+        'Sales Rep: Amina Perera\n'
+        '\n'
+        'https://app.sello.test/d/opaque-token',
+      );
+      expect(body, isNot(contains('View invoice')));
       expect(body.toLowerCase(), isNot(contains('sku')));
+    });
+
+    test('omits the discount line when the sale has no discount', () {
+      final copy = OrderConfirmationCopy(
+        companyName: 'Unitech Distributors',
+        orderNumber: 'SO-1',
+        customerName: 'City Mart',
+        salesRepName: 'Amina Perera',
+        orderedAt: DateTime.utc(2026, 8, 16),
+        total: 100,
+        currencyCode: 'LKR',
+        documentUrl: 'https://app.sello.test/d/opaque-token',
+      );
+
+      final body = OrderConfirmationMessage.compose(copy);
+
+      expect(body, contains('Order Value: Rs 100.00'));
+      expect(body, isNot(contains('Discount')));
+      expect(body, contains('\n\nhttps://app.sello.test/d/opaque-token'));
     });
 
     test('can omit the document link when configured', () {

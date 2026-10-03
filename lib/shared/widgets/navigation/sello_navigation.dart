@@ -205,12 +205,7 @@ class SelloSideNav extends StatelessWidget {
                   children: children,
                 ),
               ),
-              if (footer != null) ...[
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: footer,
-                ),
-              ],
+              ?footer,
             ],
           ),
         ],

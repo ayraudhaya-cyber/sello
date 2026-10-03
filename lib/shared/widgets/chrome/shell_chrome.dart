@@ -13,11 +13,7 @@ import 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 
 /// Premium command-style global search control for shell chrome.
 class GlobalSearchControl extends StatefulWidget {
-  const GlobalSearchControl({
-    super.key,
-    this.expanded = false,
-    this.onTap,
-  });
+  const GlobalSearchControl({super.key, this.expanded = false, this.onTap});
 
   final bool expanded;
   final VoidCallback? onTap;
@@ -42,64 +38,69 @@ class _GlobalSearchControlState extends State<GlobalSearchControl> {
       return MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: AnimatedContainer(
-          duration: AppDurations.hover,
-          width: 360,
-          height: AppSpacing.controlHeight,
-          decoration: BoxDecoration(
-            color: _hovered ? AppColors.surface : AppColors.surfaceMuted,
-            borderRadius: AppRadius.inputAll,
-            border: Border.all(
-              color: _hovered ? AppColors.outlineStrong : AppColors.outline,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onTap ?? () => _defaultTap(context),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: AnimatedContainer(
+            duration: AppDurations.hover,
+            width: double.infinity,
+            height: AppSpacing.controlHeight,
+            decoration: BoxDecoration(
+              color: _hovered ? AppColors.surface : AppColors.surfaceMuted,
               borderRadius: AppRadius.inputAll,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.search_rounded,
-                      size: 18,
-                      color: context.selloColors.textTertiary,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Search products, customers or orders...',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.texts.bodyMedium?.copyWith(
-                          color: context.selloColors.textTertiary,
-                          letterSpacing: -0.05,
+              border: Border.all(
+                color: _hovered ? AppColors.outlineStrong : AppColors.outline,
+              ),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTap ?? () => _defaultTap(context),
+                borderRadius: AppRadius.inputAll,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.search_rounded,
+                        size: 18,
+                        color: context.selloColors.textTertiary,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Search products, customers or orders...',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.texts.bodyMedium?.copyWith(
+                            color: context.selloColors.textTertiary,
+                            letterSpacing: -0.05,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppColors.outline),
-                      ),
-                      child: Text(
-                        '⌘K',
-                        style: context.texts.labelSmall?.copyWith(
-                          color: context.selloColors.textTertiary,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
+                      const SizedBox(width: AppSpacing.xs),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.outline),
+                        ),
+                        child: Text(
+                          '⌘K',
+                          style: context.texts.labelSmall?.copyWith(
+                            color: context.selloColors.textTertiary,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -145,7 +146,8 @@ class NotificationBellButton extends ConsumerWidget {
             hasUnread
                 ? Icons.notifications_rounded
                 : Icons.notifications_none_rounded,
-            color: IconTheme.of(context).color ??
+            color:
+                IconTheme.of(context).color ??
                 context.selloColors.textSecondary,
           ),
         ),

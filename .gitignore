@@ -68,4 +68,7 @@ android/key.properties
 
 # Supabase CLI local linkage (project/org ids, not source)
 supabase/.temp/
+
+# Local operator SQL that contains a Text.lk API token
+supabase/local/
 .vercel

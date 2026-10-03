@@ -27,6 +27,10 @@ abstract final class OutboundPlaceholders {
     token: 'order_total',
     label: 'Order total',
   );
+  static const discountAmount = OutboundPlaceholder(
+    token: 'discount_amount',
+    label: 'Discount',
+  );
   static const businessName = OutboundPlaceholder(
     token: 'business_name',
     label: 'Business name',
@@ -60,6 +64,7 @@ abstract final class OutboundPlaceholders {
     customerName,
     orderNumber,
     orderTotal,
+    discountAmount,
     businessName,
     salesRep,
     invoiceNumber,
@@ -107,6 +112,7 @@ abstract final class OutboundPlaceholders {
         'invoice_number': 'SO-0001',
         'order_total': 'Rs 12,500.00',
         'amount': 'Rs 12,500.00',
+        'discount_amount': 'Rs 500.00',
         'invoice_link': link,
         'document_link': link,
       };

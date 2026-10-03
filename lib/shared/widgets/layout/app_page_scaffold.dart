@@ -59,9 +59,7 @@ class AppPageScaffold extends StatelessWidget {
       floatingActionButton: floatingActionButton,
       floatingActionButtonLocation: floatingActionButtonLocation,
       body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: AppGradients.canvas,
-        ),
+        decoration: BoxDecoration(gradient: AppGradients.canvas),
         child: Stack(
           children: [
             Positioned.fill(
@@ -83,8 +81,9 @@ class AppPageScaffold extends StatelessWidget {
                 padding: padding,
                 scrollable: scrollable,
                 child: Column(
-                  mainAxisSize:
-                      scrollable ? MainAxisSize.min : MainAxisSize.max,
+                  mainAxisSize: scrollable
+                      ? MainAxisSize.min
+                      : MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (showHeader) ...[
@@ -124,30 +123,33 @@ class ShellTopBar extends StatelessWidget {
     this.title,
     this.showSearch = true,
     this.showQuickActions = false,
+    this.beforeQuickActions,
     this.leading,
   });
 
   final String? title;
   final bool showSearch;
   final bool showQuickActions;
+
+  /// Hub-only slot placed immediately before Quick actions.
+  final Widget? beforeQuickActions;
   final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: AppSpacing.topBarHeight,
-      padding: EdgeInsets.symmetric(
-        horizontal: context.isMobile ? AppSpacing.md : AppSpacing.pageDesktop,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: context.pagePadding),
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.outlineSubtle),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.outlineSubtle)),
       ),
       child: Row(
         children: [
-          ?leading,
+          if (leading != null) ...[
+            leading!,
+            const SizedBox(width: AppSpacing.xs),
+          ],
           if (title != null) ...[
             Text(
               title!,
@@ -158,13 +160,23 @@ class ShellTopBar extends StatelessWidget {
             const SizedBox(width: AppSpacing.md),
           ],
           if (showSearch && !context.isMobile)
-            const GlobalSearchControl(expanded: true)
-          else if (showSearch)
-            const GlobalSearchControl(),
-          const Spacer(),
+            const Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: GlobalSearchControl(expanded: true),
+              ),
+            )
+          else ...[
+            if (showSearch) const GlobalSearchControl(),
+            const Spacer(),
+          ],
           if (!kReleaseMode) const DevExperienceToolbarButton(),
+          if (beforeQuickActions != null) ...[
+            beforeQuickActions!,
+            const SizedBox(width: AppSpacing.md),
+          ],
           if (showQuickActions) ...[
-            QuickActionsButton(compact: context.isMobile),
+            QuickActionsButton(compact: !context.isDesktop),
             const SizedBox(width: AppSpacing.sm),
           ],
           const NotificationBellButton(),
@@ -184,10 +196,6 @@ class _TopBarSeparator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 22,
-      color: AppColors.outlineSubtle,
-    );
+    return Container(width: 1, height: 22, color: AppColors.outlineSubtle);
   }
 }

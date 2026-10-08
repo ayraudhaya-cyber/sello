@@ -391,12 +391,19 @@ class SettingsExpandable extends StatefulWidget {
     required this.child,
     this.subtitle,
     this.initiallyExpanded = false,
+    this.panel = false,
+    this.icon,
   });
 
   final String title;
   final String? subtitle;
   final Widget child;
   final bool initiallyExpanded;
+
+  /// Renders as a bordered, rounded panel that clearly reads as a control
+  /// (leading [icon], chevron chip, divider before the content).
+  final bool panel;
+  final IconData? icon;
 
   @override
   State<SettingsExpandable> createState() => _SettingsExpandableState();
@@ -405,8 +412,139 @@ class SettingsExpandable extends StatefulWidget {
 class _SettingsExpandableState extends State<SettingsExpandable> {
   late bool _open = widget.initiallyExpanded;
 
+  Widget _buildPanel() {
+    return AnimatedContainer(
+      duration: AppDurations.fast,
+      curve: AppCurves.standard,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.mdAll,
+        border: Border.all(
+          color: _open
+              ? AppColors.primary.withValues(alpha: 0.3)
+              : AppColors.outlineStrong,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: AppRadius.mdAll,
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InkWell(
+                onTap: () => setState(() => _open = !_open),
+                hoverColor: AppColors.surfaceSelected.withValues(alpha: 0.5),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      if (widget.icon != null) ...[
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            widget.icon,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: const TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.1,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            if (widget.subtitle != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.subtitle!,
+                                style: const TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 12.5,
+                                  height: 1.35,
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: _open
+                              ? AppColors.primaryContainer
+                              : AppColors.surfaceMuted,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.outlinePanel),
+                        ),
+                        child: AnimatedRotation(
+                          turns: _open ? 0.5 : 0,
+                          duration: AppDurations.fast,
+                          curve: AppCurves.standard,
+                          child: Icon(
+                            Icons.expand_more_rounded,
+                            size: 18,
+                            color: _open
+                                ? AppColors.primary
+                                : AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              AnimatedSize(
+                duration: AppDurations.fast,
+                curve: AppCurves.standard,
+                alignment: Alignment.topCenter,
+                child: _open
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Divider(
+                            height: 1,
+                            color: AppColors.outlinePanel,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: widget.child,
+                          ),
+                        ],
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.panel) return _buildPanel();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -486,7 +624,8 @@ class SettingsTwoColumn extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stack = children.length == 1 ||
+        final stack =
+            children.length == 1 ||
             !ResponsiveLayout.canFitRow(
               width: constraints.maxWidth,
               itemCount: 2,
@@ -705,8 +844,9 @@ class _SettingsNavTileState extends State<_SettingsNavTile> {
                 vertical: widget.compact ? 8 : 11,
               ),
               child: Row(
-                mainAxisSize:
-                    widget.compact ? MainAxisSize.min : MainAxisSize.max,
+                mainAxisSize: widget.compact
+                    ? MainAxisSize.min
+                    : MainAxisSize.max,
                 children: [
                   Icon(widget.icon, size: 18, color: fg),
                   const SizedBox(width: 10),

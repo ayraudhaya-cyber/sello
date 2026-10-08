@@ -88,9 +88,7 @@ abstract final class CollectionsReportExcelExporter {
   }
 
   static void _numberCell(StringBuffer buffer, num value) {
-    buffer.write(
-      '<Cell><Data ss:Type="Number">${_num(value)}</Data></Cell>',
-    );
+    buffer.write('<Cell><Data ss:Type="Number">${_num(value)}</Data></Cell>');
   }
 
   static String _num(num value) {

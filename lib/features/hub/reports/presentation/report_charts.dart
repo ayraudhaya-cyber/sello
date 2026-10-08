@@ -74,7 +74,8 @@ class _ReportBarChartState extends State<ReportBarChart> {
                         left: i == 0
                             ? 0
                             : (bars[i - 1].right + bars[i].left) / 2,
-                        width: (i == bars.length - 1
+                        width:
+                            (i == bars.length - 1
                                 ? size.width
                                 : (bars[i].right + bars[i + 1].left) / 2) -
                             (i == 0
@@ -122,7 +123,10 @@ class _TrendTooltip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const width = 156.0;
-    final left = (bar.center.dx - width / 2).clamp(0.0, (chartWidth - width).clamp(0.0, double.infinity));
+    final left = (bar.center.dx - width / 2).clamp(
+      0.0,
+      (chartWidth - width).clamp(0.0, double.infinity),
+    );
     final above = bar.top - 58;
     final top = above >= 4 ? above : 4.0;
     final orderLabel = point.orders == 1 ? '1 order' : '${point.orders} orders';
@@ -158,10 +162,7 @@ class _TrendTooltip extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  SelloFormatters.currency(
-                    point.sales,
-                    symbol: currencySymbol,
-                  ),
+                  SelloFormatters.currency(point.sales, symbol: currencySymbol),
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 13,
@@ -205,11 +206,7 @@ List<Rect> _barRects(Size size, List<ReportTrendPoint> points) {
 }
 
 class _BarPainter extends CustomPainter {
-  _BarPainter({
-    required this.points,
-    required this.color,
-    this.highlighted,
-  });
+  _BarPainter({required this.points, required this.color, this.highlighted});
 
   final List<ReportTrendPoint> points;
   final Color color;
@@ -297,7 +294,9 @@ class ReportComparisonBars extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: maxValue <= 0 ? 0 : (item.value / maxValue).toDouble(),
+                    value: maxValue <= 0
+                        ? 0
+                        : (item.value / maxValue).toDouble(),
                     minHeight: 8,
                     backgroundColor: AppColors.surfaceMuted,
                     color: context.brandAccent,

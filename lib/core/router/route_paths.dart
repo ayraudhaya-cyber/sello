@@ -17,6 +17,9 @@ abstract final class RoutePaths {
   static const String selloProfile = '/sello/profile';
   static const String selloVisit = '/sello/visit';
 
+  /// Sales Rep's own collections (pushed from Orders / Profile).
+  static const String selloCollections = '/sello/collections';
+
   // Hub — order matches HTML nav (flat index for shell branches)
   static const String hub = '/hub';
   static const String hubDashboard = '/hub/dashboard';

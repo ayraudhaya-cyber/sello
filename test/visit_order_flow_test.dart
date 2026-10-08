@@ -246,7 +246,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Offline · Changes saved on this device'),
+        find.textContaining('Offline · The visit is kept on this device.'),
         findsOneWidget,
       );
     });

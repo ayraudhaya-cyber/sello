@@ -46,8 +46,10 @@ abstract final class OrderCalculations {
   }) {
     if (subtotal <= 0) return 0;
     final percent = orderDiscountPercent.clamp(0, 100);
-    final afterPercent =
-        (subtotal * (1 - (percent / 100))).clamp(0, double.infinity);
+    final afterPercent = (subtotal * (1 - (percent / 100))).clamp(
+      0,
+      double.infinity,
+    );
     final amount = orderDiscountAmount.clamp(0, afterPercent);
     return (subtotal - (afterPercent - amount)).clamp(0, subtotal);
   }
@@ -76,6 +78,7 @@ class OrderLineDraft {
     this.variantLabel,
     this.productSku,
     this.imageUrl,
+    this.imageCacheKey,
     required this.unitPrice,
     required this.quantity,
     this.availableStock,
@@ -99,6 +102,7 @@ class OrderLineDraft {
   final String productName;
   final String? productSku;
   final String? imageUrl;
+  final String? imageCacheKey;
   num unitPrice;
   num quantity;
   final num? availableStock;
@@ -110,17 +114,14 @@ class OrderLineDraft {
   final Map<String, String> productAttributes;
 
   /// Basket identity — prefer [variantId]; fall back to product for legacy rows.
-  String get lineKey =>
-      (variantId != null && variantId!.trim().isNotEmpty)
-          ? variantId!.trim()
-          : productId;
+  String get lineKey => (variantId != null && variantId!.trim().isNotEmpty)
+      ? variantId!.trim()
+      : productId;
 
   /// Parent name · option label when labeled; never shows "Default".
   String get displayTitle {
     final label = variantLabel?.trim();
-    if (label != null &&
-        label.isNotEmpty &&
-        label.toLowerCase() != 'default') {
+    if (label != null && label.isNotEmpty && label.toLowerCase() != 'default') {
       return '$productName · $label';
     }
     return productName;
@@ -133,11 +134,11 @@ class OrderLineDraft {
   }
 
   num get lineTotal => OrderCalculations.lineTotal(
-        quantity: quantity,
-        unitPrice: unitPrice,
-        discount: discount,
-        discountType: discountType,
-      );
+    quantity: quantity,
+    unitPrice: unitPrice,
+    discount: discount,
+    discountType: discountType,
+  );
 
   OrderLineDraft copyWith({
     String? variantId,
@@ -157,6 +158,7 @@ class OrderLineDraft {
       variantLabel: variantLabel ?? this.variantLabel,
       productSku: productSku ?? this.productSku,
       imageUrl: imageUrl,
+      imageCacheKey: imageCacheKey,
       unitPrice: unitPrice ?? this.unitPrice,
       quantity: quantity ?? this.quantity,
       availableStock: availableStock ?? this.availableStock,
@@ -211,15 +213,15 @@ class OrderUpsertInput {
       OrderCalculations.subtotal(lines.map((line) => line.lineTotal));
 
   num get resolvedDiscount => OrderCalculations.resolvedOrderDiscount(
-        subtotal: subtotal,
-        orderDiscountAmount: orderDiscount,
-        orderDiscountPercent: orderDiscountPercent,
-      );
+    subtotal: subtotal,
+    orderDiscountAmount: orderDiscount,
+    orderDiscountPercent: orderDiscountPercent,
+  );
 
   num get total => OrderCalculations.grandTotal(
-        subtotal: subtotal,
-        orderDiscount: orderDiscount,
-        orderDiscountPercent: orderDiscountPercent,
-        taxAmount: taxAmount,
-      );
+    subtotal: subtotal,
+    orderDiscount: orderDiscount,
+    orderDiscountPercent: orderDiscountPercent,
+    taxAmount: taxAmount,
+  );
 }

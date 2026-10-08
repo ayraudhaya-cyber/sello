@@ -34,7 +34,9 @@ class SelloPwaInstallCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(AppRadius.button),
               ),
               child: Icon(
-                isIos ? Icons.ios_share_rounded : Icons.add_to_home_screen_rounded,
+                isIos
+                    ? Icons.ios_share_rounded
+                    : Icons.add_to_home_screen_rounded,
                 color: context.brandAccent,
                 size: 22,
               ),

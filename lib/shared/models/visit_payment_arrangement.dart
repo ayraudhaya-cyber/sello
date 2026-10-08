@@ -20,13 +20,16 @@ enum VisitPaymentArrangement {
       };
 
   String get helpText => switch (this) {
-        VisitPaymentArrangement.paidToday => 'Collect payment now',
-        VisitPaymentArrangement.creditSale => 'On account',
+        VisitPaymentArrangement.paidToday =>
+          'Collect money after you submit. This new order is added to Outstanding when goods are delivered.',
+        VisitPaymentArrangement.creditSale =>
+          'Customer will pay later. Outstanding for this order updates when goods are delivered, not when you submit.',
         VisitPaymentArrangement.chequeReceived =>
-          'Customer intends to pay by cheque',
+          'The order is saved unpaid. Recording the cheque is optional — skip and enter it later from the order.',
         VisitPaymentArrangement.chequeCollectionScheduled =>
-          'Customer will give the cheque later',
-        VisitPaymentArrangement.noneYet => 'Settle later',
+          'No cheque is created now. Record it later from the order when the customer gives it.',
+        VisitPaymentArrangement.noneYet =>
+          'The order is saved. Collect payment later from the order.',
       };
 
   /// Offers Record cheque after checkout. Saving the form creates the ledger

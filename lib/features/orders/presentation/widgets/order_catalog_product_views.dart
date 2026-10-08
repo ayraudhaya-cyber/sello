@@ -18,6 +18,7 @@ class OrderCatalogMediaFrame extends StatelessWidget {
     super.key,
     required this.name,
     this.imageUrl,
+    this.cacheKey,
     this.onTap,
     this.badge,
     this.onRemove,
@@ -28,6 +29,7 @@ class OrderCatalogMediaFrame extends StatelessWidget {
 
   final String name;
   final String? imageUrl;
+  final String? cacheKey;
   final VoidCallback? onTap;
   final Widget? badge;
 
@@ -89,6 +91,7 @@ class OrderCatalogMediaFrame extends StatelessWidget {
               child: SelloEntityThumb(
                 name: name,
                 imageUrl: imageUrl,
+                cacheKey: cacheKey,
                 width: w,
                 height: h,
               ),
@@ -163,6 +166,7 @@ class OrderCatalogGridCard extends StatelessWidget {
             OrderCatalogMediaFrame(
               name: product.name,
               imageUrl: product.imageUrl,
+              cacheKey: product.imageCacheKey,
               onTap: onOpenPhotos,
               badge: OrderCatalogStockChip(
                 available: available,
@@ -280,6 +284,7 @@ class OrderCatalogListTile extends StatelessWidget {
                 child: OrderCatalogMediaFrame(
                   name: product.name,
                   imageUrl: product.imageUrl,
+                  cacheKey: product.imageCacheKey,
                   width: 88,
                   fillHeight: true,
                   topRadius: false,

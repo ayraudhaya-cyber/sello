@@ -6,8 +6,8 @@ import 'package:sello/shared/models/customer_summary.dart';
 /// Area used for Home discovery. Defaults to today's assigned territory.
 final selloHomeNearAreaProvider =
     NotifierProvider<SelloHomeNearAreaNotifier, String?>(
-  SelloHomeNearAreaNotifier.new,
-);
+      SelloHomeNearAreaNotifier.new,
+    );
 
 class SelloHomeNearAreaNotifier extends Notifier<String?> {
   @override
@@ -33,10 +33,9 @@ final selloConsiderCustomersProvider = FutureProvider<List<CustomerSummary>>((
 ) async {
   final area = ref.watch(selloHomeNearAreaProvider);
   final day = ref.watch(selloHomeDayProvider);
-  final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-        isActive: true,
-        pageSize: 80,
-      );
+  final result = await ref
+      .read(customerRepositoryProvider)
+      .fetchCustomers(isActive: true, pageSize: 80);
 
   final plannedIds = {
     for (final stop in day.plannedVisits)
@@ -48,46 +47,39 @@ final selloConsiderCustomersProvider = FutureProvider<List<CustomerSummary>>((
       .whereType<String>()
       .firstOrNull;
 
-  final ranked = result.items
-      .where(
-        (customer) =>
-            customer.id != inProgressId && !plannedIds.contains(customer.id),
-      )
-      .toList()
-    ..sort((a, b) => _considerScore(
-          b,
-          area: area,
-        ).compareTo(_considerScore(
-          a,
-          area: area,
-        )));
+  final ranked =
+      result.items
+          .where(
+            (customer) =>
+                customer.id != inProgressId &&
+                !plannedIds.contains(customer.id),
+          )
+          .toList()
+        ..sort(
+          (a, b) => _considerScore(
+            b,
+            area: area,
+          ).compareTo(_considerScore(a, area: area)),
+        );
 
   return ranked.take(5).toList(growable: false);
 });
 
-final selloHomeCustomerSearchProvider =
-    FutureProvider.autoDispose.family<List<CustomerSummary>, String>((
-  ref,
-  query,
-) async {
-  final needle = query.trim();
-  if (needle.length < 2) return const [];
-  final area = ref.watch(selloHomeNearAreaProvider);
-  final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-        search: needle,
-        isActive: true,
-        pageSize: 8,
-      );
-  if (area == null || area.isEmpty) return result.items;
-  final inArea = result.items.where((c) => _matchesArea(c, area)).toList();
-  if (inArea.isNotEmpty) return inArea;
-  return result.items;
-});
+final selloHomeCustomerSearchProvider = FutureProvider.autoDispose
+    .family<List<CustomerSummary>, String>((ref, query) async {
+      final needle = query.trim();
+      if (needle.length < 2) return const [];
+      final area = ref.watch(selloHomeNearAreaProvider);
+      final result = await ref
+          .read(customerRepositoryProvider)
+          .fetchCustomers(search: needle, isActive: true, pageSize: 8);
+      if (area == null || area.isEmpty) return result.items;
+      final inArea = result.items.where((c) => _matchesArea(c, area)).toList();
+      if (inArea.isNotEmpty) return inArea;
+      return result.items;
+    });
 
-int _considerScore(
-  CustomerSummary customer, {
-  required String? area,
-}) {
+int _considerScore(CustomerSummary customer, {required String? area}) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   var score = 0;
@@ -106,11 +98,9 @@ int _considerScore(
   if (lastVisit == null) {
     score += 18;
   } else {
-    final days = today.difference(DateTime(
-      lastVisit.year,
-      lastVisit.month,
-      lastVisit.day,
-    )).inDays;
+    final days = today
+        .difference(DateTime(lastVisit.year, lastVisit.month, lastVisit.day))
+        .inDays;
     if (days >= 14) {
       score += 22;
     } else if (days >= 7) {
@@ -122,11 +112,9 @@ int _considerScore(
 
   final lastOrder = customer.lastPurchaseAt;
   if (lastOrder != null) {
-    final days = today.difference(DateTime(
-      lastOrder.year,
-      lastOrder.month,
-      lastOrder.day,
-    )).inDays;
+    final days = today
+        .difference(DateTime(lastOrder.year, lastOrder.month, lastOrder.day))
+        .inDays;
     if (days >= 7 && days < 45) score += 12;
     if (days < 7) score += 6;
   }

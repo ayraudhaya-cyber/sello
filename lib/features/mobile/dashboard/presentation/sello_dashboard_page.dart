@@ -90,71 +90,82 @@ class SelloDashboardPage extends ConsumerWidget {
           children: [
             _HomeHero(day: day, currencySymbol: currency),
             Expanded(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(pad, 8, pad, 20),
-                children: [
-                  _HomeStoreSearch(
-                    nearArea: nearArea,
-                    onPickArea: () => _pickNearArea(context, ref),
-                    onOpenCustomer: (customer) =>
-                        openVisit(customerId: customer.id, name: customer.name),
-                    onSeeAll: (query) => context.go(
-                      query.trim().isEmpty
-                          ? RoutePaths.selloCustomers
-                          : '${RoutePaths.selloCustomers}'
-                                '?q=${Uri.encodeComponent(query.trim())}',
-                    ),
-                    onSearchProducts: (query) => context.go(
-                      query.trim().isEmpty
-                          ? RoutePaths.selloProducts
-                          : '${RoutePaths.selloProducts}'
-                                '?q=${Uri.encodeComponent(query.trim())}',
-                    ),
-                    onWalkIn: () =>
-                        context.go('${RoutePaths.selloVisit}?walkin=1'),
-                  ),
-                  if (activeStop != null) ...[
-                    const SizedBox(height: 14),
-                    _ContinueVisit(
-                      shopName: activeStop.customerName,
-                      onContinue: () => openStop(activeStop),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
-                  if (day.hasVisitPlan) ...[
-                    _TodaysPlanSection(
-                      day: day,
-                      preview: preview,
-                      hiddenCount: hidden,
-                      onOpenStop: openStop,
-                      onViewAll: () => _showFullPlan(
-                        context,
-                        day: day,
-                        onOpenStop: openStop,
+              child: RefreshIndicator(
+                onRefresh: () {
+                  ref.invalidate(selloConsiderCustomersProvider);
+                  return ref.read(selloHomeDayProvider.notifier).refresh();
+                },
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(pad, 8, pad, 20),
+                  children: [
+                    _HomeStoreSearch(
+                      nearArea: nearArea,
+                      onPickArea: () => _pickNearArea(context, ref),
+                      onOpenCustomer: (customer) => openVisit(
+                        customerId: customer.id,
+                        name: customer.name,
                       ),
+                      onSeeAll: (query) => context.go(
+                        query.trim().isEmpty
+                            ? RoutePaths.selloCustomers
+                            : '${RoutePaths.selloCustomers}'
+                                  '?q=${Uri.encodeComponent(query.trim())}',
+                      ),
+                      onSearchProducts: (query) => context.go(
+                        query.trim().isEmpty
+                            ? RoutePaths.selloProducts
+                            : '${RoutePaths.selloProducts}'
+                                  '?q=${Uri.encodeComponent(query.trim())}',
+                      ),
+                      onWalkIn: () =>
+                          context.go('${RoutePaths.selloVisit}?walkin=1'),
                     ),
-                    const SizedBox(height: 20),
-                  ],
-                  _CustomersToConsider(
-                    customers: consider.valueOrNull ?? const [],
-                    loading: consider.isLoading,
-                    onOpen: (customer) =>
-                        openVisit(customerId: customer.id, name: customer.name),
-                    onSeeAll: () => context.go(RoutePaths.selloCustomers),
-                  ),
-                  if (day.intelligenceHints.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    SelloIntelligenceBanner(
-                      insights: _fieldInsights(day.intelligenceHints),
-                      maxVisible: 2,
-                      onInsightAction: (insight) {
-                        final role = session?.appRole;
-                        if (role == null) return;
-                        context.go(insight.routeFor(role));
-                      },
+                    if (activeStop != null) ...[
+                      const SizedBox(height: 14),
+                      _ContinueVisit(
+                        shopName: activeStop.customerName,
+                        onContinue: () => openStop(activeStop),
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    if (day.hasVisitPlan) ...[
+                      _TodaysPlanSection(
+                        day: day,
+                        preview: preview,
+                        hiddenCount: hidden,
+                        onOpenStop: openStop,
+                        onViewAll: () => _showFullPlan(
+                          context,
+                          day: day,
+                          onOpenStop: openStop,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    _CustomersToConsider(
+                      customers: consider.valueOrNull ?? const [],
+                      loading: consider.isLoading,
+                      onOpen: (customer) => openVisit(
+                        customerId: customer.id,
+                        name: customer.name,
+                      ),
+                      onSeeAll: () => context.go(RoutePaths.selloCustomers),
                     ),
+                    if (day.intelligenceHints.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      SelloIntelligenceBanner(
+                        insights: _fieldInsights(day.intelligenceHints),
+                        maxVisible: 2,
+                        onInsightAction: (insight) {
+                          final role = session?.appRole;
+                          if (role == null) return;
+                          context.go(insight.routeFor(role));
+                        },
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             Padding(
@@ -535,7 +546,7 @@ class _HomeStoreSearchState extends ConsumerState<_HomeStoreSearch> {
                     focusedBorder: InputBorder.none,
                   ),
                 ),
-                const Divider(height: 1, color: Color(0xFFE6E4EE)),
+                const Divider(height: 1, color: AppColors.outline),
                 InkWell(
                   onTap: widget.onPickArea,
                   borderRadius: const BorderRadius.vertical(
@@ -848,7 +859,7 @@ class _ContinueVisit extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFE4E0F8),
+      color: AppColors.primaryMid,
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
         onTap: onContinue,
@@ -921,8 +932,8 @@ class _VisitShopAction extends StatelessWidget {
 
   final VoidCallback onVisitShop;
 
-  static const _surface = Color(0xFF160F2F);
-  static const _accent = Color(0xFF6A5BE2);
+  static const _surface = AppColors.navBottom;
+  static const _accent = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {

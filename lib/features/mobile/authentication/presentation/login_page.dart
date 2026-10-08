@@ -10,11 +10,7 @@ import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
 /// Local login-card modes (distinct from Auth deep-link recovery).
-enum _LoginCardMode {
-  signIn,
-  requestReset,
-  resetSent,
-}
+enum _LoginCardMode { signIn, requestReset, resetSent }
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -144,8 +140,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           errorMessage: setNewPassword
               ? auth.errorMessage
               : (mode == _LoginCardMode.signIn
-                  ? auth.errorMessage
-                  : _recoveryError),
+                    ? auth.errorMessage
+                    : _recoveryError),
           infoMessage: auth.infoMessage,
           emailJustVerified: auth.emailJustVerified,
           setNewPassword: setNewPassword,
@@ -221,7 +217,9 @@ class _LoginForm extends StatelessWidget {
     if (setNewPassword) {
       return _authCard(
         context,
-        title: invitePasswordSetup ? 'Set your password' : 'Reset your password',
+        title: invitePasswordSetup
+            ? 'Set your password'
+            : 'Reset your password',
         subtitle: invitePasswordSetup
             ? 'Create a password to access ${AppConstants.appName}'
             : 'Create a new password to restore access to ${AppConstants.appName}',
@@ -234,55 +232,53 @@ class _LoginForm extends StatelessWidget {
 
     return switch (cardMode) {
       _LoginCardMode.signIn => _authCard(
-          context,
-          title: 'Welcome back',
-          subtitle: 'Sign in to continue to ${AppConstants.appName}',
-          fields: _signInFields(context),
-          primaryLabel: 'Sign in',
-          onPrimary: onSubmit,
-          showInfo: true,
-          footer: [
-            AuthTextLink(
-              label: 'Forgot password?',
-              onPressed: loading ? null : onForgotPassword,
-            ),
-            AuthTextLink(
-              label: "Don't have an account? Create account",
-              onPressed: loading
-                  ? null
-                  : () => context.go(RoutePaths.onboarding),
-            ),
-          ],
-        ),
+        context,
+        title: 'Welcome back',
+        subtitle: 'Sign in to continue to ${AppConstants.appName}',
+        fields: _signInFields(context),
+        primaryLabel: 'Sign in',
+        onPrimary: onSubmit,
+        showInfo: true,
+        footer: [
+          AuthTextLink(
+            label: 'Forgot password?',
+            onPressed: loading ? null : onForgotPassword,
+          ),
+          AuthTextLink(
+            label: "Don't have an account? Create account",
+            onPressed: loading ? null : () => context.go(RoutePaths.onboarding),
+          ),
+        ],
+      ),
       _LoginCardMode.requestReset => _authCard(
-          context,
-          title: 'Reset your password',
-          subtitle:
-              "Enter your email address and we'll send you a link to reset your password.",
-          fields: _requestResetFields(context),
-          primaryLabel: 'Send reset link',
-          onPrimary: onSendResetLink,
-          footer: [
-            AuthTextLink(
-              label: 'Back to sign in',
-              onPressed: loading ? null : onBackToSignIn,
-            ),
-          ],
-        ),
+        context,
+        title: 'Reset your password',
+        subtitle:
+            "Enter your email address and we'll send you a link to reset your password.",
+        fields: _requestResetFields(context),
+        primaryLabel: 'Send reset link',
+        onPrimary: onSendResetLink,
+        footer: [
+          AuthTextLink(
+            label: 'Back to sign in',
+            onPressed: loading ? null : onBackToSignIn,
+          ),
+        ],
+      ),
       _LoginCardMode.resetSent => _authCard(
-          context,
-          title: 'Check your email',
-          subtitle: "We've sent a password reset link to your email.",
-          fields: const [],
-          primaryLabel: null,
-          onPrimary: null,
-          footer: [
-            AuthTextLink(
-              label: 'Back to sign in',
-              onPressed: loading ? null : onBackToSignIn,
-            ),
-          ],
-        ),
+        context,
+        title: 'Check your email',
+        subtitle: "We've sent a password reset link to your email.",
+        fields: const [],
+        primaryLabel: null,
+        onPrimary: null,
+        footer: [
+          AuthTextLink(
+            label: 'Back to sign in',
+            onPressed: loading ? null : onBackToSignIn,
+          ),
+        ],
+      ),
     };
   }
 
@@ -312,11 +308,7 @@ class _LoginForm extends StatelessWidget {
               children: [
                 const SelloBrandMark(size: 40, onLightSurface: true),
                 const SizedBox(height: AppSpacing.xl),
-                Text(
-                  title,
-                  style: context.texts.headlineLarge,
-                  softWrap: true,
-                ),
+                Text(title, style: context.texts.headlineLarge, softWrap: true),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitle,

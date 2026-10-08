@@ -20,6 +20,7 @@ class SelloCatalogState {
     this.pageSize = 40,
     this.hasMore = false,
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.errorMessage,
     this.initialized = false,
   });
@@ -32,6 +33,7 @@ class SelloCatalogState {
   final int pageSize;
   final bool hasMore;
   final bool isLoading;
+  final bool isLoadingMore;
   final String? errorMessage;
   final bool initialized;
 
@@ -46,6 +48,7 @@ class SelloCatalogState {
     int? pageSize,
     bool? hasMore,
     bool? isLoading,
+    bool? isLoadingMore,
     String? errorMessage,
     bool clearCategory = false,
     bool clearError = false,
@@ -60,6 +63,7 @@ class SelloCatalogState {
       pageSize: pageSize ?? this.pageSize,
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       initialized: initialized ?? this.initialized,
     );
@@ -75,8 +79,9 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -86,10 +91,7 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
   }
 
   Future<void> _initialize() async {
-    await Future.wait([
-      _loadCategories(),
-      loadProducts(resetPage: true),
-    ]);
+    await Future.wait([_loadCategories(), loadProducts(resetPage: true)]);
   }
 
   Future<void> _loadCategories() async {
@@ -101,38 +103,42 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        errorMessage: failure.message,
-        initialized: true,
-      );
+      state = state.copyWith(errorMessage: failure.message, initialized: true);
     }
   }
 
   Future<void> refresh() async {
-    await _loadCategories();
-    await loadProducts(resetPage: true);
+    await Future.wait([_loadCategories(), loadProducts(resetPage: true)]);
+  }
+
+  int _loadGeneration = 0;
+
+  String? get _branchId {
+    final session = ref.read(currentSessionProvider);
+    return session?.branch?.id ?? session?.employee.branchId;
   }
 
   Future<void> loadProducts({bool resetPage = false}) async {
+    final generation = ++_loadGeneration;
     final page = resetPage ? 0 : state.page;
     state = state.copyWith(
       isLoading: true,
+      isLoadingMore: false,
       clearError: true,
       page: page,
       initialized: true,
     );
 
     try {
-      final session = ref.read(currentSessionProvider);
-      final branchId = session?.branch?.id ?? session?.employee.branchId;
       final result = await _repo.fetchProducts(
         search: state.search,
         categoryId: state.categoryId,
         isActive: true,
-        branchId: branchId,
+        branchId: _branchId,
         page: page,
         pageSize: state.pageSize,
       );
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
         items: result.items,
         hasMore: result.hasMore,
@@ -141,13 +147,45 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
       );
+    }
+  }
+
+  /// Appends the next page (infinite scroll).
+  Future<void> loadMore() async {
+    if (!state.hasMore || state.isLoading || state.isLoadingMore) return;
+    final generation = _loadGeneration;
+    final nextPage = state.page + 1;
+    state = state.copyWith(isLoadingMore: true);
+    try {
+      final result = await _repo.fetchProducts(
+        search: state.search,
+        categoryId: state.categoryId,
+        isActive: true,
+        branchId: _branchId,
+        page: nextPage,
+        pageSize: state.pageSize,
+      );
+      if (generation != _loadGeneration) return;
+      final seen = {for (final p in state.items) p.id};
+      state = state.copyWith(
+        items: [
+          ...state.items,
+          for (final p in result.items)
+            if (!seen.contains(p.id)) p,
+        ],
+        page: nextPage,
+        hasMore: result.hasMore,
+        isLoadingMore: false,
+      );
+    } on AppFailure {
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(isLoadingMore: false);
     }
   }
 
@@ -168,5 +206,5 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
 
 final selloCatalogProvider =
     NotifierProvider<SelloCatalogNotifier, SelloCatalogState>(
-  SelloCatalogNotifier.new,
-);
+      SelloCatalogNotifier.new,
+    );

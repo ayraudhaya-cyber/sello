@@ -74,6 +74,24 @@ List<InventoryProductGroup> groupInventoryItems(List<InventoryItem> items) {
   ];
 }
 
+/// Page by parent product so each Hub page shows a stable number of rows.
+({List<InventoryItem> items, bool hasMore}) paginateGroupedInventory({
+  required List<InventoryItem> items,
+  required int page,
+  required int pageSize,
+}) {
+  final groups = groupInventoryItems(items);
+  final start = page * pageSize;
+  if (start >= groups.length) {
+    return (items: const <InventoryItem>[], hasMore: false);
+  }
+  final pageGroups = groups.skip(start).take(pageSize).toList();
+  return (
+    items: [for (final group in pageGroups) ...group.items],
+    hasMore: groups.length > start + pageSize,
+  );
+}
+
 List<InventoryItem> _sortOptionRows(List<InventoryItem> rows) {
   final copy = List<InventoryItem>.from(rows);
   copy.sort((a, b) {

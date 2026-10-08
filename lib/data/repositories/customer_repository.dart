@@ -9,21 +9,16 @@ import 'package:sello/shared/models/customer_upsert_input.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CustomerPageResult {
-  const CustomerPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const CustomerPageResult({required this.items, required this.hasMore});
 
   final List<CustomerSummary> items;
   final bool hasMore;
 }
 
 class CustomerRepository {
-  CustomerRepository({
-    SupabaseClient? client,
-    BusinessEventBus? events,
-  })  : _client = client ?? SupabaseService.client,
-        _events = events ?? BusinessEventBus();
+  CustomerRepository({SupabaseClient? client, BusinessEventBus? events})
+    : _client = client ?? SupabaseService.client,
+      _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
@@ -60,6 +55,9 @@ class CustomerRepository {
     String search = '',
     bool? isActive,
     CustomerType? customerType,
+    bool owingOnly = false,
+    String? orderBy,
+    bool ascending = false,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -86,13 +84,22 @@ class CustomerRepository {
       if (customerType != null) {
         query = query.eq('customer_type', customerType.dbValue);
       }
+      if (owingOnly) {
+        query = query.gt('current_balance', 0);
+      }
 
       final response = await query
-          .order('updated_at', ascending: false)
+          .order(
+            orderBy ?? (owingOnly ? 'current_balance' : 'updated_at'),
+            ascending: orderBy == null ? false : ascending,
+            nullsFirst: false,
+          )
           .range(page * pageSize, (page * pageSize) + pageSize - 1);
 
       final items = (response as List)
-          .map((row) => CustomerSummary.fromJson(Map<String, dynamic>.from(row)))
+          .map(
+            (row) => CustomerSummary.fromJson(Map<String, dynamic>.from(row)),
+          )
           .toList();
 
       return CustomerPageResult(
@@ -244,8 +251,11 @@ class CustomerRepository {
 
   Future<bool> _referenced(String table, String column, String id) async {
     try {
-      final rows =
-          await _client.from(table).select('id').eq(column, id).limit(1);
+      final rows = await _client
+          .from(table)
+          .select('id')
+          .eq(column, id)
+          .limit(1);
       return (rows as List).isNotEmpty;
     } catch (_) {
       return true;
@@ -272,10 +282,10 @@ class CustomerRepository {
         );
       }
 
-      await _client.from('customers').update({
-        'is_active': !archived,
-        'updated_by': employeeId,
-      }).eq('id', customerId);
+      await _client
+          .from('customers')
+          .update({'is_active': !archived, 'updated_by': employeeId})
+          .eq('id', customerId);
 
       if (archived) {
         final row = await _client
@@ -325,7 +335,8 @@ class CustomerRepository {
           'This customer has already been permanently deleted.',
         );
       }
-      final used = await _referenced('orders', 'customer_id', customerId) ||
+      final used =
+          await _referenced('orders', 'customer_id', customerId) ||
           await _referenced('payments', 'customer_id', customerId) ||
           await _referenced('customer_visits', 'customer_id', customerId) ||
           await _referenced('scheduled_visits', 'customer_id', customerId) ||
@@ -339,11 +350,14 @@ class CustomerRepository {
         throw ValidationFailure(decision.message!);
       }
 
-      await _client.from('customers').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-        'is_active': false,
-        'updated_by': employeeId,
-      }).eq('id', customerId);
+      await _client
+          .from('customers')
+          .update({
+            'deleted_at': DateTime.now().toUtc().toIso8601String(),
+            'is_active': false,
+            'updated_by': employeeId,
+          })
+          .eq('id', customerId);
     } on ValidationFailure {
       rethrow;
     } on PostgrestException catch (error) {
@@ -383,6 +397,38 @@ class CustomerRepository {
     }
   }
 
+  Future<String> correctOpeningBalanceAdjustment({
+    required String adjustmentId,
+    required num amount,
+    required String reason,
+    String? notes,
+    String? referenceNumber,
+    DateTime? recognizedAt,
+  }) async {
+    try {
+      final result = await _client.rpc(
+        'correct_opening_balance_adjustment',
+        params: {
+          'p_adjustment_id': adjustmentId,
+          'p_amount': amount,
+          'p_reason': reason.trim(),
+          'p_notes': _nullIfBlank(notes),
+          'p_reference_number': _nullIfBlank(referenceNumber),
+          'p_recognized_at': recognizedAt?.toUtc().toIso8601String(),
+        },
+      );
+      return result is String ? result : result.toString();
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(mapOpeningBalanceError(error.message));
+    } on AppFailure {
+      rethrow;
+    } catch (_) {
+      throw const UnexpectedFailure(
+        'Unable to correct this opening balance. Please try again.',
+      );
+    }
+  }
+
   Future<List<CustomerReceivableAdjustment>> fetchOpeningBalanceAdjustments(
     String customerId,
   ) async {
@@ -395,6 +441,7 @@ class CustomerRepository {
           )
           .eq('customer_id', customerId)
           .eq('kind', 'opening_balance')
+          .isFilter('reversed_at', null)
           .order('recognized_at');
 
       final paid = <String, num>{};
@@ -431,6 +478,9 @@ class CustomerRepository {
           }(),
       ];
     } on PostgrestException catch (error) {
+      if (error.message.toLowerCase().contains('reversed_at')) {
+        return _fetchOpeningBalanceAdjustmentsLegacy(customerId);
+      }
       throw UnexpectedFailure(
         error.message.trim().isEmpty
             ? 'Unable to load opening balances.'
@@ -440,6 +490,29 @@ class CustomerRepository {
       if (error is AppFailure) rethrow;
       throw const UnexpectedFailure('Unable to load opening balances.');
     }
+  }
+
+  Future<List<CustomerReceivableAdjustment>>
+  _fetchOpeningBalanceAdjustmentsLegacy(String customerId) async {
+    final rows = await _client
+        .from('customer_receivable_adjustments')
+        .select(
+          'id, adjustment_number, amount, recognized_at, notes, '
+          'reference_number',
+        )
+        .eq('customer_id', customerId)
+        .eq('kind', 'opening_balance')
+        .order('recognized_at');
+    return [
+      for (final row in rows as List)
+        () {
+          final map = Map<String, dynamic>.from(row as Map);
+          return CustomerReceivableAdjustment.fromJson(
+            map,
+            remaining: _asNum(map['amount']),
+          );
+        }(),
+    ];
   }
 
   static num _asNum(dynamic value) {
@@ -453,15 +526,11 @@ class CustomerRepository {
     final trimmed = value.trim();
     return trimmed.isEmpty ? null : trimmed;
   }
-
 }
 
 /// Customers UPDATE RLS requires `updated_by` to be the signed-in employee.
 Map<String, dynamic> customerAllowOnAccountPatch({required String employeeId}) {
-  return {
-    'credit_allowed': true,
-    'updated_by': employeeId,
-  };
+  return {'credit_allowed': true, 'updated_by': employeeId};
 }
 
 String mapCustomerSaveError(String message) {
@@ -486,6 +555,9 @@ String mapCustomerSaveError(String message) {
 String mapOpeningBalanceError(String message) {
   final lower = message.toLowerCase();
   if (lower.contains('only owner or manager')) {
+    if (lower.contains('correct')) {
+      return 'Only Owner or Manager can correct an opening balance.';
+    }
     return 'Only Owner or Manager can add an opening balance.';
   }
   if (lower.contains('inactive')) {

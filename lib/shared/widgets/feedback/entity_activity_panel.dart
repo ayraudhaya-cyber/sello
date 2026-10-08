@@ -57,13 +57,14 @@ class _EntityActivityPanelState extends ConsumerState<EntityActivityPanel> {
     }
     setState(() => _loading = true);
     try {
-      final events =
-          await ref.read(notificationRepositoryProvider).fetchCompanyActivity(
-                companyId: session.company.id,
-                referenceType: widget.referenceType,
-                referenceId: widget.referenceId,
-                limit: widget.limit,
-              );
+      final events = await ref
+          .read(notificationRepositoryProvider)
+          .fetchCompanyActivity(
+            companyId: session.company.id,
+            referenceType: widget.referenceType,
+            referenceId: widget.referenceId,
+            limit: widget.limit,
+          );
       if (!mounted) return;
       setState(() {
         _events = events;

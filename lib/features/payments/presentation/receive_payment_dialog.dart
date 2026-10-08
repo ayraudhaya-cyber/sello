@@ -22,11 +22,15 @@ class ReceivePaymentDialog extends ConsumerStatefulWidget {
     required this.currencySymbol,
     this.visitId,
     this.initialCustomer,
+    this.preferredOrderId,
   });
 
   final String currencySymbol;
   final String? visitId;
   final CustomerSummary? initialCustomer;
+
+  /// Order just placed (visit checkout) — pre-selected with its balance.
+  final String? preferredOrderId;
 
   @override
   ConsumerState<ReceivePaymentDialog> createState() =>
@@ -92,6 +96,15 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
         _receivables = orders;
         _loadingOrders = false;
       });
+      final preferredId = widget.preferredOrderId;
+      if (preferredId != null && _selectedIds.isEmpty) {
+        for (final receivable in orders) {
+          if (receivable.id == preferredId) {
+            _toggleReceivable(receivable, true);
+            break;
+          }
+        }
+      }
     } on AppFailure catch (failure) {
       if (!mounted) return;
       setState(() {
@@ -225,6 +238,8 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
 
     return SelloFormDialog(
       title: 'Receive payment',
+      subtitle:
+          'Collect money the customer already owes. Tick the orders or opening balance this payment should cover.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -274,8 +289,8 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                   const LinearProgressIndicator(minHeight: 2)
                 else if (_receivables.isEmpty)
                   const Text(
-                    'No unpaid completed orders. Payment will reduce the '
-                    'customer balance / credit the wallet if overpaid.',
+                    'No unpaid orders or opening balances. Payment will reduce '
+                    'Outstanding, or add to Wallet if you collect more than they owe.',
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
                       fontSize: 13.5,

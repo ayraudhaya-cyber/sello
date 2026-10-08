@@ -38,14 +38,12 @@ abstract final class OutboundMessageTemplate {
 
   static const collectionSubmittedDefault =
       '{{business_name}}\n'
-      'Collection submitted for review\n'
+      'Collection {{collection_status}}\n'
       '\n'
       'Customer: {{customer_name}}'
-      '{{#sales_rep_name}}\nSales Rep: {{sales_rep_name}}{{/sales_rep_name}}\n'
-      'Amount: {{collection_amount}}\n'
-      'Status: Pending Review\n'
-      '\n'
-      'Balances update only after owner/manager approval.'
+      '{{#sales_rep_name}}\nCollected by: {{sales_rep_name}}{{/sales_rep_name}}\n'
+      'Amount: {{collection_amount}}'
+      '{{#approval_note}}\n\n{{approval_note}}{{/approval_note}}'
       '{{#receipt_link}}\n\nView receipt: {{receipt_link}}{{/receipt_link}}';
 
   static const invoiceDefault =

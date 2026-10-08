@@ -45,16 +45,17 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     final newOrder = GoRouterState.of(context).uri.queryParameters['new'];
     if (newOrder == '1' || newOrder == 'true') {
       _openedFromQuery = true;
-      final visitId =
-          GoRouterState.of(context).uri.queryParameters['visit'];
-      final customerId =
-          GoRouterState.of(context).uri.queryParameters['customer'];
+      final visitId = GoRouterState.of(context).uri.queryParameters['visit'];
+      final customerId = GoRouterState.of(
+        context,
+      ).uri.queryParameters['customer'];
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _openEditor(
           visitId: (visitId != null && visitId.isNotEmpty) ? visitId : null,
-          initialCustomerId:
-              (customerId != null && customerId.isNotEmpty) ? customerId : null,
+          initialCustomerId: (customerId != null && customerId.isNotEmpty)
+              ? customerId
+              : null,
         );
         context.go(RoutePaths.selloOrders);
       });
@@ -71,7 +72,9 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
   String get _currencySymbol => ref.watch(selloCurrencySymbolProvider);
 
   bool get _salesCanRecordDelivery =>
-      ref.watch(selloCompanySettingsProvider).valueOrNull
+      ref
+          .watch(selloCompanySettingsProvider)
+          .valueOrNull
           ?.salesRepsCanRecordDelivery ??
       true;
 
@@ -92,7 +95,9 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     );
     if (result == null) return;
 
-    final saved = await ref.read(selloOrdersProvider.notifier).saveOrder(
+    final saved = await ref
+        .read(selloOrdersProvider.notifier)
+        .saveOrder(
           result.input,
           complete: result.complete,
           place: result.place,
@@ -113,10 +118,25 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     }
   }
 
+  String? _openingOrderId;
+
   Future<void> _openDetails(OrderSummary order) async {
-    final detail =
-        await ref.read(orderRepositoryProvider).fetchById(order.id);
-    if (!mounted || detail == null) return;
+    if (_openingOrderId != null) return;
+    setState(() => _openingOrderId = order.id);
+    final OrderDetail? fetched;
+    try {
+      fetched = await ref.read(orderRepositoryProvider).fetchById(order.id);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _openingOrderId = null);
+        SelloSnackbars.error(context, 'Unable to open this order.');
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _openingOrderId = null);
+    if (fetched == null) return;
+    final detail = fetched;
 
     await showDialog<void>(
       context: context,
@@ -163,7 +183,8 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
                 await _recordDelivery(detail);
               }
             : null,
-        onFulfillAll: _salesCanRecordDelivery && detail.summary.status.canFulfill
+        onFulfillAll:
+            _salesCanRecordDelivery && detail.summary.status.canFulfill
             ? () async {
                 final nav = Navigator.of(context);
                 nav.pop();
@@ -177,18 +198,16 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     );
   }
 
-  Future<OrderConfirmationOutcome?> _prepareInvoiceShare(
-    String orderId,
-  ) {
-    return ref.read(orderConfirmationDispatcherProvider).dispatch(
-          orderId,
-          smsMode: OrderConfirmationSmsMode.shareActions,
-        );
+  Future<OrderConfirmationOutcome?> _prepareInvoiceShare(String orderId) {
+    return ref
+        .read(orderConfirmationDispatcherProvider)
+        .dispatch(orderId, smsMode: OrderConfirmationSmsMode.shareActions);
   }
 
   Future<String> _messagingUnavailableMessage() async {
-    final policies =
-        await ref.read(orderDocumentRepositoryProvider).fetchOutboundPolicies();
+    final policies = await ref
+        .read(orderDocumentRepositoryProvider)
+        .fetchOutboundPolicies();
     return policies.inactiveOrderMessagingReason() ??
         'Unable to prepare the confirmation for this order.';
   }
@@ -320,10 +339,7 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
       case OutboundSmsStatus.sent:
         SelloSnackbars.success(context, 'SMS sent to the customer.');
       case OutboundSmsStatus.alreadySent:
-        SelloSnackbars.success(
-          context,
-          'SMS was already sent for this order.',
-        );
+        SelloSnackbars.success(context, 'SMS was already sent for this order.');
       case OutboundSmsStatus.skippedMissingSender:
         SelloSnackbars.warning(
           context,
@@ -353,8 +369,9 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     );
     if (confirmed != true || !mounted) return;
 
-    final saved =
-        await ref.read(selloOrdersProvider.notifier).placeExisting(order);
+    final saved = await ref
+        .read(selloOrdersProvider.notifier)
+        .placeExisting(order);
     if (!mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(context, saved.error!);
@@ -371,10 +388,9 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     );
     if (result == null || !mounted) return;
 
-    final error = await ref.read(selloOrdersProvider.notifier).fulfillOrderItems(
-          orderId: detail.summary.id,
-          lines: result.lines,
-        );
+    final error = await ref
+        .read(selloOrdersProvider.notifier)
+        .fulfillOrderItems(orderId: detail.summary.id, lines: result.lines);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -397,8 +413,9 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     );
     if (confirmed != true || !mounted) return;
 
-    final saved =
-        await ref.read(selloOrdersProvider.notifier).completeExisting(order);
+    final saved = await ref
+        .read(selloOrdersProvider.notifier)
+        .completeExisting(order);
     if (!mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(
@@ -415,16 +432,16 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     final confirmed = await showSelloDialog(
       context: context,
       title: 'Cancel order?',
-      message:
-          '${order.orderNumber} will be cancelled. Stock is not affected.',
+      message: '${order.orderNumber} will be cancelled. Stock is not affected.',
       confirmLabel: 'Cancel order',
       cancelLabel: 'Keep draft',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
-    final error =
-        await ref.read(selloOrdersProvider.notifier).cancelOrder(order);
+    final error = await ref
+        .read(selloOrdersProvider.notifier)
+        .cancelOrder(order);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -451,7 +468,22 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
       showBreadcrumbs: false,
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.sm,
+      inlineActions: true,
+      onRefresh: () => ref.read(selloOrdersProvider.notifier).refresh(),
+      onNearEnd: () => ref.read(selloOrdersProvider.notifier).loadMore(),
       actions: [
+        SelloHeaderAction(
+          icon: Icons.refresh_rounded,
+          label: 'Refresh',
+          onPressed: state.isLoading
+              ? null
+              : () => ref.read(selloOrdersProvider.notifier).refresh(),
+        ),
+        SelloHeaderAction(
+          icon: Icons.payments_outlined,
+          label: 'My collections',
+          onPressed: () => context.push(RoutePaths.selloCollections),
+        ),
         SelloButton(
           label: 'New order',
           icon: Icons.add_rounded,
@@ -481,7 +513,8 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
               children: [
                 _FilterChip(
                   label: 'In progress',
-                  selected: !state.showAllStatuses &&
+                  selected:
+                      !state.showAllStatuses &&
                       state.statusFilter == OrderStatus.draft,
                   onTap: () => ref
                       .read(selloOrdersProvider.notifier)
@@ -490,7 +523,8 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
                 const SizedBox(width: 8),
                 _FilterChip(
                   label: 'Completed',
-                  selected: !state.showAllStatuses &&
+                  selected:
+                      !state.showAllStatuses &&
                       state.statusFilter == OrderStatus.completed,
                   onTap: () => ref
                       .read(selloOrdersProvider.notifier)
@@ -508,11 +542,16 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
+          SelloInlineRefreshBar(
+            active: state.isLoading && state.items.isNotEmpty,
+          ),
+          if (state.errorMessage != null && state.items.isNotEmpty)
+            SelloInlineErrorBar(
+              message: state.errorMessage,
+              onRetry: () => ref.read(selloOrdersProvider.notifier).refresh(),
+            ),
           if (state.isLoading && state.items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
+            const SelloListSkeleton()
           else if (state.errorMessage != null && state.items.isEmpty)
             SelloStateView.error(
               title: 'Unable to load orders',
@@ -529,15 +568,18 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
               actionLabel: 'New order',
               onAction: () => _openEditor(),
             )
-          else
+          else ...[
             for (final order in state.items) ...[
               _OrderCard(
                 order: order,
                 currencySymbol: currencySymbol,
+                opening: _openingOrderId == order.id,
                 onTap: () => _openDetails(order),
               ),
               const SizedBox(height: 10),
             ],
+            SelloLoadMoreFooter(active: state.isLoadingMore),
+          ],
         ],
       ),
     );
@@ -599,11 +641,13 @@ class _OrderCard extends StatelessWidget {
     required this.order,
     required this.currencySymbol,
     required this.onTap,
+    this.opening = false,
   });
 
   final OrderSummary order;
   final String currencySymbol;
   final VoidCallback onTap;
+  final bool opening;
 
   @override
   Widget build(BuildContext context) {
@@ -645,6 +689,16 @@ class _OrderCard extends StatelessWidget {
                       color: context.brandAccent,
                     ),
                   ),
+                  if (opening) ...[
+                    const SizedBox(width: 10),
+                    SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.brandAccent,
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 6),

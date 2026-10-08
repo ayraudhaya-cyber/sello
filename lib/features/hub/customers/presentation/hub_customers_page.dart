@@ -8,16 +8,22 @@ import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/customers/application/hub_customers_provider.dart';
+import 'package:sello/features/corrections/presentation/correct_opening_balance_dialog.dart';
+import 'package:sello/features/customers/application/customers_excel_exporter.dart';
 import 'package:sello/features/customers/presentation/add_opening_balance_dialog.dart';
 import 'package:sello/features/customers/presentation/customer_details_dialog.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
 import 'package:sello/services/iam/iam_providers.dart';
+import 'package:sello/services/quick_actions/quick_actions_launcher.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
+import 'package:sello/shared/models/customer_receivable_adjustment.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
+import 'package:sello/shared/models/role_permission_profile.dart';
+import 'package:sello/shared/utils/browser_file_download.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/utils/phone_number.dart';
 import 'package:sello/shared/utils/quick_new_query.dart';
@@ -63,6 +69,72 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
     };
   }
 
+  bool _exporting = false;
+
+  String _filterLabel(HubCustomersState state) {
+    final parts = <String>[
+      if (state.statusFilter != CustomerStatusFilter.active)
+        'Status: ${switch (state.statusFilter) {
+          CustomerStatusFilter.all => 'All',
+          CustomerStatusFilter.active => 'Active',
+          CustomerStatusFilter.inactive => 'Inactive',
+        }}',
+      if (state.typeFilter != CustomerTypeFilter.all)
+        'Type: ${switch (state.typeFilter) {
+          CustomerTypeFilter.all => 'All',
+          CustomerTypeFilter.retail => 'Retail',
+          CustomerTypeFilter.wholesale => 'Wholesale',
+        }}',
+      if (state.owingOnly) 'Owes money',
+      if (state.search.trim().isNotEmpty) 'Search: "${state.search.trim()}"',
+    ];
+    return parts.isEmpty ? 'Active customers' : parts.join(' · ');
+  }
+
+  Future<void> _exportCustomers() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final rows = await ref
+          .read(hubCustomersProvider.notifier)
+          .fetchAllForExport();
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        SelloSnackbars.info(context, 'No customers match these filters.');
+        return;
+      }
+      downloadBrowserFile(
+        bytes: CustomersExcelExporter.buildBytes(
+          customers: rows,
+          filterLabel: _filterLabel(ref.read(hubCustomersProvider)),
+        ),
+        filename: CustomersExcelExporter.filename(),
+        mimeType: 'application/vnd.ms-excel',
+      );
+      SelloSnackbars.success(
+        context,
+        rows.length == 1
+            ? '1 customer exported.'
+            : '${rows.length} customers exported.',
+      );
+    } on AppFailure catch (failure) {
+      if (mounted) SelloSnackbars.error(context, failure.message);
+    } on UnsupportedError {
+      if (mounted) {
+        SelloSnackbars.warning(
+          context,
+          'Export download is available in the web app.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        SelloSnackbars.error(context, 'Unable to export customers right now.');
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _openEditor({CustomerSummary? customer}) async {
     final result = await showDialog<CustomerUpsertInput>(
       context: context,
@@ -78,7 +150,10 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
 
     if (!mounted) return;
     if (!outcome.isOk) {
-      SelloSnackbars.error(context, outcome.error ?? 'Unable to save customer.');
+      SelloSnackbars.error(
+        context,
+        outcome.error ?? 'Unable to save customer.',
+      );
       return;
     }
 
@@ -118,7 +193,8 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
         .items
         .where((c) => c.id == customerId)
         .firstOrNull;
-    final summary = listed ??
+    final summary =
+        listed ??
         CustomerSummary(
           id: customerId,
           companyId: ref.read(currentSessionProvider)?.company.id ?? '',
@@ -163,17 +239,19 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
   Future<void> _openDetails(CustomerSummary customer) async {
     final currencySymbol = _currencySymbol();
     final session = ref.read(currentSessionProvider);
-    String? assigneeName;
-    if (session != null) {
-      final assignee = await ref
-          .read(employeeRepositoryProvider)
-          .fetchCustomerAssignee(
-            companyId: session.company.id,
-            customerId: customer.id,
-          );
-      assigneeName = assignee.employeeName;
-    }
-    if (!mounted) return;
+    final employees = ref.read(employeeRepositoryProvider);
+    final Future<String?>? assigneeName = session == null
+        ? null
+        : employees
+              .fetchCustomerAssignee(
+                companyId: session.company.id,
+                customerId: customer.id,
+              )
+              .then<String?>((a) => a.employeeName)
+              .catchError((Object _) => null);
+    final permissions = ref.read(permissionServiceProvider);
+    final canOrder = permissions?.canCreate(AppModule.orders) ?? false;
+    final canCollect = permissions?.canCreate(AppModule.payments) ?? false;
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -181,6 +259,26 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
         customer: customer,
         currencySymbol: currencySymbol,
         assignedRepresentativeName: assigneeName,
+        onNewOrder: !canOrder
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                QuickActionsLauncher.newOrder(
+                  context,
+                  ref,
+                  customerId: customer.id,
+                );
+              },
+        onReceivePayment: !canCollect
+            ? null
+            : () async {
+                Navigator.of(dialogContext).pop();
+                await QuickActionsLauncher.receivePayment(
+                  context,
+                  ref,
+                  customer: customer,
+                );
+              },
         onAddExistingCheque: () async {
           Navigator.of(dialogContext).pop();
           final saved = await _openAddExistingCheque(customer);
@@ -214,8 +312,8 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
       title: archived ? 'Deactivate customer?' : 'Reactivate customer?',
       message: archived
           ? '"${customer.name}" will be hidden from new sales. '
-              'Past orders and payments still show this customer. '
-              'You can reactivate them from the Inactive filter.'
+                'Past orders and payments still show this customer. '
+                'You can reactivate them from the Inactive filter.'
           : '"${customer.name}" will be available for new sales again.',
       confirmLabel: archived ? 'Deactivate' : 'Reactivate',
       cancelLabel: 'Cancel',
@@ -232,9 +330,7 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
     } else {
       SelloSnackbars.success(
         context,
-        archived
-            ? 'Customer deactivated.'
-            : 'Customer reactivated.',
+        archived ? 'Customer deactivated.' : 'Customer reactivated.',
       );
     }
   }
@@ -277,6 +373,8 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
     final state = ref.watch(hubCustomersProvider);
     ref.watch(hubSettingsProvider);
     final currencySymbol = _currencySymbol();
+    DataColumnSortCallback sortBy(CustomerSort sort) =>
+        (_, _) => ref.read(hubCustomersProvider.notifier).setSort(sort);
 
     if (_searchController.text != state.search) {
       _searchController.value = TextEditingValue(
@@ -314,11 +412,22 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
                 ref.read(hubCustomersProvider.notifier).setTypeFilter(value);
               }
             },
+            onOwingChanged: (value) =>
+                ref.read(hubCustomersProvider.notifier).setOwingOnly(value),
             onRefresh: () => ref.read(hubCustomersProvider.notifier).refresh(),
             isRefreshing: state.isLoading,
+            onExport: _exporting ? null : _exportCustomers,
+            isExporting: _exporting,
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloClearFiltersBar(
+            visible: state.hasActiveFilters,
+            onClear: () {
+              _searchController.clear();
+              ref.read(hubCustomersProvider.notifier).clearFilters();
+            },
+          ),
           if (state.statusFilter == CustomerStatusFilter.inactive) ...[
             const _ArchivedCustomersBanner(),
             const SizedBox(height: AppSpacing.md),
@@ -326,6 +435,11 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,
           ),
+          if (state.errorMessage != null && state.items.isNotEmpty)
+            SelloInlineErrorBar(
+              message: state.errorMessage,
+              onRetry: () => ref.read(hubCustomersProvider.notifier).refresh(),
+            ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -421,15 +535,41 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
             else
               SelloFadeIn(
                 child: SelloDataTable(
+                  sortColumnIndex: switch (state.sort) {
+                    CustomerSort.recent => null,
+                    CustomerSort.name => 0,
+                    CustomerSort.outstanding => 3,
+                    CustomerSort.wallet => 4,
+                    CustomerSort.lastPurchase => 5,
+                    CustomerSort.updated => 7,
+                  },
+                  sortAscending: state.sortAscending,
                   columns: [
-                    selloDataColumn('Customer'),
+                    selloDataColumn(
+                      'Customer',
+                      onSort: sortBy(CustomerSort.name),
+                    ),
                     selloDataColumn('Type'),
                     selloDataColumn('Phone'),
-                    selloDataColumn('Outstanding', numeric: true),
-                    selloDataColumn('Wallet', numeric: true),
-                    selloDataColumn('Last Purchase'),
+                    selloDataColumn(
+                      'Outstanding',
+                      numeric: true,
+                      onSort: sortBy(CustomerSort.outstanding),
+                    ),
+                    selloDataColumn(
+                      'Wallet',
+                      numeric: true,
+                      onSort: sortBy(CustomerSort.wallet),
+                    ),
+                    selloDataColumn(
+                      'Last Purchase',
+                      onSort: sortBy(CustomerSort.lastPurchase),
+                    ),
                     selloDataColumn('Status'),
-                    selloDataColumn('Updated'),
+                    selloDataColumn(
+                      'Updated',
+                      onSort: sortBy(CustomerSort.updated),
+                    ),
                     selloDataColumn('Actions'),
                   ],
                   rows: [
@@ -577,8 +717,11 @@ class _CustomersToolbar extends StatelessWidget {
     required this.onSearchChanged,
     required this.onStatusChanged,
     required this.onTypeChanged,
+    required this.onOwingChanged,
     required this.onRefresh,
     required this.isRefreshing,
+    required this.onExport,
+    required this.isExporting,
     required this.onAdd,
   });
 
@@ -587,8 +730,11 @@ class _CustomersToolbar extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<CustomerStatusFilter?> onStatusChanged;
   final ValueChanged<CustomerTypeFilter?> onTypeChanged;
+  final ValueChanged<bool> onOwingChanged;
   final VoidCallback onRefresh;
   final bool isRefreshing;
+  final VoidCallback? onExport;
+  final bool isExporting;
   final VoidCallback? onAdd;
 
   @override
@@ -635,12 +781,36 @@ class _CustomersToolbar extends StatelessWidget {
       ),
     );
 
+    final owing = SizedBox(
+      width: context.isMobile ? double.infinity : 168,
+      child: SelloDropdown<bool>(
+        value: state.owingOnly,
+        compact: true,
+        hint: 'Balance',
+        onChanged: (value) {
+          if (value != null) onOwingChanged(value);
+        },
+        items: const [
+          DropdownMenuItem(value: false, child: Text('Any balance')),
+          DropdownMenuItem(value: true, child: Text('Owes money')),
+        ],
+      ),
+    );
+
     final refresh = SelloButton(
       label: 'Refresh',
       icon: Icons.refresh_rounded,
       variant: SelloButtonVariant.outline,
       loading: isRefreshing,
       onPressed: isRefreshing ? null : onRefresh,
+    );
+
+    final export = SelloButton(
+      label: 'Export',
+      icon: Icons.download_rounded,
+      variant: SelloButtonVariant.outline,
+      loading: isExporting,
+      onPressed: onExport,
     );
 
     final add = SelloButton(
@@ -666,8 +836,8 @@ class _CustomersToolbar extends StatelessWidget {
       ),
       child: SelloToolbarBody(
         search: search,
-        filters: [status, type],
-        actions: [refresh, add],
+        filters: [status, type, owing],
+        actions: [refresh, export, add],
       ),
     );
   }
@@ -1322,7 +1492,7 @@ class CustomerEditorDialogState extends State<CustomerEditorDialog> {
                 onChanged: (value) => setState(() => _creditAllowed = value),
                 label: 'Credit allowed',
                 helper:
-                    'Allow this customer to purchase on credit up to their credit limit.',
+                    'Allow this customer to buy now and pay later. Credit limit is shown for guidance — Sello does not currently block orders above it.',
               ),
               SelloFormRow(
                 left: SelloTextField(
@@ -1340,8 +1510,8 @@ class CustomerEditorDialogState extends State<CustomerEditorDialog> {
                   controller: _openingBalance,
                   label: 'Opening balance',
                   hint: _isCreate
-                      ? 'Seeds outstanding on create'
-                      : 'Set at create — not editable',
+                      ? 'Amount they already owed — added to Outstanding'
+                      : 'Set at create — use Add opening balance later',
                   enabled: _isCreate,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -1407,6 +1577,8 @@ class _HubCustomerDetailsHost extends ConsumerStatefulWidget {
     required this.customer,
     required this.currencySymbol,
     this.assignedRepresentativeName,
+    this.onNewOrder,
+    this.onReceivePayment,
     this.onAddExistingCheque,
     this.onEdit,
     this.onToggleArchive,
@@ -1415,7 +1587,11 @@ class _HubCustomerDetailsHost extends ConsumerStatefulWidget {
 
   final CustomerSummary customer;
   final String currencySymbol;
-  final String? assignedRepresentativeName;
+
+  /// Resolved after the dialog opens so details appear immediately.
+  final Future<String?>? assignedRepresentativeName;
+  final VoidCallback? onNewOrder;
+  final VoidCallback? onReceivePayment;
   final VoidCallback? onAddExistingCheque;
   final VoidCallback? onEdit;
   final VoidCallback? onToggleArchive;
@@ -1430,11 +1606,15 @@ class _HubCustomerDetailsHostState
     extends ConsumerState<_HubCustomerDetailsHost> {
   late CustomerSummary _customer;
   int _historyEpoch = 0;
+  String? _assigneeName;
 
   @override
   void initState() {
     super.initState();
     _customer = widget.customer;
+    widget.assignedRepresentativeName?.then((name) {
+      if (mounted && name != null) setState(() => _assigneeName = name);
+    });
   }
 
   Future<void> _addOpeningBalance() async {
@@ -1464,18 +1644,54 @@ class _HubCustomerDetailsHostState
     SelloSnackbars.success(context, 'Opening balance added.');
   }
 
+  Future<void> _correctOpeningBalance(CustomerReceivableAdjustment item) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => CorrectOpeningBalanceDialog(
+        customer: _customer,
+        adjustment: item,
+        currencySymbol: widget.currencySymbol,
+      ),
+    );
+    if (saved != true || !mounted) return;
+    final fresh = await ref
+        .read(customerRepositoryProvider)
+        .fetchById(_customer.id);
+    if (!mounted) return;
+    if (fresh != null) {
+      setState(() {
+        _customer = fresh;
+        _historyEpoch++;
+      });
+    }
+    await ref
+        .read(hubCustomersProvider.notifier)
+        .loadCustomers(showLoading: false);
+    if (!mounted) return;
+    SelloSnackbars.success(context, 'Opening balance corrected.');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canAdd = ref.watch(permissionServiceProvider)
+    final canAdd =
+        ref
+            .watch(permissionServiceProvider)
             ?.canRecordOpeningBalanceAdjustment ??
         false;
     return CustomerDetailsDialog(
       customer: _customer,
       currencySymbol: widget.currencySymbol,
-      assignedRepresentativeName: widget.assignedRepresentativeName,
+      assignedRepresentativeName: _assigneeName,
       openingBalanceHistoryEpoch: _historyEpoch,
-      onAddOpeningBalance:
-          canAdd && _customer.isActive ? _addOpeningBalance : null,
+      onAddOpeningBalance: canAdd && _customer.isActive
+          ? _addOpeningBalance
+          : null,
+      onCorrectOpeningBalance: canAdd && _customer.isActive
+          ? _correctOpeningBalance
+          : null,
+      onNewOrder: widget.onNewOrder,
+      onReceivePayment: widget.onReceivePayment,
       onAddExistingCheque: widget.onAddExistingCheque,
       onEdit: widget.onEdit,
       onToggleArchive: widget.onToggleArchive,

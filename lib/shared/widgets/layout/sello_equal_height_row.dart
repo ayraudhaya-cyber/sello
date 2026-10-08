@@ -131,18 +131,13 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
   Widget _cell(int i) {
     final child = widget.children[i];
     if (!widget.equalizeHeights) return child;
-    return _EqualHeightCell(
-      key: _keys[i],
-      height: _rowHeight,
-      child: child,
-    );
+    return _EqualHeightCell(key: _keys[i], height: _rowHeight, child: child);
   }
 
   @override
   Widget build(BuildContext context) {
     assert(
-      widget.flexes == null ||
-          widget.flexes!.length == widget.children.length,
+      widget.flexes == null || widget.flexes!.length == widget.children.length,
       'flexes length must match children',
     );
     assert(widget.children.isNotEmpty, 'children must not be empty');
@@ -175,15 +170,9 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
             for (var i = 0; i < widget.children.length; i++) ...[
               if (i > 0) SizedBox(width: widget.gap),
               if (widget.expandChildren)
-                Expanded(
-                  flex: widget.flexes?[i] ?? 1,
-                  child: _cell(i),
-                )
+                Expanded(flex: widget.flexes?[i] ?? 1, child: _cell(i))
               else
-                SizedBox(
-                  width: widget.childWidth,
-                  child: _cell(i),
-                ),
+                SizedBox(width: widget.childWidth, child: _cell(i)),
             ],
           ],
         );
@@ -193,11 +182,7 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
 }
 
 class _EqualHeightCell extends StatelessWidget {
-  const _EqualHeightCell({
-    super.key,
-    required this.child,
-    this.height,
-  });
+  const _EqualHeightCell({super.key, required this.child, this.height});
 
   final Widget child;
   final double? height;

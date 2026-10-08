@@ -9,8 +9,12 @@ import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/dashboard/application/hub_dashboard_provider.dart';
+import 'package:sello/features/hub/dashboard/application/hub_needs_attention_provider.dart';
 import 'package:sello/features/hub/dashboard/presentation/hub_dashboard_empty_state.dart';
 import 'package:sello/features/hub/dashboard/presentation/hub_needs_attention_card.dart';
+import 'package:sello/features/hub/customers/application/hub_customers_provider.dart';
+import 'package:sello/features/hub/inventory/application/hub_inventory_provider.dart';
+import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:sello/features/intelligence/application/intelligence_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/app_notification.dart';
@@ -42,8 +46,8 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
     final greeting = hour < 12
         ? 'Good morning'
         : hour < 17
-            ? 'Good afternoon'
-            : 'Good evening';
+        ? 'Good afternoon'
+        : 'Good evening';
 
     final performance = _PerformanceCard(
       range: _range,
@@ -52,6 +56,8 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
       onMetric: (v) => setState(() => _metric = v),
     );
     const actions = _ActionCenterCard();
+    final dashAsync = ref.watch(hubDashboardProvider(_range));
+    final refreshing = dashAsync.isLoading;
 
     return AppPageScaffold(
       title: '',
@@ -67,6 +73,15 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
             name: name,
             branch: branch,
             date: date,
+            isRefreshing: refreshing,
+            onRefresh: refreshing
+                ? null
+                : () {
+                    ref.invalidate(hubDashboardProvider);
+                    ref.invalidate(hubNeedsAttentionProvider);
+                    ref.invalidate(hubIntelligenceProvider);
+                    ref.invalidate(_hubInventoryHealthProvider);
+                  },
           ),
           SizedBox(height: gap),
           const HubNeedsAttentionCard(),
@@ -77,10 +92,7 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
             gap: gap,
             flexes: const [68, 32],
             minChildWidth: ResponsiveLayout.sectionCardMinWidth,
-            children: [
-              performance,
-              actions,
-            ],
+            children: [performance, actions],
           ),
           SizedBox(height: gap),
           SelloEqualHeightRow.natural(
@@ -118,12 +130,16 @@ class _WelcomeRow extends StatelessWidget {
     required this.name,
     required this.branch,
     required this.date,
+    required this.isRefreshing,
+    this.onRefresh,
   });
 
   final String greeting;
   final String name;
   final String branch;
   final String date;
+  final bool isRefreshing;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -161,12 +177,22 @@ class _WelcomeRow extends StatelessWidget {
       ),
     );
 
+    final refresh = SelloButton(
+      label: 'Refresh',
+      icon: Icons.refresh_rounded,
+      variant: SelloButtonVariant.outline,
+      loading: isRefreshing,
+      onPressed: onRefresh,
+    );
+
     final chips = Wrap(
       spacing: 10,
       runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _MetaChip(icon: Icons.location_on_outlined, label: branch),
         _MetaChip(icon: Icons.calendar_today_outlined, label: date),
+        refresh,
       ],
     );
 
@@ -259,13 +285,7 @@ class _WavingHandState extends State<_WavingHand>
           child: child,
         );
       },
-      child: Text(
-        '👋',
-        style: TextStyle(
-          fontSize: widget.fontSize,
-          height: 1,
-        ),
-      ),
+      child: Text('👋', style: TextStyle(fontSize: widget.fontSize, height: 1)),
     );
   }
 }
@@ -299,7 +319,9 @@ class _MetaChipState extends State<_MetaChip> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
-            color: _hovered ? Colors.white : Colors.white.withValues(alpha: 0.86),
+            color: _hovered
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.86),
             borderRadius: AppRadius.controlAll,
             border: Border.all(
               color: _hovered ? context.brandMid : AppColors.outline,
@@ -339,10 +361,7 @@ class _MetaChipState extends State<_MetaChip> {
 // ─── KPIs ──────────────────────────────────────────────────────────────────
 
 class _KpiGrid extends ConsumerWidget {
-  const _KpiGrid({
-    required this.gap,
-    required this.range,
-  });
+  const _KpiGrid({required this.gap, required this.range});
 
   final double gap;
   final String range;
@@ -355,7 +374,7 @@ class _KpiGrid extends ConsumerWidget {
 
     final items = <_KpiSpec>[
       _KpiSpec(
-        label: 'Revenue (MTD)',
+        label: hubDashboardRevenueLabel(range),
         value: snap == null ? '—' : snap.money(snap.revenue),
         trend: null,
         up: true,
@@ -395,25 +414,30 @@ class _KpiGrid extends ConsumerWidget {
         icon: Icons.credit_card_outlined,
         tone: AppColors.finance,
         spark: const [],
-        route: RoutePaths.hubPayments,
+        route: RoutePaths.hubCustomers,
+        prepare: () =>
+            ref.read(hubCustomersProvider.notifier).setOwingOnly(true),
       ),
       _KpiSpec(
         label: 'Low Stock Alerts',
         value: snap == null
             ? '—'
             : snap.lowStock == 1
-                ? '1 item'
-                : '${snap.lowStock} items',
+            ? '1 item'
+            : '${snap.lowStock} items',
         trend: null,
         up: false,
         icon: Icons.warning_amber_rounded,
         tone: AppColors.attention,
         spark: const [],
         route: RoutePaths.hubInventory,
+        prepare: () => ref
+            .read(hubInventoryProvider.notifier)
+            .setStatusFilter(StockStatusFilter.lowStock),
       ),
     ];
 
-    return SelloStatCardGrid(
+    final grid = SelloStatCardGrid(
       gap: gap,
       maxColumns: 5,
       children: [
@@ -430,8 +454,24 @@ class _KpiGrid extends ConsumerWidget {
             reserveSparklineSlot: true,
             onTap: item.route == null
                 ? null
-                : () => context.go(item.route!),
+                : () {
+                    item.prepare?.call();
+                    context.go(item.route!);
+                  },
           ),
+      ],
+    );
+
+    if (!async.hasError || async.isLoading) return grid;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SelloInlineErrorBar(
+          lead: 'Couldn’t load the dashboard figures.',
+          message: 'Check your connection and try again.',
+          onRetry: () => ref.invalidate(hubDashboardProvider(range)),
+        ),
+        grid,
       ],
     );
   }
@@ -447,6 +487,7 @@ class _KpiSpec {
     this.tone,
     required this.spark,
     required this.route,
+    this.prepare,
   });
 
   final String label;
@@ -457,6 +498,9 @@ class _KpiSpec {
   final Color? tone;
   final List<double> spark;
   final String? route;
+
+  /// Applies the destination filter before navigating (deep link).
+  final VoidCallback? prepare;
 }
 
 // ─── Performance ───────────────────────────────────────────────────────────
@@ -479,31 +523,29 @@ class _PerformanceCard extends ConsumerWidget {
     final snap = ref.watch(hubDashboardProvider(range)).valueOrNull;
     final figure = switch (metric) {
       'orders' => (
-          snap == null
-              ? '—'
-              : NumberFormat.decimalPattern().format(snap.orders),
-          snap == null || snap.orders == 0
-              ? 'No orders in this period'
-              : 'Completed in selected period',
-          AppColors.ops,
-          false,
-        ),
+        snap == null ? '—' : NumberFormat.decimalPattern().format(snap.orders),
+        snap == null || snap.orders == 0
+            ? 'No orders in this period'
+            : 'Completed in selected period',
+        AppColors.ops,
+        false,
+      ),
       'collections' => (
-          snap == null ? '—' : snap.money(snap.collections),
-          snap == null || snap.collections == 0
-              ? 'No collections in this period'
-              : 'Collected in selected period',
-          AppColors.finance,
-          false,
-        ),
+        snap == null ? '—' : snap.money(snap.collections),
+        snap == null || snap.collections == 0
+            ? 'No collections in this period'
+            : 'Collected in selected period',
+        AppColors.finance,
+        false,
+      ),
       _ => (
-          snap == null ? '—' : snap.money(snap.revenue),
-          snap == null || snap.revenue == 0
-              ? 'No sales in this period'
-              : 'Completed sales in selected period',
-          context.brandAccent,
-          false,
-        ),
+        snap == null ? '—' : snap.money(snap.revenue),
+        snap == null || snap.revenue == 0
+            ? 'No sales in this period'
+            : 'Completed sales in selected period',
+        context.brandAccent,
+        false,
+      ),
     };
     final spark = snap?.sparkForMetric(metric) ?? const <double>[];
     final hasChart = spark.length >= 2;
@@ -514,8 +556,8 @@ class _PerformanceCard extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final chartH = ResponsiveLayout.chartHeight(constraints.maxWidth);
-          final stackHeader = !constraints.maxWidth.isFinite ||
-              constraints.maxWidth < 560;
+          final stackHeader =
+              !constraints.maxWidth.isFinite || constraints.maxWidth < 560;
           final rangeControl = SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: _Segmented(
@@ -528,10 +570,7 @@ class _PerformanceCard extends ConsumerWidget {
           final headline = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'BUSINESS PERFORMANCE',
-                style: AppTypography.heroEyebrow,
-              ),
+              Text('BUSINESS PERFORMANCE', style: AppTypography.heroEyebrow),
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerLeft,
@@ -646,10 +685,7 @@ class _PerformanceCard extends ConsumerWidget {
                         ),
                       ),
               ),
-              if (hasChart) ...[
-                const SizedBox(height: 6),
-                chartAxis,
-              ],
+              if (hasChart) ...[const SizedBox(height: 6), chartAxis],
             ],
           );
         },
@@ -729,8 +765,8 @@ class _SegmentedTabState extends State<_SegmentedTab> {
             color: selected
                 ? Colors.white
                 : showHover
-                    ? Colors.white.withValues(alpha: 0.55)
-                    : Colors.transparent,
+                ? Colors.white.withValues(alpha: 0.55)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(9),
             boxShadow: selected ? AppShadows.level1 : null,
           ),
@@ -854,8 +890,8 @@ class _HoverFillState extends State<_HoverFill> {
     final fill = widget.selected
         ? (widget.selectedColor ?? Colors.transparent)
         : (_hovered
-            ? (widget.hoverColor ?? AppColors.veil)
-            : Colors.transparent);
+              ? (widget.hoverColor ?? AppColors.veil)
+              : Colors.transparent);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -968,8 +1004,12 @@ class _ChartPainter extends CustomPainter {
     const right = 8.0;
     const top = 8.0;
     const bottom = 4.0;
-    final plot =
-        Rect.fromLTRB(left, top, size.width - right, size.height - bottom);
+    final plot = Rect.fromLTRB(
+      left,
+      top,
+      size.width - right,
+      size.height - bottom,
+    );
 
     final gridPaint = Paint()
       ..color = const Color(0xFFF0ECFA)
@@ -985,9 +1025,7 @@ class _ChartPainter extends CustomPainter {
     if (t <= 0.001) return;
 
     // Prefer real series; never invent random demo values.
-    final series = values.length >= 2
-        ? values
-        : const <double>[];
+    final series = values.length >= 2 ? values : const <double>[];
     if (series.length < 2) return;
 
     final pts = <Offset>[
@@ -1040,9 +1078,7 @@ class _ChartPainter extends CustomPainter {
             color.withValues(alpha: 0.0),
           ],
           stops: const [0.0, 0.5, 1.0],
-        ).createShader(
-          Rect.fromLTRB(plot.left, topY, plot.right, plot.bottom),
-        ),
+        ).createShader(Rect.fromLTRB(plot.left, topY, plot.right, plot.bottom)),
     );
 
     canvas.drawPath(
@@ -1057,7 +1093,9 @@ class _ChartPainter extends CustomPainter {
 
     // End marker blooms in near the finish of the draw.
     if (t > 0.86) {
-      final bloom = Curves.easeOutCubic.transform(((t - 0.86) / 0.14).clamp(0.0, 1.0));
+      final bloom = Curves.easeOutCubic.transform(
+        ((t - 0.86) / 0.14).clamp(0.0, 1.0),
+      );
       final last = tip ?? pts.last;
       canvas.drawCircle(
         last,
@@ -1100,7 +1138,8 @@ class _ActionCenterCard extends ConsumerWidget {
         final items = snap.insights;
         if (items.isEmpty) {
           final dash = ref.watch(hubDashboardProvider('month')).valueOrNull;
-          final hasBusinessSignal = dash != null &&
+          final hasBusinessSignal =
+              dash != null &&
               (dash.hasSales ||
                   dash.hasActivity ||
                   dash.hasInventory ||
@@ -1198,47 +1237,43 @@ class _ActionCenterCard extends ConsumerWidget {
   }
 
   static Color _toneFor(IntelligenceCategory category) => switch (category) {
-        IntelligenceCategory.inventory => AppColors.finance,
-        IntelligenceCategory.payments => AppColors.attention,
-        IntelligenceCategory.schedules ||
-        IntelligenceCategory.customerVisits =>
-          AppColors.ops,
-        IntelligenceCategory.orders => AppColors.primary,
-        IntelligenceCategory.customers => AppColors.attention,
-        IntelligenceCategory.sales ||
-        IntelligenceCategory.forecasts ||
-        IntelligenceCategory.recommendations =>
-          AppColors.primary,
-        IntelligenceCategory.salesRepresentatives => AppColors.ops,
-      };
+    IntelligenceCategory.inventory => AppColors.finance,
+    IntelligenceCategory.payments => AppColors.attention,
+    IntelligenceCategory.schedules ||
+    IntelligenceCategory.customerVisits => AppColors.ops,
+    IntelligenceCategory.orders => AppColors.primary,
+    IntelligenceCategory.customers => AppColors.attention,
+    IntelligenceCategory.sales ||
+    IntelligenceCategory.forecasts ||
+    IntelligenceCategory.recommendations => AppColors.primary,
+    IntelligenceCategory.salesRepresentatives => AppColors.ops,
+  };
 
   static Color _softFor(IntelligenceCategory category) => switch (category) {
-        IntelligenceCategory.inventory => AppColors.financeSoft,
-        IntelligenceCategory.payments => AppColors.attentionSoft,
-        IntelligenceCategory.schedules ||
-        IntelligenceCategory.customerVisits =>
-          AppColors.opsSoft,
-        IntelligenceCategory.orders => AppColors.primaryContainer,
-        IntelligenceCategory.customers => AppColors.attentionSoft,
-        IntelligenceCategory.sales ||
-        IntelligenceCategory.forecasts ||
-        IntelligenceCategory.recommendations =>
-          AppColors.primaryContainer,
-        IntelligenceCategory.salesRepresentatives => AppColors.opsSoft,
-      };
+    IntelligenceCategory.inventory => AppColors.financeSoft,
+    IntelligenceCategory.payments => AppColors.attentionSoft,
+    IntelligenceCategory.schedules ||
+    IntelligenceCategory.customerVisits => AppColors.opsSoft,
+    IntelligenceCategory.orders => AppColors.primaryContainer,
+    IntelligenceCategory.customers => AppColors.attentionSoft,
+    IntelligenceCategory.sales ||
+    IntelligenceCategory.forecasts ||
+    IntelligenceCategory.recommendations => AppColors.primaryContainer,
+    IntelligenceCategory.salesRepresentatives => AppColors.opsSoft,
+  };
 
   static IconData _iconFor(IntelligenceCategory category) => switch (category) {
-        IntelligenceCategory.inventory => Icons.inventory_2_outlined,
-        IntelligenceCategory.payments => Icons.account_balance_wallet_outlined,
-        IntelligenceCategory.schedules => Icons.event_busy_outlined,
-        IntelligenceCategory.customerVisits => Icons.place_outlined,
-        IntelligenceCategory.orders => Icons.receipt_long_outlined,
-        IntelligenceCategory.customers => Icons.person_outline_rounded,
-        IntelligenceCategory.sales => Icons.trending_up_rounded,
-        IntelligenceCategory.salesRepresentatives => Icons.groups_outlined,
-        IntelligenceCategory.forecasts => Icons.auto_graph_outlined,
-        IntelligenceCategory.recommendations => Icons.auto_awesome_outlined,
-      };
+    IntelligenceCategory.inventory => Icons.inventory_2_outlined,
+    IntelligenceCategory.payments => Icons.account_balance_wallet_outlined,
+    IntelligenceCategory.schedules => Icons.event_busy_outlined,
+    IntelligenceCategory.customerVisits => Icons.place_outlined,
+    IntelligenceCategory.orders => Icons.receipt_long_outlined,
+    IntelligenceCategory.customers => Icons.person_outline_rounded,
+    IntelligenceCategory.sales => Icons.trending_up_rounded,
+    IntelligenceCategory.salesRepresentatives => Icons.groups_outlined,
+    IntelligenceCategory.forecasts => Icons.auto_graph_outlined,
+    IntelligenceCategory.recommendations => Icons.auto_awesome_outlined,
+  };
 }
 
 class _ActionRow extends StatefulWidget {
@@ -1320,8 +1355,10 @@ class _ActionRowState extends State<_ActionRow> {
             child: GestureDetector(
               onTap: widget.onTap,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: _ctaHovered
                       ? context.brandAccent
@@ -1407,8 +1444,9 @@ class _ActivityCard extends ConsumerWidget {
                               Expanded(
                                 child: Container(
                                   width: 1.5,
-                                  margin:
-                                      const EdgeInsets.symmetric(vertical: 2),
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
                                   color: AppColors.outline,
                                 ),
                               ),
@@ -1439,7 +1477,9 @@ class _ActivityCard extends ConsumerWidget {
                                         ),
                                       ),
                                       if (events[i].actorName != null &&
-                                          events[i].actorName!.trim().isNotEmpty) ...[
+                                          events[i].actorName!
+                                              .trim()
+                                              .isNotEmpty) ...[
                                         const SizedBox(height: 2),
                                         Text(
                                           events[i].actorName!,
@@ -1461,7 +1501,7 @@ class _ActivityCard extends ConsumerWidget {
                                     fontSize: 10.5,
                                     color: AppColors.textFaint,
                                     fontFeatures: const [
-                                      FontFeature.tabularFigures()
+                                      FontFeature.tabularFigures(),
                                     ],
                                   ),
                                 ),
@@ -1477,14 +1517,16 @@ class _ActivityCard extends ConsumerWidget {
     );
   }
 
-  static Color _activityTone(NotificationCategory category) => switch (category) {
+  static Color _activityTone(NotificationCategory category) =>
+      switch (category) {
         NotificationCategory.orders => AppColors.ops,
         NotificationCategory.payments => AppColors.success,
         NotificationCategory.inventory => AppColors.inventory,
         _ => AppColors.primary,
       };
 
-  static Color _activitySoft(NotificationCategory category) => switch (category) {
+  static Color _activitySoft(NotificationCategory category) =>
+      switch (category) {
         NotificationCategory.orders => AppColors.opsSoft,
         NotificationCategory.payments => AppColors.successContainer,
         NotificationCategory.inventory => AppColors.inventorySoft,
@@ -1504,11 +1546,11 @@ class _ActivityCard extends ConsumerWidget {
 
 final _hubInventoryHealthProvider =
     FutureProvider.autoDispose<InventoryDashboardStats>((ref) async {
-  final branchId = ref.watch(currentSessionProvider)?.branch?.id;
-  return ref
-      .read(inventoryRepositoryProvider)
-      .fetchDashboardStats(branchId: branchId);
-});
+      final branchId = ref.watch(currentSessionProvider)?.branch?.id;
+      return ref
+          .read(inventoryRepositoryProvider)
+          .fetchDashboardStats(branchId: branchId);
+    });
 
 class _InventoryHealthCard extends ConsumerWidget {
   const _InventoryHealthCard();
@@ -1552,8 +1594,8 @@ class _InventoryHealthCard extends ConsumerWidget {
     final healthyRatio = stats == null || stats.totalItems == 0
         ? 0.0
         : ((stats.totalItems - stats.lowStock - stats.outOfStock) /
-                stats.totalItems)
-            .clamp(0.0, 1.0);
+                  stats.totalItems)
+              .clamp(0.0, 1.0);
     final emptyInventory = stats != null && stats.totalItems == 0;
 
     return SelloCard(
@@ -1589,83 +1631,83 @@ class _InventoryHealthCard extends ConsumerWidget {
               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 36),
             )
           else
-          LayoutBuilder(
-            builder: (context, c) {
-              final narrow = c.maxWidth < 420;
-              final list = Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (final row in rows)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              color: row.$4,
-                              borderRadius: BorderRadius.circular(7),
+            LayoutBuilder(
+              builder: (context, c) {
+                final narrow = c.maxWidth < 420;
+                final list = Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final row in rows)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: row.$4,
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: Icon(row.$5, size: 13, color: row.$3),
                             ),
-                            child: Icon(row.$5, size: 13, color: row.$3),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              row.$1,
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                row.$1,
+                                style: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ),
-                          ),
-                          Text(
-                            row.$2,
-                            style: TextStyle(
-                              fontFamily: AppTypography.fontFamily,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: row.$3 == AppColors.inventory
-                                  ? AppColors.textPrimary
-                                  : row.$3,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
+                            Text(
+                              row.$2,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: row.$3 == AppColors.inventory
+                                    ? AppColors.textPrimary
+                                    : row.$3,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                ],
-              );
-
-              if (narrow) {
-                return Column(
-                  children: [
-                    _InventoryGauge(ratio: healthyRatio),
-                    const SizedBox(height: 16),
-                    list,
                   ],
                 );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _InventoryGauge(ratio: healthyRatio),
-                  const SizedBox(width: 36),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 280),
-                    child: SizedBox(
-                      height: _InventoryGauge.gaugeHeight,
-                      child: list,
+
+                if (narrow) {
+                  return Column(
+                    children: [
+                      _InventoryGauge(ratio: healthyRatio),
+                      const SizedBox(height: 16),
+                      list,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _InventoryGauge(ratio: healthyRatio),
+                    const SizedBox(width: 36),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: SizedBox(
+                        height: _InventoryGauge.gaugeHeight,
+                        child: list,
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
-          ),
+                  ],
+                );
+              },
+            ),
           const SizedBox(height: 14),
           const Divider(height: 1, color: AppColors.outlineSubtle),
           const SizedBox(height: 12),
@@ -1683,10 +1725,10 @@ class _InventoryHealthCard extends ConsumerWidget {
                   text: emptyInventory
                       ? 'Add products and stock to see inventory health. '
                       : attention == 0
-                          ? 'Inventory looks healthy. '
-                          : attention == 1
-                              ? '1 product needs attention. '
-                              : '$attention products need attention. ',
+                      ? 'Inventory looks healthy. '
+                      : attention == 1
+                      ? '1 product needs attention. '
+                      : '$attention products need attention. ',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,
@@ -1715,6 +1757,7 @@ class _InventoryGauge extends StatelessWidget {
   static const double gaugeHeight = 214;
   static const double _w = 224;
   static const double _gaugeH = gaugeHeight;
+
   /// Must match [_GaugePainter] arc center (`height * 0.52`).
   static const double _arcCenterY = _gaugeH * 0.52;
   static const double _pctSize = 44;
@@ -1729,9 +1772,7 @@ class _InventoryGauge extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: CustomPaint(
-              painter: _GaugePainter(progress: ratio),
-            ),
+            child: CustomPaint(painter: _GaugePainter(progress: ratio)),
           ),
           Positioned(
             left: 0,
@@ -1825,12 +1866,15 @@ class _TopCustomersCard extends ConsumerWidget {
 
     return SelloDashboardCard(
       title: 'Top Customers',
-      action:
-          SelloViewAllLink(onTap: () => context.go(RoutePaths.hubCustomers)),
+      action: SelloViewAllLink(
+        onTap: () => context.go(RoutePaths.hubCustomers),
+      ),
       child: customers.isEmpty
           ? HubDashboardEmptyState.compact(
               icon: Icons.groups_outlined,
-              title: async.isLoading ? 'Loading customers…' : 'No customers yet.',
+              title: async.isLoading
+                  ? 'Loading customers…'
+                  : 'No customers yet.',
               tone: AppColors.success,
               soft: AppColors.successContainer,
             )
@@ -1841,7 +1885,8 @@ class _TopCustomersCard extends ConsumerWidget {
                     rank: '${i + 1}',
                     initials: _initials(customers[i].name),
                     name: customers[i].name,
-                    subtitle: customers[i].subtitle ??
+                    subtitle:
+                        customers[i].subtitle ??
                         (customers[i].count == null
                             ? 'Sales in period'
                             : '${customers[i].count} orders'),
@@ -1858,11 +1903,16 @@ class _TopCustomersCard extends ConsumerWidget {
   }
 
   static String _initials(String name) {
-    final parts =
-        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) {
-      return parts.first.substring(0, math.min(2, parts.first.length)).toUpperCase();
+      return parts.first
+          .substring(0, math.min(2, parts.first.length))
+          .toUpperCase();
     }
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
@@ -2048,8 +2098,7 @@ class _BestSellersCard extends ConsumerWidget {
 
     return SelloDashboardCard(
       title: 'Best Sellers',
-      action:
-          SelloViewAllLink(onTap: () => context.go(RoutePaths.hubProducts)),
+      action: SelloViewAllLink(onTap: () => context.go(RoutePaths.hubProducts)),
       child: products.isEmpty
           ? HubDashboardEmptyState.compact(
               icon: Icons.shopping_bag_outlined,
@@ -2163,10 +2212,7 @@ class _BestSellerRow extends StatelessWidget {
             width: 58,
             height: 24,
             child: CustomPaint(
-              painter: _MiniTrendPainter(
-                points: spark,
-                color: sparkColor,
-              ),
+              painter: _MiniTrendPainter(points: spark, color: sparkColor),
             ),
           ),
         ],
@@ -2255,7 +2301,7 @@ class _InsightsSection extends ConsumerWidget {
               message: intel.isLoading
                   ? null
                   : 'As your business activity grows, Sello Intelligence will '
-                      'surface useful patterns and things worth your attention.',
+                        'surface useful patterns and things worth your attention.',
               tone: AppColors.ai,
               soft: AppColors.aiSoft,
               padding: EdgeInsets.zero,
@@ -2291,8 +2337,8 @@ class _InsightsSection extends ConsumerWidget {
           flexes: cards.length == 1
               ? const [1]
               : cards.length == 2
-                  ? const [132, 100]
-                  : const [132, 100, 100],
+              ? const [132, 100]
+              : const [132, 100, 100],
           children: cards,
         ),
       ],
@@ -2330,14 +2376,17 @@ class _InsightCard extends StatelessWidget {
       padding: EdgeInsets.all(large ? 26 : 22),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final stretch = constraints.hasBoundedHeight &&
+          final stretch =
+              constraints.hasBoundedHeight &&
               constraints.maxHeight < double.infinity;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: soft,
                   borderRadius: BorderRadius.circular(AppRadius.pill),

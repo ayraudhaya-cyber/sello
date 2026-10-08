@@ -34,7 +34,7 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
   final num? Function(ProductVariant variant) maxQuantityForVariant;
   final void Function(ProductVariant variant) onAddVariant;
   final void Function(ProductVariant variant, num quantity)
-      onVariantQuantityChanged;
+  onVariantQuantityChanged;
   final VoidCallback onOpenPhotos;
   final void Function(ProductVariant variant)? onStockLimitReached;
   final bool offlineStockHint;
@@ -75,6 +75,7 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
             OrderCatalogMediaFrame(
               name: product.name,
               imageUrl: product.imageUrl,
+              cacheKey: product.imageCacheKey,
               onTap: onOpenPhotos,
               badge: OrderCatalogStockChip(
                 available: product.availableStockQuantity,
@@ -137,8 +138,7 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
                   onAdd: () => onAddVariant(option),
                   onQuantityChanged: (qty) =>
                       onVariantQuantityChanged(option, qty),
-                  onStockLimitReached: () =>
-                      onStockLimitReached?.call(option),
+                  onStockLimitReached: () => onStockLimitReached?.call(option),
                 ),
           ],
         ),
@@ -174,24 +174,25 @@ class OrderCatalogMultiOptionCard extends StatelessWidget {
                     child: OrderCatalogMediaFrame(
                       name: product.name,
                       imageUrl: product.imageUrl,
+                      cacheKey: product.imageCacheKey,
                       width: 88,
                       fillHeight: true,
                       topRadius: false,
                       onTap: onOpenPhotos,
-                    badge: OrderCatalogStockChip(
-                      available: product.availableStockQuantity,
-                      reorderLevel: reorderLevel ?? product.reorderLevel,
-                      offlineHint: offlineStockHint,
-                    ),
-                    onRemove: selected
-                        ? () {
-                            for (final option in _options) {
-                              if (quantityForVariant(option) > 0) {
-                                onVariantQuantityChanged(option, 0);
+                      badge: OrderCatalogStockChip(
+                        available: product.availableStockQuantity,
+                        reorderLevel: reorderLevel ?? product.reorderLevel,
+                        offlineHint: offlineStockHint,
+                      ),
+                      onRemove: selected
+                          ? () {
+                              for (final option in _options) {
+                                if (quantityForVariant(option) > 0) {
+                                  onVariantQuantityChanged(option, 0);
+                                }
                               }
                             }
-                          }
-                        : null,
+                          : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -287,9 +288,7 @@ class _ExpandControl extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              expanded
-                  ? Icons.expand_less_rounded
-                  : Icons.expand_more_rounded,
+              expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
               size: 18,
               color: context.brandAccent,
             ),

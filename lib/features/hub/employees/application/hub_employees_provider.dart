@@ -12,6 +12,7 @@ import 'package:sello/shared/models/employment_status.dart';
 import 'package:sello/shared/models/role.dart';
 import 'package:sello/shared/models/role_permission_profile.dart';
 import 'package:sello/shared/models/team_invite_result.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum EmployeeStatusFilter { all, active, inactive, suspended, archived }
 
@@ -26,25 +27,25 @@ enum EmployeeRoleFilter {
 
 extension on EmployeeRoleFilter {
   String? get roleCode => switch (this) {
-        EmployeeRoleFilter.all => null,
-        EmployeeRoleFilter.owner => 'owner',
-        EmployeeRoleFilter.manager => 'manager',
-        EmployeeRoleFilter.salesRepresentative => 'sales_representative',
-        EmployeeRoleFilter.storeInCharge => 'store_in_charge',
-        EmployeeRoleFilter.salesInCharge => 'sales_in_charge',
-      };
+    EmployeeRoleFilter.all => null,
+    EmployeeRoleFilter.owner => 'owner',
+    EmployeeRoleFilter.manager => 'manager',
+    EmployeeRoleFilter.salesRepresentative => 'sales_representative',
+    EmployeeRoleFilter.storeInCharge => 'store_in_charge',
+    EmployeeRoleFilter.salesInCharge => 'sales_in_charge',
+  };
 }
 
 extension on EmployeeStatusFilter {
   EmploymentStatus? get status => switch (this) {
-        EmployeeStatusFilter.all => null,
-        EmployeeStatusFilter.active => EmploymentStatus.active,
-        EmployeeStatusFilter.inactive => EmploymentStatus.inactive,
-        EmployeeStatusFilter.suspended => EmploymentStatus.suspended,
-        // Legacy rows only. New deactivation writes inactive, and the
-        // Inactive filter also includes this status.
-        EmployeeStatusFilter.archived => EmploymentStatus.archived,
-      };
+    EmployeeStatusFilter.all => null,
+    EmployeeStatusFilter.active => EmploymentStatus.active,
+    EmployeeStatusFilter.inactive => EmploymentStatus.inactive,
+    EmployeeStatusFilter.suspended => EmploymentStatus.suspended,
+    // Legacy rows only. New deactivation writes inactive, and the
+    // Inactive filter also includes this status.
+    EmployeeStatusFilter.archived => EmploymentStatus.archived,
+  };
 }
 
 class HubEmployeesState {
@@ -58,7 +59,7 @@ class HubEmployeesState {
     this.roleFilter = EmployeeRoleFilter.all,
     this.branchId,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -89,6 +90,12 @@ class HubEmployeesState {
   final bool initialized;
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
+
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      statusFilter != EmployeeStatusFilter.all ||
+      roleFilter != EmployeeRoleFilter.all ||
+      branchId != null;
 
   HubEmployeesState copyWith({
     List<EmployeeSummary>? items,
@@ -143,8 +150,9 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -172,10 +180,14 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
 
   Future<void> refresh() => loadEmployees(resetPage: true);
 
+  int _loadGeneration = 0;
+
   Future<void> loadEmployees({
     bool resetPage = false,
     bool showLoading = true,
+    bool refreshStats = true,
   }) async {
+    final generation = ++_loadGeneration;
     final session = ref.read(currentSessionProvider);
     if (session == null) {
       state = state.copyWith(
@@ -196,6 +208,10 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
 
     try {
       final companyId = session.company.id;
+      final statsFuture = refreshStats
+          ? _repo.fetchDashboardStats(companyId: companyId)
+          : null;
+      statsFuture?.ignore();
       final result = await _repo.fetchEmployees(
         companyId: companyId,
         search: state.search,
@@ -205,7 +221,8 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
         page: page,
         pageSize: state.pageSize,
       );
-      final stats = await _repo.fetchDashboardStats(companyId: companyId);
+      final stats = await statsFuture;
+      if (generation != _loadGeneration) return;
 
       state = state.copyWith(
         items: result.items,
@@ -215,12 +232,14 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
         initialized: true,
       );
     } on AppFailure catch (e) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
         isLoading: false,
         initialized: true,
         errorMessage: e.message,
       );
     } catch (_) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
         isLoading: false,
         initialized: true,
@@ -248,9 +267,16 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
   }
 
   void setBranchFilter(String? branchId) {
+    state = state.copyWith(branchId: branchId, clearBranch: branchId == null);
+    loadEmployees(resetPage: true);
+  }
+
+  void clearFilters() {
     state = state.copyWith(
-      branchId: branchId,
-      clearBranch: branchId == null,
+      search: '',
+      statusFilter: EmployeeStatusFilter.all,
+      roleFilter: EmployeeRoleFilter.all,
+      clearBranch: true,
     );
     loadEmployees(resetPage: true);
   }
@@ -258,7 +284,7 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
   void goToPage(int page) {
     if (page < 0 || page == state.page) return;
     state = state.copyWith(page: page);
-    loadEmployees();
+    loadEmployees(refreshStats: false);
   }
 
   /// Returns null on success, or an error message.
@@ -280,7 +306,9 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
       clearError: true,
     );
     try {
-      ref.read(permissionServiceProvider)?.require(
+      ref
+          .read(permissionServiceProvider)
+          ?.require(
             AppModule.employees,
             input.isCreate ? PermissionAction.create : PermissionAction.edit,
           );
@@ -289,32 +317,20 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
         actorEmployeeId: session.employee.id,
         input: input,
         onProgress: (message) {
-          state = state.copyWith(
-            isSaving: true,
-            savingProgress: message,
-          );
+          state = state.copyWith(isSaving: true, savingProgress: message);
         },
       );
       state = state.copyWith(savingProgress: 'Refreshing team…');
       await loadEmployees(resetPage: input.isCreate, showLoading: false);
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       final invite = result.invite;
       if (invite != null) onInvite?.call(invite);
       return null;
     } on AppFailure catch (e) {
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return e.message;
     } catch (_) {
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return 'Unable to save team member.';
     }
   }
@@ -330,10 +346,7 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
       return 'You cannot deactivate your own account.';
     }
 
-    state = state.copyWith(
-      isSaving: true,
-      savingProgress: 'Updating status…',
-    );
+    state = state.copyWith(isSaving: true, savingProgress: 'Updating status…');
     try {
       await _repo.setEmploymentStatus(
         companyId: session.company.id,
@@ -343,22 +356,13 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
       );
       state = state.copyWith(savingProgress: 'Refreshing team…');
       await loadEmployees(showLoading: false);
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return null;
     } on AppFailure catch (e) {
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return e.message;
     } catch (_) {
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return 'Unable to update status.';
     }
   }
@@ -399,23 +403,14 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
       );
       state = state.copyWith(savingProgress: 'Refreshing team…');
       await loadEmployees(showLoading: false);
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       onInvite?.call(invite);
       return null;
     } on AppFailure catch (e) {
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return e.message;
     } catch (_) {
-      state = state.copyWith(
-        isSaving: false,
-        clearSavingProgress: true,
-      );
+      state = state.copyWith(isSaving: false, clearSavingProgress: true);
       return 'Unable to send invitation.';
     }
   }
@@ -469,5 +464,5 @@ class HubEmployeesNotifier extends Notifier<HubEmployeesState> {
 
 final hubEmployeesProvider =
     NotifierProvider<HubEmployeesNotifier, HubEmployeesState>(
-  HubEmployeesNotifier.new,
-);
+      HubEmployeesNotifier.new,
+    );

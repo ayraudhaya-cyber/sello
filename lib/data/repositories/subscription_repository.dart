@@ -8,7 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Writes / lifecycle changes belong to future billing RPCs — not the client.
 class SubscriptionRepository {
   SubscriptionRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseService.client;
+    : _client = client ?? SupabaseService.client;
 
   final SupabaseClient _client;
 
@@ -25,9 +25,7 @@ class SubscriptionRepository {
       ];
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load plans.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to load plans.' : error.message,
       );
     } catch (_) {
       throw const UnexpectedFailure('Unable to load plans.');
@@ -45,9 +43,7 @@ class SubscriptionRepository {
       return SubscriptionPlan.fromJson(Map<String, dynamic>.from(row));
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load plan.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to load plan.' : error.message,
       );
     } catch (_) {
       throw const UnexpectedFailure('Unable to load plan.');
@@ -87,18 +83,15 @@ class SubscriptionRepository {
     }
   }
 
-  Future<CompanySubscription?> fetchCurrentSubscription(String companyId) async {
+  Future<CompanySubscription?> fetchCurrentSubscription(
+    String companyId,
+  ) async {
     try {
       final row = await _client
           .from('company_subscriptions')
           .select()
           .eq('company_id', companyId)
-          .inFilter('status', [
-            'active',
-            'trialing',
-            'past_due',
-            'grace',
-          ])
+          .inFilter('status', ['active', 'trialing', 'past_due', 'grace'])
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
@@ -127,9 +120,7 @@ class SubscriptionRepository {
       return const CompanyUsageCounts();
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load usage.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to load usage.' : error.message,
       );
     } catch (_) {
       throw const UnexpectedFailure('Unable to load usage.');
@@ -143,10 +134,7 @@ class SubscriptionRepository {
     try {
       final result = await _client.rpc(
         'check_company_capacity',
-        params: {
-          'p_company_id': companyId,
-          'p_limit_key': limitKey,
-        },
+        params: {'p_company_id': companyId, 'p_limit_key': limitKey},
       );
       if (result is Map) {
         return CapacityCheck.fromJson(Map<String, dynamic>.from(result));

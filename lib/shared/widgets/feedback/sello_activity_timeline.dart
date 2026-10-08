@@ -126,8 +126,7 @@ class _ActivityRow extends StatelessWidget {
       NotificationCategory.suppliers => context.brandAccent,
       NotificationCategory.products => AppColors.inventory,
       NotificationCategory.schedule ||
-      NotificationCategory.visits =>
-        AppColors.ops,
+      NotificationCategory.visits => AppColors.ops,
       NotificationCategory.team => context.brandAccent,
       NotificationCategory.intelligence => AppColors.ai,
       NotificationCategory.reliability => context.brandAccent,

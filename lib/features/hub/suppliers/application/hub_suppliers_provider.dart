@@ -5,6 +5,7 @@ import 'package:sello/data/repositories/supplier_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/supplier_summary.dart';
 import 'package:sello/shared/models/supplier_upsert_input.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum SupplierStatusFilter { all, active, inactive }
 
@@ -16,7 +17,7 @@ class HubSuppliersState {
     this.statusFilter = SupplierStatusFilter.active,
     this.category,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -40,6 +41,11 @@ class HubSuppliersState {
   final bool initialized;
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
+
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      statusFilter != SupplierStatusFilter.active ||
+      (category != null && category!.trim().isNotEmpty);
 
   HubSuppliersState copyWith({
     List<SupplierSummary>? items,
@@ -83,8 +89,9 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -95,10 +102,14 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
 
   Future<void> refresh() => loadSuppliers(resetPage: true);
 
+  int _loadGeneration = 0;
+
   Future<void> loadSuppliers({
     bool resetPage = false,
     bool showLoading = true,
+    bool refreshStats = true,
   }) async {
+    final generation = ++_loadGeneration;
     final session = ref.read(currentSessionProvider);
     if (session == null) {
       state = state.copyWith(
@@ -120,6 +131,10 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
 
     try {
       final companyId = session.company.id;
+      final statsFuture = refreshStats
+          ? _repo.fetchDashboardStats(companyId: companyId)
+          : null;
+      statsFuture?.ignore();
       final result = await _repo.fetchSuppliers(
         companyId: companyId,
         search: state.search,
@@ -132,7 +147,8 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
         page: page,
         pageSize: state.pageSize,
       );
-      final stats = await _repo.fetchDashboardStats(companyId: companyId);
+      final stats = await statsFuture;
+      if (generation != _loadGeneration) return;
 
       state = state.copyWith(
         items: result.items,
@@ -142,12 +158,8 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
         clearError: true,
       );
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        items: const [],
-        hasMore: false,
-        isLoading: false,
-        errorMessage: failure.message,
-      );
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(isLoading: false, errorMessage: failure.message);
     }
   }
 
@@ -170,9 +182,19 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
     await loadSuppliers(resetPage: true);
   }
 
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: SupplierStatusFilter.active,
+      clearCategory: true,
+      page: 0,
+    );
+    await loadSuppliers(resetPage: true);
+  }
+
   Future<void> goToPage(int page) async {
     state = state.copyWith(page: page);
-    await loadSuppliers();
+    await loadSuppliers(refreshStats: false);
   }
 
   Future<String?> saveSupplier(SupplierUpsertInput input) async {
@@ -246,5 +268,5 @@ class HubSuppliersNotifier extends Notifier<HubSuppliersState> {
 
 final hubSuppliersProvider =
     NotifierProvider<HubSuppliersNotifier, HubSuppliersState>(
-  HubSuppliersNotifier.new,
-);
+      HubSuppliersNotifier.new,
+    );

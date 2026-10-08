@@ -83,10 +83,7 @@ class SelloIntelligenceBanner extends StatelessWidget {
 }
 
 class _InsightRow extends StatelessWidget {
-  const _InsightRow({
-    required this.insight,
-    this.onAction,
-  });
+  const _InsightRow({required this.insight, this.onAction});
 
   final IntelligenceInsight insight;
   final VoidCallback? onAction;

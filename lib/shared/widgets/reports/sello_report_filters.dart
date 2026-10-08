@@ -142,15 +142,19 @@ class SelloReportFiltersBar extends StatelessWidget {
 
   Future<void> _pickCustomRange(BuildContext context) async {
     final now = DateTime.now();
-    final initialStart = query.customFrom?.toLocal() ??
-        now.subtract(const Duration(days: 29));
+    final initialStart =
+        query.customFrom?.toLocal() ?? now.subtract(const Duration(days: 29));
     final initialEnd = query.customTo?.toLocal() ?? now;
     final range = await showDateRangePicker(
       context: context,
       firstDate: DateTime(now.year - 5),
       lastDate: now,
       initialDateRange: DateTimeRange(
-        start: DateTime(initialStart.year, initialStart.month, initialStart.day),
+        start: DateTime(
+          initialStart.year,
+          initialStart.month,
+          initialStart.day,
+        ),
         end: DateTime(initialEnd.year, initialEnd.month, initialEnd.day),
       ),
     );

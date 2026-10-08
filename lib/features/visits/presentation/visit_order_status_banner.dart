@@ -5,10 +5,7 @@ import 'package:sello/services/reliability/reliability_providers.dart';
 
 /// Offline notice while a visit order is being saved on the device.
 class VisitOrderStatusBanner extends ConsumerWidget {
-  const VisitOrderStatusBanner({
-    super.key,
-    this.visitPendingSync = false,
-  });
+  const VisitOrderStatusBanner({super.key, this.visitPendingSync = false});
 
   final bool visitPendingSync;
 
@@ -33,7 +30,8 @@ class VisitOrderStatusBanner extends ConsumerWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Offline · Changes saved on this device',
+              'Offline · The visit is kept on this device. '
+              'Placing orders and recording payments need a connection.',
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 12,

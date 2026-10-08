@@ -146,8 +146,8 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
       title: archived ? 'Deactivate supplier?' : 'Reactivate supplier?',
       message: archived
           ? '"${supplier.name}" will be hidden from new sourcing. '
-              'Products that already use this supplier keep the link. '
-              'You can reactivate them from the Inactive filter.'
+                'Products that already use this supplier keep the link. '
+                'You can reactivate them from the Inactive filter.'
           : '"${supplier.name}" will be available for sourcing again.',
       confirmLabel: archived ? 'Deactivate' : 'Reactivate',
       cancelLabel: 'Cancel',
@@ -255,6 +255,13 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
                 : () => ref.read(hubSuppliersProvider.notifier).refresh(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloClearFiltersBar(
+            visible: state.hasActiveFilters,
+            onClear: () {
+              _searchController.clear();
+              ref.read(hubSuppliersProvider.notifier).clearFilters();
+            },
+          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -263,6 +270,12 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
           ] else ...[
             _SummaryRow(stats: state.stats),
             const SizedBox(height: AppSpacing.lg),
+            if (state.errorMessage != null && state.items.isNotEmpty)
+              SelloInlineErrorBar(
+                message: state.errorMessage,
+                onRetry: () =>
+                    ref.read(hubSuppliersProvider.notifier).refresh(),
+              ),
             if (state.errorMessage != null && state.items.isEmpty)
               SizedBox(
                 height: 320,
@@ -446,11 +459,20 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
                             ),
                           ),
                           DataCell(
-                            SelloButton(
-                              label: 'View',
-                              variant: SelloButtonVariant.ghost,
-                              size: SelloButtonSize.small,
-                              onPressed: () => _openDetails(supplier),
+                            SelloRowIconGroup(
+                              children: [
+                                SelloRowIconButton(
+                                  tooltip: 'View supplier',
+                                  icon: Icons.visibility_outlined,
+                                  onPressed: () => _openDetails(supplier),
+                                ),
+                                SelloRowIconButton(
+                                  tooltip: 'Edit supplier',
+                                  icon: Icons.edit_outlined,
+                                  onPressed: () =>
+                                      _openEditor(supplier: supplier),
+                                ),
+                              ],
                             ),
                           ),
                         ],

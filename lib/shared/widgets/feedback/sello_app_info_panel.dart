@@ -11,10 +11,7 @@ import 'package:sello/shared/widgets/feedback/sello_info_hint.dart';
 /// Version/build always come from [installedAppVersionProvider] (`pubspec.yaml`
 /// via `package_info_plus`). Optional revision is compile-time only.
 class SelloAppInfoPanel extends ConsumerWidget {
-  const SelloAppInfoPanel({
-    super.key,
-    this.compact = false,
-  });
+  const SelloAppInfoPanel({super.key, this.compact = false});
 
   /// When true, uses a denser list suitable for Sales Profile cards.
   final bool compact;
@@ -87,11 +84,7 @@ class SelloAppInfoPanel extends ConsumerWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.helper,
-  });
+  const _InfoRow({required this.label, required this.value, this.helper});
 
   final String label;
   final String value;

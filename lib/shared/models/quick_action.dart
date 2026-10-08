@@ -40,7 +40,7 @@ class QuickActionDefinition {
   /// Optional supporting line for future rich menus.
   final String? subtitle;
 
-  /// Future keyboard hint (e.g. "C"). Not bound yet.
+  /// Desktop Hub shortcut letter, pressed with Alt (see QuickActionsShortcuts).
   final String? shortcutLabel;
 
   bool isAvailableFor(UserRole role) => roles.contains(role);

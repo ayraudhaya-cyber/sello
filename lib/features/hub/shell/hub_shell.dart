@@ -7,10 +7,12 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/devtools/dev_experience.dart';
+import 'package:sello/features/hub/payments/application/pending_collections_count_provider.dart';
 import 'package:sello/features/hub/shell/sms_quota_chip.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/iam/permission_service.dart';
 import 'package:sello/shared/widgets/branding/branded_shell_app_bar.dart';
+import 'package:sello/shared/widgets/chrome/quick_actions_button.dart';
 import 'package:sello/shared/widgets/chrome/shell_chrome.dart';
 import 'package:sello/shared/widgets/icons/sello_nav_icons.dart';
 import 'package:sello/shared/widgets/layout/app_page_scaffold.dart';
@@ -182,7 +184,19 @@ class HubShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = navigationShell.currentIndex;
-    final navSections = sectionsFor(ref.watch(permissionServiceProvider));
+    final pending = ref.watch(pendingCollectionsCountProvider);
+    final navSections = [
+      for (final section in sectionsFor(ref.watch(permissionServiceProvider)))
+        SelloNavSection(
+          label: section.label,
+          destinations: [
+            for (final dest in section.destinations)
+              dest.location == RoutePaths.hubPayments && pending > 0
+                  ? dest.withBadge(pending > 99 ? '99+' : '$pending')
+                  : dest,
+          ],
+        ),
+    ];
 
     return AnimatedSwitcher(
       duration: AppDurations.normal,
@@ -277,7 +291,7 @@ class _DrawerHubShell extends StatelessWidget {
                   showSearch: true,
                   showQuickActions: true,
                 ),
-                Expanded(child: navigationShell),
+                Expanded(child: QuickActionsShortcuts(child: navigationShell)),
               ],
             ),
     );
@@ -321,7 +335,9 @@ class _SidebarHubShell extends StatelessWidget {
                     showQuickActions: true,
                     beforeQuickActions: SmsQuotaChip(),
                   ),
-                  Expanded(child: navigationShell),
+                  Expanded(
+                    child: QuickActionsShortcuts(child: navigationShell),
+                  ),
                 ],
               ),
             ),

@@ -5,6 +5,7 @@ import 'package:sello/data/repositories/cheque_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum ChequeStatusFilter {
   all,
@@ -17,15 +18,15 @@ enum ChequeStatusFilter {
   cancelled;
 
   String get label => switch (this) {
-        ChequeStatusFilter.all => 'All',
-        ChequeStatusFilter.awaitingCollection => 'Waiting to receive',
-        ChequeStatusFilter.pendingApproval => 'Needs approval',
-        ChequeStatusFilter.collected => 'In hand',
-        ChequeStatusFilter.deposited => 'At the bank',
-        ChequeStatusFilter.cleared => 'Bank paid',
-        ChequeStatusFilter.bounced => 'Bank returned',
-        ChequeStatusFilter.cancelled => 'Cancelled',
-      };
+    ChequeStatusFilter.all => 'All',
+    ChequeStatusFilter.awaitingCollection => 'Waiting to receive',
+    ChequeStatusFilter.pendingApproval => 'Needs approval',
+    ChequeStatusFilter.collected => 'In hand',
+    ChequeStatusFilter.deposited => 'At the bank',
+    ChequeStatusFilter.cleared => 'Bank paid',
+    ChequeStatusFilter.bounced => 'Bank returned',
+    ChequeStatusFilter.cancelled => 'Cancelled',
+  };
 }
 
 class HubChequesState {
@@ -37,7 +38,7 @@ class HubChequesState {
     this.bankFilter = '',
     this.dueToday = false,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -60,6 +61,12 @@ class HubChequesState {
   final bool initialized;
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
+
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      statusFilter != ChequeStatusFilter.all ||
+      bankFilter.trim().isNotEmpty ||
+      dueToday;
 
   HubChequesState copyWith({
     List<ChequeSummary>? items,
@@ -117,10 +124,14 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
 
   Future<void> refresh() => loadCheques(resetPage: true);
 
+  int _loadGeneration = 0;
+
   Future<void> loadCheques({
     bool resetPage = false,
     bool showLoading = true,
+    bool refreshStats = true,
   }) async {
+    final generation = ++_loadGeneration;
     final page = resetPage ? 0 : state.page;
     state = state.copyWith(
       isLoading: showLoading ? true : state.isLoading,
@@ -130,12 +141,12 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     );
 
     try {
+      final statsFuture = refreshStats ? _repo.fetchDashboardStats() : null;
+      statsFuture?.ignore();
       final result = await _repo.fetchCheques(
         search: state.search,
         status: switch (state.statusFilter) {
-          ChequeStatusFilter.all ||
-          ChequeStatusFilter.pendingApproval =>
-            null,
+          ChequeStatusFilter.all || ChequeStatusFilter.pendingApproval => null,
           ChequeStatusFilter.awaitingCollection =>
             ChequeStatus.awaitingCollection,
           ChequeStatusFilter.collected => null,
@@ -153,7 +164,8 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
         page: page,
         pageSize: state.pageSize,
       );
-      final stats = await _repo.fetchDashboardStats();
+      final stats = await statsFuture;
+      if (generation != _loadGeneration) return;
 
       state = state.copyWith(
         items: result.items,
@@ -164,9 +176,8 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
@@ -198,9 +209,20 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     await loadCheques(resetPage: true);
   }
 
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: ChequeStatusFilter.all,
+      bankFilter: '',
+      dueToday: false,
+      page: 0,
+    );
+    await loadCheques(resetPage: true);
+  }
+
   Future<void> goToPage(int page) async {
     state = state.copyWith(page: page);
-    await loadCheques();
+    await loadCheques(refreshStats: false);
   }
 
   Future<ChequeSummary?> createCheque(CreateChequeInput input) async {

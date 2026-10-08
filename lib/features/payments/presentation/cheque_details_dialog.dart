@@ -25,6 +25,7 @@ class ChequeDetailsDialog extends ConsumerStatefulWidget {
     this.onClear,
     this.onBounce,
     this.onCancel,
+    this.onEditDetails,
   });
 
   final ChequeSummary cheque;
@@ -37,6 +38,7 @@ class ChequeDetailsDialog extends ConsumerStatefulWidget {
   final Future<String?> Function()? onClear;
   final Future<String?> Function(String? reason)? onBounce;
   final Future<String?> Function(String? reason)? onCancel;
+  final VoidCallback? onEditDetails;
 
   @override
   ConsumerState<ChequeDetailsDialog> createState() =>
@@ -483,6 +485,12 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
             variant: SelloButtonVariant.outline,
             onPressed: _busy ? null : () => Navigator.of(context).maybePop(),
           ),
+          if (widget.onEditDetails != null)
+            SelloButton(
+              label: 'Edit details',
+              variant: SelloButtonVariant.ghost,
+              onPressed: _busy ? null : widget.onEditDetails,
+            ),
           if (showBounce)
             SelloButton(
               label: 'Bank returned it',

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/collections/application/collections_summary.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/services/intelligence/intelligence_providers.dart';
@@ -14,8 +15,8 @@ import 'package:sello/shared/models/scheduled_visit.dart';
 /// employee and merges active / completed operational visits.
 final selloHomeDayProvider =
     NotifierProvider<SelloHomeDayNotifier, SalesDaySnapshot>(
-  SelloHomeDayNotifier.new,
-);
+      SelloHomeDayNotifier.new,
+    );
 
 class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
   @override
@@ -24,8 +25,9 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -36,6 +38,11 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
       if (prevId == nextId) return;
       Future.microtask(refresh);
     });
+    final ledgerChanges = ref
+        .watch(paymentRepositoryProvider)
+        .changes
+        .listen((_) => Future.microtask(refresh));
+    ref.onDispose(ledgerChanges.cancel);
 
     Future.microtask(refresh);
     return SalesDaySnapshots.emptyDynamic();
@@ -134,13 +141,13 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
             status: visit.isActive
                 ? VisitStopStatus.inProgress
                 : visit.isCompleted
-                    ? VisitStopStatus.completed
-                    : VisitStopStatus.skipped,
+                ? VisitStopStatus.completed
+                : VisitStopStatus.skipped,
             badge: visit.isActive
                 ? VisitBadgeKind.unplanned
                 : visit.isCompleted
-                    ? VisitBadgeKind.completed
-                    : VisitBadgeKind.followUp,
+                ? VisitBadgeKind.completed
+                : VisitBadgeKind.followUp,
             lastVisitLabel: visit.outcome?.label,
             sortOrder: 1000 + stops.length,
           ),
@@ -149,12 +156,14 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
 
       final planned = stops.where((s) => s.isPlanned).toList();
       final completedToday = stops.where((s) => s.isComplete).length;
-      final mode = planned.isNotEmpty ||
+      final mode =
+          planned.isNotEmpty ||
               (assignedArea != null && assignedArea.trim().isNotEmpty)
           ? SalesDayMode.managerPlanned
           : SalesDayMode.dynamic;
 
-      final settings = ref.read(selloCompanySettingsProvider).valueOrNull ??
+      final settings =
+          ref.read(selloCompanySettingsProvider).valueOrNull ??
           CompanySettings.defaults;
       final branchId = session.branch?.id;
 
@@ -175,35 +184,50 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
       }
       statsFutures.add(() async {
         try {
-          final pay =
-              await ref.read(paymentRepositoryProvider).fetchDashboardStats();
-          collectedToday = pay.collectedToday;
+          final pay = await ref
+              .read(paymentRepositoryProvider)
+              .fetchDashboardStats();
           if (settings.salesCanViewOutstandingBalances) {
             outstanding = pay.outstandingReceivables;
           }
+        } catch (_) {}
+      }());
+      // "Collected Today" is this rep's own money (same source as
+      // My collections), not the whole company's total.
+      statsFutures.add(() async {
+        try {
+          final range = CollectionsPeriod.today.range();
+          final rows = await ref
+              .read(paymentRepositoryProvider)
+              .fetchCollections(
+                employeeId: session.employee.id,
+                from: range.from,
+                before: range.before,
+              );
+          collectedToday = CollectionsSummary.of(rows).collected;
         } catch (_) {}
       }());
       statsFutures.add(() async {
         try {
           final now = DateTime.now();
           final start = DateTime(now.year, now.month, now.day);
-          final result = await ref.read(orderRepositoryProvider).fetchOrders(
-                employeeId: session.employee.id,
-                orderedFrom: start,
-                pageSize: 100,
-              );
-          ordersToday = result.items.length;
+          ordersToday = await ref
+              .read(orderRepositoryProvider)
+              .countOrders(employeeId: session.employee.id, orderedFrom: start);
         } catch (_) {}
       }());
       await Future.wait(statsFutures);
       if (generation != _refreshGeneration) return;
 
-      final followUpsDue =
-          scheduled.where((v) => v.status == VisitStatus.missed).length;
+      final followUpsDue = scheduled
+          .where((v) => v.status == VisitStatus.missed)
+          .length;
       final visitsLeft = planned
-          .where((s) =>
-              s.status == VisitStopStatus.pending ||
-              s.status == VisitStopStatus.inProgress)
+          .where(
+            (s) =>
+                s.status == VisitStopStatus.pending ||
+                s.status == VisitStopStatus.inProgress,
+          )
           .length;
 
       final snapshot = SalesDaySnapshot(
@@ -228,11 +252,9 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
       // Compose intelligence from the day context + shared domain stats.
       var hints = snapshot.intelligenceHints;
       try {
-        final intel = await ref.read(intelligenceServiceProvider).generate(
-              session: session,
-              settings: settings,
-              salesDay: snapshot,
-            );
+        final intel = await ref
+            .read(intelligenceServiceProvider)
+            .generate(session: session, settings: settings, salesDay: snapshot);
         hints = intel.insights;
       } catch (_) {}
 
@@ -268,15 +290,16 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
       isNewCustomer: stop.isNewCustomer,
       distanceLabel: stop.distanceLabel,
       lastVisitLabel: stop.lastVisitLabel,
-      outstandingLabel:
-          state.showOutstandingBalances ? stop.outstandingLabel : null,
+      outstandingLabel: state.showOutstandingBalances
+          ? stop.outstandingLabel
+          : null,
       sortOrder: state.visits.length,
     );
     state = state.copyWith(
       visits: [...state.visits, unplanned],
       activity: SalesDayActivity(
-        customersVisited: state.activity.customersVisited +
-            (stop.isComplete ? 1 : 0),
+        customersVisited:
+            state.activity.customersVisited + (stop.isComplete ? 1 : 0),
         ordersCreated: state.activity.ordersCreated,
         paymentsCollected: state.activity.paymentsCollected,
       ),

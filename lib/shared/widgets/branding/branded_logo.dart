@@ -53,13 +53,11 @@ class BrandedLogo extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final parentWidth = constraints.maxWidth;
-        final resolvedWidth = maxWidth ??
+        final resolvedWidth =
+            maxWidth ??
             (parentWidth.isFinite && parentWidth > 0 ? parentWidth : size * 6);
         return ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: resolvedWidth,
-            maxHeight: size,
-          ),
+          constraints: BoxConstraints(maxWidth: resolvedWidth, maxHeight: size),
           child: Image(
             image: provider,
             fit: BoxFit.contain,
@@ -67,9 +65,7 @@ class BrandedLogo extends StatelessWidget {
             filterQuality: FilterQuality.high,
             gaplessPlayback: true,
             isAntiAlias: true,
-            errorBuilder: (_, _, _) => _SelloMark(
-              size: size < 40 ? size : 40,
-            ),
+            errorBuilder: (_, _, _) => _SelloMark(size: size < 40 ? size : 40),
           ),
         );
       },
@@ -135,10 +131,7 @@ class BrandedDarkSurface extends StatelessWidget {
             decoration: BoxDecoration(gradient: AppGradients.navRailGlow),
           ),
         ),
-        Padding(
-          padding: padding ?? EdgeInsets.zero,
-          child: child,
-        ),
+        Padding(padding: padding ?? EdgeInsets.zero, child: child),
       ],
     );
     if (borderRadius != null) {
@@ -180,10 +173,13 @@ class BrandedLaunchLockup extends ConsumerWidget {
     final labelColor = lightOnDark
         ? AppColors.onPrimary.withValues(alpha: 0.72)
         : AppColors.textTertiary;
-    final titleColor =
-        lightOnDark ? AppColors.onPrimary : AppColors.textPrimary;
-    final maxWordmarkWidth =
-        (MediaQuery.sizeOf(context).width * 0.62).clamp(200.0, 360.0);
+    final titleColor = lightOnDark
+        ? AppColors.onPrimary
+        : AppColors.textPrimary;
+    final maxWordmarkWidth = (MediaQuery.sizeOf(context).width * 0.62).clamp(
+      200.0,
+      360.0,
+    );
 
     Widget progress() {
       final indicator = SizedBox(

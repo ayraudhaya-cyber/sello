@@ -191,18 +191,16 @@ class VisitCheckoutStage extends StatelessWidget {
                     ),
                 ],
               ),
-              if (arrangement == VisitPaymentArrangement.chequeReceived) ...[
-                const SizedBox(height: 10),
-                const Text(
-                  'The order will be saved as unpaid. Recording the cheque is optional — you can skip and enter it later.',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    height: 1.35,
-                    color: AppColors.textTertiary,
-                  ),
+              const SizedBox(height: 10),
+              Text(
+                arrangement.helpText,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 12,
+                  height: 1.35,
+                  color: AppColors.textTertiary,
                 ),
-              ],
+              ),
               if (arrangement.allowsOptionalExpectedDate) ...[
                 const SizedBox(height: 12),
                 Align(
@@ -239,11 +237,7 @@ class VisitCheckoutStage extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 28),
-              SelloTextField(
-                controller: notes,
-                hint: 'Note',
-                maxLines: 2,
-              ),
+              SelloTextField(controller: notes, hint: 'Note', maxLines: 2),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -329,9 +323,9 @@ class _ArrangementChoice extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.button),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 40),
+          constraints: const BoxConstraints(minHeight: 44),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Text(
               label,
               style: TextStyle(

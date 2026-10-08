@@ -34,9 +34,7 @@ class VisitDraftRestoreBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.brandAccentContainer.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(AppRadius.control),
-          border: Border.all(
-            color: context.brandAccent.withValues(alpha: 0.2),
-          ),
+          border: Border.all(color: context.brandAccent.withValues(alpha: 0.2)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),

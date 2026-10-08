@@ -186,6 +186,9 @@ class _CustomerVisitWorkspacePageState
         return;
       }
 
+      final customerFuture = ref
+          .read(customerRepositoryProvider)
+          .fetchById(customerId);
       if (active == null || active.customerId != customerId) {
         await ref
             .read(activeCustomerVisitProvider.notifier)
@@ -196,9 +199,7 @@ class _CustomerVisitWorkspacePageState
             );
       }
 
-      final customer = await ref
-          .read(customerRepositoryProvider)
-          .fetchById(customerId);
+      final customer = await customerFuture;
       if (!mounted) return;
       setState(() {
         _customer = customer;
@@ -347,7 +348,8 @@ class _CustomerVisitWorkspacePageState
     if (session == null) return;
     final editor = _orderKey.currentState;
     final lines = editor?.lines ?? [];
-    final hasMeta = _visitNotes.text.trim().isNotEmpty ||
+    final hasMeta =
+        _visitNotes.text.trim().isNotEmpty ||
         _stage == _VisitStage.checkout ||
         _arrangement != VisitPaymentArrangement.noneYet;
 
@@ -374,7 +376,9 @@ class _CustomerVisitWorkspacePageState
             quantity: line.quantity,
           ),
       ],
-      visitNotes: _visitNotes.text.trim().isEmpty ? null : _visitNotes.text.trim(),
+      visitNotes: _visitNotes.text.trim().isEmpty
+          ? null
+          : _visitNotes.text.trim(),
       stage: _stage == _VisitStage.checkout
           ? VisitOrderDraftStage.checkout
           : VisitOrderDraftStage.catalog,
@@ -395,16 +399,14 @@ class _CustomerVisitWorkspacePageState
   }) async {
     final draft = _pendingDraft;
     if (draft == null) return;
-    final restored = await _orderKey.currentState?.restoreFromProductLines(
-      [
-        for (final line in draft.lines)
-          (
-            productId: line.productId,
-            variantId: line.variantId,
-            quantity: line.quantity,
-          ),
-      ],
-    );
+    final restored = await _orderKey.currentState?.restoreFromProductLines([
+      for (final line in draft.lines)
+        (
+          productId: line.productId,
+          variantId: line.variantId,
+          quantity: line.quantity,
+        ),
+    ]);
     if (draft.visitNotes != null && draft.visitNotes!.isNotEmpty) {
       _visitNotes.text = draft.visitNotes!;
     }
@@ -455,24 +457,14 @@ class _CustomerVisitWorkspacePageState
     final shopName = _isWalkIn && _customer == null
         ? 'Walk-in'
         : (_customer?.name ?? widget.customerName ?? 'this customer');
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSelloDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Discard order?'),
-        content: Text(
-          'This will remove the current draft for $shopName.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
+      title: 'Discard order?',
+      message:
+          'This removes the current draft for $shopName. '
+          'It can’t be undone.',
+      confirmLabel: 'Discard',
+      destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -528,22 +520,14 @@ class _CustomerVisitWorkspacePageState
     if (hasLines) {
       await _persistDraft();
       if (!mounted) return;
-      final leave = await showDialog<bool>(
+      final leave = await showSelloDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Order in progress'),
-          content: const Text('Your progress has been saved.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Stay'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Leave'),
-            ),
-          ],
-        ),
+        title: 'Order in progress',
+        message:
+            'Your basket is saved on this device. '
+            'You can continue it next time you open this customer.',
+        confirmLabel: 'Leave',
+        cancelLabel: 'Stay',
       );
       if (leave != true || !mounted) return;
     }
@@ -674,10 +658,9 @@ class _CustomerVisitWorkspacePageState
           if (employeeId == null || employeeId.isEmpty) {
             throw const ValidationFailure('No active session found.');
           }
-          await ref.read(customerRepositoryProvider).allowOnAccount(
-                customerId: customer.id,
-                employeeId: employeeId,
-              );
+          await ref
+              .read(customerRepositoryProvider)
+              .allowOnAccount(customerId: customer.id, employeeId: employeeId);
         }
         // Record demand (placed). Delivery is a separate step and is what
         // marks the order completed and moves stock.
@@ -697,11 +680,7 @@ class _CustomerVisitWorkspacePageState
         );
         final saved = await ref
             .read(selloOrdersProvider.notifier)
-            .saveOrder(
-              input,
-              place: true,
-              reloadList: false,
-            );
+            .saveOrder(input, place: true, reloadList: false);
         if (!saved.isOk) {
           if (!mounted) return;
           setState(() => _saving = false);
@@ -734,6 +713,7 @@ class _CustomerVisitWorkspacePageState
             currencySymbol: _currency,
             visitId: visit.isLocalOnly ? null : visit.id,
             initialCustomer: customer,
+            preferredOrderId: _savedVisitOrderId,
           ),
         );
         if (!mounted) return;
@@ -763,10 +743,11 @@ class _CustomerVisitWorkspacePageState
             initialCustomer: customer,
             markCollected: true,
             recordingIsOptional: true,
-            preferredOrderId: VisitCheckoutPaymentRules.preferredOrderIdForCheque(
-              arrangement: _arrangement,
-              createdOrderId: _savedVisitOrderId,
-            ),
+            preferredOrderId:
+                VisitCheckoutPaymentRules.preferredOrderIdForCheque(
+                  arrangement: _arrangement,
+                  createdOrderId: _savedVisitOrderId,
+                ),
           ),
         );
         if (!mounted) return;
@@ -834,9 +815,11 @@ class _CustomerVisitWorkspacePageState
       if (!mounted) return;
       SelloSnackbars.success(
         context,
-        skippedOptionalCheque && hasLines
-            ? 'Visit saved. Record the cheque later from the order.'
-            : 'Visit saved.',
+        VisitCheckoutPaymentRules.visitSavedMessage(
+          arrangement: _arrangement,
+          hasLines: hasLines,
+          skippedOptionalCheque: skippedOptionalCheque,
+        ),
       );
       if (confirmation != null && confirmation.hasShareActions && mounted) {
         await showOrderConfirmationShareSheet(context, confirmation);

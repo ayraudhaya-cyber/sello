@@ -37,8 +37,9 @@ class HubVisitsState {
   }
 }
 
-final hubVisitsProvider =
-    NotifierProvider<HubVisitsNotifier, HubVisitsState>(HubVisitsNotifier.new);
+final hubVisitsProvider = NotifierProvider<HubVisitsNotifier, HubVisitsState>(
+  HubVisitsNotifier.new,
+);
 
 class HubVisitsNotifier extends Notifier<HubVisitsState> {
   @override
@@ -79,10 +80,7 @@ class HubVisitsNotifier extends Notifier<HubVisitsState> {
     } on AppFailure catch (error) {
       state = state.copyWith(loading: false, error: error.message);
     } catch (_) {
-      state = state.copyWith(
-        loading: false,
-        error: 'Unable to load visits.',
-      );
+      state = state.copyWith(loading: false, error: 'Unable to load visits.');
     }
   }
 }

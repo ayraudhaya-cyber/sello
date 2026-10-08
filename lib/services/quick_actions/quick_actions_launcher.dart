@@ -18,6 +18,7 @@ import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/company_settings.dart';
+import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/payment_summary.dart';
@@ -57,9 +58,9 @@ abstract final class QuickActionsLauncher {
       case QuickActionId.stockAdjustment:
         await _stockAdjustment(context, ref);
       case QuickActionId.receivePayment:
-        await _receivePayment(context, ref, role);
+        await receivePayment(context, ref);
       case QuickActionId.newOrder:
-        await _newOrder(context, ref, role);
+        await newOrder(context, ref);
       case QuickActionId.startVisit:
         await _startVisit(context, ref);
       case QuickActionId.newWalkIn:
@@ -109,16 +110,21 @@ abstract final class QuickActionsLauncher {
     return SelloFormatters.currencySymbol(code);
   }
 
-  static Future<void> _receivePayment(
+  /// Shared Receive payment flow (Quick actions, customer details).
+  static Future<void> receivePayment(
     BuildContext context,
-    WidgetRef ref,
-    UserRole role,
-  ) async {
+    WidgetRef ref, {
+    CustomerSummary? customer,
+  }) async {
+    final role = ref.read(currentSessionProvider)?.appRole;
+    if (role == null) return;
     final input = await showDialog<ReceivePaymentInput>(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          ReceivePaymentDialog(currencySymbol: _currency(ref, role)),
+      builder: (context) => ReceivePaymentDialog(
+        currencySymbol: _currency(ref, role),
+        initialCustomer: customer,
+      ),
     );
     if (input == null || !context.mounted) return;
 
@@ -154,11 +160,14 @@ abstract final class QuickActionsLauncher {
     }
   }
 
-  static Future<void> _newOrder(
+  /// Shared Hub New order flow (Quick actions, customer details).
+  static Future<void> newOrder(
     BuildContext context,
-    WidgetRef ref,
-    UserRole role,
-  ) async {
+    WidgetRef ref, {
+    String? customerId,
+  }) async {
+    final role = ref.read(currentSessionProvider)?.appRole;
+    if (role == null) return;
     if (role.usesSello) {
       // Field sales: orders live inside the visit workspace.
       context.go(RoutePaths.selloCustomers);
@@ -168,8 +177,10 @@ abstract final class QuickActionsLauncher {
     final result = await showDialog<OrderEditorResult>(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          OrderEditorDialog(currencySymbol: _currency(ref, role)),
+      builder: (context) => OrderEditorDialog(
+        currencySymbol: _currency(ref, role),
+        initialCustomerId: customerId,
+      ),
     );
     if (result == null || !context.mounted) return;
 

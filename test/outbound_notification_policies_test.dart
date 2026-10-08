@@ -238,12 +238,31 @@ void main() {
           'business_name': 'Acme',
           'customer_name': 'City Mart',
           'collection_amount': 'Rs 25,000.00',
+          'collection_status': 'submitted for review',
+          'approval_note': 'Balances update only after owner/manager approval.',
           'receipt_link': 'https://app.sello.test/d/token',
         },
       );
-      expect(body, contains('Pending Review'));
-      expect(body, contains('submitted'));
-      expect(body.toLowerCase(), isNot(contains('approved')));
+      expect(body, contains('Collection submitted for review'));
+      expect(body, contains('Balances update only after'));
+    });
+
+    test('team collection template for an applied collection has no approval note',
+        () {
+      final body = OutboundMessageTemplate.render(
+        OutboundMessageTemplate.collectionSubmittedDefault,
+        values: {
+          'business_name': 'Acme',
+          'customer_name': 'City Mart',
+          'sales_rep_name': 'Amina',
+          'collection_amount': 'Rs 25,000.00',
+          'collection_status': 'recorded',
+          'approval_note': null,
+        },
+      );
+      expect(body, contains('Collection recorded'));
+      expect(body, contains('Collected by: Amina'));
+      expect(body, isNot(contains('approval')));
     });
 
     test('only exposes placeholders that belong to the message family', () {

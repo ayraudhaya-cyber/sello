@@ -57,10 +57,7 @@ class SelloStatusBadge extends StatelessWidget {
             Container(
               width: compact ? 5 : 6,
               height: compact ? 5 : 6,
-              decoration: BoxDecoration(
-                color: accent,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
             ),
             SizedBox(width: compact ? 5 : 6),
           ],
@@ -81,12 +78,7 @@ class SelloStatusBadge extends StatelessWidget {
 
 /// Neutral metadata pill for secondary attributes (brand, unit, category).
 class SelloMetaPill extends StatelessWidget {
-  const SelloMetaPill({
-    super.key,
-    required this.value,
-    this.label,
-    this.icon,
-  });
+  const SelloMetaPill({super.key, required this.value, this.label, this.icon});
 
   final String value;
   final String? label;

@@ -28,11 +28,14 @@ class CustomerDetailsDialog extends StatefulWidget {
     this.onDeletePermanently,
     this.onAddExistingCheque,
     this.onAddOpeningBalance,
+    this.onCorrectOpeningBalance,
     this.openingBalanceHistoryEpoch = 0,
     this.readOnly = false,
     this.currencySymbol = '\$',
     this.assignedRepresentativeName,
     this.enableVisitActions = false,
+    this.onNewOrder,
+    this.onReceivePayment,
   });
 
   final CustomerSummary customer;
@@ -41,6 +44,8 @@ class CustomerDetailsDialog extends StatefulWidget {
   final VoidCallback? onDeletePermanently;
   final VoidCallback? onAddExistingCheque;
   final VoidCallback? onAddOpeningBalance;
+  final Future<void> Function(CustomerReceivableAdjustment item)?
+      onCorrectOpeningBalance;
   final int openingBalanceHistoryEpoch;
   final bool readOnly;
   final String currencySymbol;
@@ -50,6 +55,10 @@ class CustomerDetailsDialog extends StatefulWidget {
 
   /// Sales field actions: Start / Complete visit.
   final bool enableVisitActions;
+
+  /// Hub shortcuts shown above the tabs (active customers only).
+  final VoidCallback? onNewOrder;
+  final VoidCallback? onReceivePayment;
 
   @override
   State<CustomerDetailsDialog> createState() => _CustomerDetailsDialogState();
@@ -95,6 +104,33 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
               assignedRepresentativeName: widget.assignedRepresentativeName,
             )
           else ...[
+            if (customer.isActive &&
+                (widget.onNewOrder != null ||
+                    widget.onReceivePayment != null)) ...[
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  if (widget.onNewOrder != null)
+                    SelloButton(
+                      label: 'New order',
+                      icon: Icons.add_shopping_cart_rounded,
+                      size: SelloButtonSize.small,
+                      variant: SelloButtonVariant.outline,
+                      onPressed: widget.onNewOrder,
+                    ),
+                  if (widget.onReceivePayment != null)
+                    SelloButton(
+                      label: 'Receive payment',
+                      icon: Icons.payments_outlined,
+                      size: SelloButtonSize.small,
+                      variant: SelloButtonVariant.outline,
+                      onPressed: widget.onReceivePayment,
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+            ],
             _CustomerDetailTabs(
               tab: _tab,
               onChanged: (value) => setState(() => _tab = value),
@@ -108,6 +144,7 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                 readOnly: widget.readOnly,
                 openingBalanceHistoryEpoch: widget.openingBalanceHistoryEpoch,
                 onAddOpeningBalance: widget.onAddOpeningBalance,
+                onCorrectOpeningBalance: widget.onCorrectOpeningBalance,
                 onAddExistingCheque: widget.onAddExistingCheque,
                 sectionGap: _sectionGap,
                 fieldGap: _fieldGap,
@@ -220,6 +257,7 @@ class _HubOverviewBody extends StatelessWidget {
     required this.fieldGap,
     this.assignedRepresentativeName,
     this.onAddOpeningBalance,
+    this.onCorrectOpeningBalance,
     this.onAddExistingCheque,
   });
 
@@ -229,6 +267,8 @@ class _HubOverviewBody extends StatelessWidget {
   final bool readOnly;
   final int openingBalanceHistoryEpoch;
   final VoidCallback? onAddOpeningBalance;
+  final Future<void> Function(CustomerReceivableAdjustment item)?
+      onCorrectOpeningBalance;
   final VoidCallback? onAddExistingCheque;
   final double sectionGap;
   final double fieldGap;
@@ -334,6 +374,7 @@ class _HubOverviewBody extends StatelessWidget {
                 customerId: customer.id,
                 currencySymbol: currencySymbol,
                 epoch: openingBalanceHistoryEpoch,
+                onCorrect: onCorrectOpeningBalance,
               ),
             ],
           ),
@@ -1028,11 +1069,13 @@ class _OpeningBalanceHistory extends ConsumerStatefulWidget {
     required this.customerId,
     required this.currencySymbol,
     required this.epoch,
+    this.onCorrect,
   });
 
   final String customerId;
   final String currencySymbol;
   final int epoch;
+  final Future<void> Function(CustomerReceivableAdjustment item)? onCorrect;
 
   @override
   ConsumerState<_OpeningBalanceHistory> createState() =>
@@ -1111,6 +1154,7 @@ class _OpeningBalanceHistoryState
             _OpeningBalanceRow(
               item: _items[i],
               currencySymbol: widget.currencySymbol,
+              onCorrect: widget.onCorrect,
             ),
           ],
         ],
@@ -1123,10 +1167,12 @@ class _OpeningBalanceRow extends StatelessWidget {
   const _OpeningBalanceRow({
     required this.item,
     required this.currencySymbol,
+    this.onCorrect,
   });
 
   final CustomerReceivableAdjustment item;
   final String currencySymbol;
+  final Future<void> Function(CustomerReceivableAdjustment item)? onCorrect;
 
   TextStyle get _title => _CustomerDetailType.label.copyWith(
         color: AppColors.textPrimary,
@@ -1171,6 +1217,18 @@ class _OpeningBalanceRow extends StatelessWidget {
           'Date: ${SelloFormatters.date(item.recognizedAt)}',
           style: _meta,
         ),
+        if (onCorrect != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelloButton(
+              label: 'Correct',
+              size: SelloButtonSize.small,
+              variant: SelloButtonVariant.outline,
+              onPressed: () => onCorrect!(item),
+            ),
+          ),
+        ],
       ],
     );
   }

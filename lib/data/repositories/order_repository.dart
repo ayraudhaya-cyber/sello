@@ -142,6 +142,8 @@ class OrderRepository {
     String? employeeId,
     DateTime? orderedFrom,
     DateTime? orderedTo,
+    String orderBy = 'ordered_at',
+    bool ascending = false,
     int page = 0,
     int pageSize = 20,
   }) async {
@@ -184,35 +186,35 @@ class OrderRepository {
       List<String>? customerIds;
       List<String>? employeeIds;
       if (needle.isNotEmpty) {
-        final customerRows = await _client
-            .from('customers')
-            .select('id')
-            .isFilter('deleted_at', null)
-            .or(
-              'name.ilike.%$needle%,phone.ilike.%$needle%,code.ilike.%$needle%',
-            )
-            .limit(50);
-        customerIds = (customerRows as List)
+        final lookups = await Future.wait<dynamic>([
+          _client
+              .from('customers')
+              .select('id')
+              .isFilter('deleted_at', null)
+              .or(
+                'name.ilike.%$needle%,phone.ilike.%$needle%,code.ilike.%$needle%',
+              )
+              .limit(50),
+          _client
+              .from('employees')
+              .select('id')
+              .isFilter('deleted_at', null)
+              .ilike('full_name', '%$needle%')
+              .limit(50),
+          _client
+              .from('products')
+              .select('id')
+              .isFilter('deleted_at', null)
+              .or('name.ilike.%$needle%,sku.ilike.%$needle%')
+              .limit(50),
+        ]);
+        customerIds = (lookups[0] as List)
             .map((row) => row['id'] as String)
             .toList();
-
-        final employeeRows = await _client
-            .from('employees')
-            .select('id')
-            .isFilter('deleted_at', null)
-            .ilike('full_name', '%$needle%')
-            .limit(50);
-        employeeIds = (employeeRows as List)
+        employeeIds = (lookups[1] as List)
             .map((row) => row['id'] as String)
             .toList();
-
-        final productRows = await _client
-            .from('products')
-            .select('id')
-            .isFilter('deleted_at', null)
-            .or('name.ilike.%$needle%,sku.ilike.%$needle%')
-            .limit(50);
-        final productIds = (productRows as List)
+        final productIds = (lookups[2] as List)
             .map((row) => row['id'] as String)
             .toList();
         List<String> orderIdsFromProducts = const [];
@@ -242,7 +244,7 @@ class OrderRepository {
       }
 
       final response = await query
-          .order('ordered_at', ascending: false)
+          .order(orderBy, ascending: ascending)
           .range(page * pageSize, (page * pageSize) + pageSize - 1);
 
       final list = response as List;
@@ -280,6 +282,25 @@ class OrderRepository {
         completed: counts[2],
         cancelled: counts[3],
       );
+    } on PostgrestException catch (error) {
+      throw ProvisioningFailure(error.message);
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Head count of orders (no rows downloaded), e.g. a rep's orders today.
+  Future<int> countOrders({String? employeeId, DateTime? orderedFrom}) async {
+    try {
+      var query = _client.from('orders').count().isFilter('deleted_at', null);
+      if (employeeId != null && employeeId.isNotEmpty) {
+        query = query.eq('employee_id', employeeId);
+      }
+      if (orderedFrom != null) {
+        query = query.gte('ordered_at', orderedFrom.toUtc().toIso8601String());
+      }
+      return await query;
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
     } catch (error) {
@@ -1164,6 +1185,23 @@ class OrderRepository {
     return trimmed;
   }
 
+  Future<void> reassignSalesRep({
+    required String orderId,
+    required String employeeId,
+  }) async {
+    try {
+      await _client.rpc(
+        'reassign_order_sales_rep',
+        params: {'p_order_id': orderId, 'p_employee_id': employeeId},
+      );
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
   static String _mapOrderError(String message) {
     final lower = message.toLowerCase();
     if (lower.contains('not enough stock for')) {
@@ -1188,6 +1226,15 @@ class OrderRepository {
     }
     if (lower.contains('cannot record delivery')) {
       return 'Recording delivery is turned off for Sales. Ask an Owner or Manager to complete this order.';
+    }
+    if (lower.contains('only owner or manager can change the sales rep')) {
+      return 'Only Owner or Manager can change the Sales Rep on an order.';
+    }
+    if (lower.contains('cancelled orders cannot be reassigned')) {
+      return 'Cancelled orders cannot be reassigned.';
+    }
+    if (lower.contains('still a draft')) {
+      return message;
     }
     return message;
   }

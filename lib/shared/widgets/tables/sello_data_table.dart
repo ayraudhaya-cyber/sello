@@ -15,9 +15,11 @@ class SelloDataTable extends StatelessWidget {
     this.dataRowMaxHeight = 72,
     this.minWidth,
     this.footer,
-    this.horizontalMargin = 24,
-    this.columnSpacing = 28,
+    this.horizontalMargin = 16,
+    this.columnSpacing = 20,
     this.flexColumnIndex = 0,
+    this.sortColumnIndex,
+    this.sortAscending = true,
   });
 
   final List<DataColumn> columns;
@@ -33,6 +35,10 @@ class SelloDataTable extends StatelessWidget {
   /// Column that absorbs leftover width. Identity (name / number), not a
   /// leading checkbox.
   final int flexColumnIndex;
+
+  /// Column showing the sort arrow. Pair with onSort on [selloDataColumn].
+  final int? sortColumnIndex;
+  final bool sortAscending;
 
   @override
   Widget build(BuildContext context) {
@@ -67,29 +73,27 @@ class SelloDataTable extends StatelessWidget {
                   child: Theme(
                     data: Theme.of(context).copyWith(
                       dataTableTheme: Theme.of(context).dataTableTheme.copyWith(
-                            headingRowColor: WidgetStateProperty.all(
-                              AppColors.surface,
-                            ),
-                            headingTextStyle:
-                                context.texts.labelMedium?.copyWith(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.15,
-                            ),
-                            dataRowColor:
-                                WidgetStateProperty.resolveWith((states) {
-                              if (states.contains(WidgetState.selected)) {
-                                return colors.surfaceSelected;
-                              }
-                              if (states.contains(WidgetState.hovered)) {
-                                return colors.veil;
-                              }
-                              return AppColors.surface;
-                            }),
-                            horizontalMargin: horizontalMargin,
-                            columnSpacing: columnSpacing,
-                            dividerThickness: 1,
-                          ),
+                        headingRowColor: WidgetStateProperty.all(
+                          AppColors.surface,
+                        ),
+                        headingTextStyle: context.texts.labelMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.15,
+                        ),
+                        dataRowColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return colors.surfaceSelected;
+                          }
+                          if (states.contains(WidgetState.hovered)) {
+                            return colors.veil;
+                          }
+                          return AppColors.surface;
+                        }),
+                        horizontalMargin: horizontalMargin,
+                        columnSpacing: columnSpacing,
+                        dividerThickness: 1,
+                      ),
                       dividerColor: AppColors.outlineSubtle,
                     ),
                     child: DataTable(
@@ -97,6 +101,8 @@ class SelloDataTable extends StatelessWidget {
                       dataRowMinHeight: dataRowMinHeight,
                       dataRowMaxHeight: dataRowMaxHeight,
                       showCheckboxColumn: false,
+                      sortColumnIndex: sortColumnIndex,
+                      sortAscending: sortAscending,
                       columns: expandedColumns,
                       rows: rows,
                     ),
@@ -131,7 +137,7 @@ class SelloDataTable extends StatelessWidget {
 
     final flexIndex = flexColumnIndex.clamp(0, columns.length - 1);
     final otherCount = columns.length - 1;
-    const estimatedOtherColumn = 96.0;
+    const estimatedOtherColumn = 88.0;
     const estimatedSelectColumn = 40.0;
     var reserved = (horizontalMargin * 2) + (columnSpacing * otherCount);
     for (var i = 0; i < columns.length; i++) {
@@ -140,7 +146,7 @@ class SelloDataTable extends StatelessWidget {
           ? estimatedSelectColumn
           : estimatedOtherColumn;
     }
-    final leadWidth = (tableWidth - reserved).clamp(220.0, 640.0);
+    final leadWidth = (tableWidth - reserved).clamp(120.0, 420.0);
 
     return [
       for (var i = 0; i < columns.length; i++)
@@ -199,12 +205,12 @@ class SelloTableText extends StatelessWidget {
     final colors = context.selloColors;
     final base = switch (tone) {
       SelloTableTone.strong => context.texts.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
+        fontWeight: FontWeight.w600,
+      ),
       SelloTableTone.normal => context.texts.bodyMedium,
       SelloTableTone.muted => context.texts.bodySmall?.copyWith(
-          color: colors.textSecondary,
-        ),
+        color: colors.textSecondary,
+      ),
     };
 
     return Text(
@@ -220,15 +226,14 @@ class SelloTableText extends StatelessWidget {
 /// Compact leading checkbox column. Pair with [SelloDataTable.flexColumnIndex]
 /// set to the identity column (usually 1).
 DataColumn selloSelectDataColumn() {
-  return const DataColumn(
-    label: SizedBox(width: 28),
-  );
+  return const DataColumn(label: SizedBox(width: 28));
 }
 
 /// Table column helper so headings stay consistent across screens.
-DataColumn selloDataColumn(String label, {bool numeric = false}) {
-  return DataColumn(
-    label: Text(label),
-    numeric: numeric,
-  );
+DataColumn selloDataColumn(
+  String label, {
+  bool numeric = false,
+  DataColumnSortCallback? onSort,
+}) {
+  return DataColumn(label: Text(label), numeric: numeric, onSort: onSort);
 }

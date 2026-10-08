@@ -85,12 +85,13 @@ class _SelloProductsPageState extends ConsumerState<SelloProductsPage> {
       showBreadcrumbs: false,
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.sm,
+      inlineActions: true,
+      onRefresh: () => ref.read(selloCatalogProvider.notifier).refresh(),
+      onNearEnd: () => ref.read(selloCatalogProvider.notifier).loadMore(),
       actions: [
-        SelloButton(
+        SelloHeaderAction(
           label: 'Refresh',
           icon: Icons.refresh_rounded,
-          size: SelloButtonSize.small,
-          variant: SelloButtonVariant.outline,
           onPressed: state.isLoading
               ? null
               : () => ref.read(selloCatalogProvider.notifier).refresh(),
@@ -114,7 +115,7 @@ class _SelloProductsPageState extends ConsumerState<SelloProductsPage> {
           if (state.categories.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             SizedBox(
-              height: 36,
+              height: 44,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
@@ -140,6 +141,14 @@ class _SelloProductsPageState extends ConsumerState<SelloProductsPage> {
             ),
           ],
           const SizedBox(height: AppSpacing.md),
+          SelloInlineRefreshBar(
+            active: state.isLoading && state.items.isNotEmpty,
+          ),
+          if (state.errorMessage != null && state.items.isNotEmpty)
+            SelloInlineErrorBar(
+              message: state.errorMessage,
+              onRetry: () => ref.read(selloCatalogProvider.notifier).refresh(),
+            ),
           if (state.isLoading && state.items.isEmpty)
             const SelloListSkeleton()
           else if (state.errorMessage != null && state.items.isEmpty)
@@ -189,6 +198,7 @@ class _SelloProductsPageState extends ConsumerState<SelloProductsPage> {
                 },
               ),
             ),
+          SelloLoadMoreFooter(active: state.isLoadingMore),
         ],
       ),
     );
@@ -299,8 +309,9 @@ class _CatalogProductCard extends ConsumerWidget {
                   children: [
                     if (product.imageUrl != null &&
                         product.imageUrl!.isNotEmpty)
-                      Image.network(
-                        product.imageUrl!,
+                      SelloNetworkImage(
+                        url: product.imageUrl!,
+                        cacheKey: product.imageCacheKey,
                         fit: BoxFit.cover,
                         filterQuality: FilterQuality.medium,
                         gaplessPlayback: true,

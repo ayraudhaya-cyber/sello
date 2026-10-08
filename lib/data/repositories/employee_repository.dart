@@ -41,10 +41,10 @@ class EmployeeRepository {
     MediaStorageService? imageStorage,
     MediaService? media,
     BusinessEventBus? events,
-  })  : _client = client ?? SupabaseService.client,
-        _imageStorage = imageStorage ?? MediaStorageService(),
-        _media = media ?? MediaService(),
-        _events = events ?? BusinessEventBus();
+  }) : _client = client ?? SupabaseService.client,
+       _imageStorage = imageStorage ?? MediaStorageService(),
+       _media = media ?? MediaService(),
+       _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final MediaStorageService _imageStorage;
@@ -160,13 +160,11 @@ class EmployeeRepository {
             try {
               final employeeId = row['id'] as String?;
               if (employeeId != null) {
-                await _client.from('employees').update({
-                  'user_id': authUserId,
-                }).eq('id', employeeId);
-                row = {
-                  ...row,
-                  'user_id': authUserId,
-                };
+                await _client
+                    .from('employees')
+                    .update({'user_id': authUserId})
+                    .eq('id', employeeId);
+                row = {...row, 'user_id': authUserId};
               }
             } catch (_) {
               // RLS may block self-link; session can still proceed via email.
@@ -186,8 +184,7 @@ class EmployeeRepository {
       }
 
       final employee = Employee.fromJson(row);
-      if (!employee.isActive ||
-          !employee.employmentStatus.canAuthenticate) {
+      if (!employee.isActive || !employee.employmentStatus.canAuthenticate) {
         throw const AuthFailure(
           'This account is inactive. Contact your administrator.',
         );
@@ -272,9 +269,7 @@ class EmployeeRepository {
     try {
       final rows = await _client
           .from('employees')
-          .select(
-            'employment_status, roles!employees_role_id_fkey(code)',
-          )
+          .select('employment_status, roles!employees_role_id_fkey(code)')
           .eq('company_id', companyId)
           .isFilter('deleted_at', null);
 
@@ -287,17 +282,16 @@ class EmployeeRepository {
       for (final raw in rows as List) {
         final row = Map<String, dynamic>.from(raw as Map);
         total++;
-        final status =
-            EmploymentStatus.fromCode(row['employment_status'] as String?);
+        final status = EmploymentStatus.fromCode(
+          row['employment_status'] as String?,
+        );
         if (status == EmploymentStatus.active) {
           active++;
         } else {
           inactive++;
         }
         final roleJson = row['roles'];
-        final code = roleJson is Map
-            ? (roleJson['code'] as String? ?? '')
-            : '';
+        final code = roleJson is Map ? (roleJson['code'] as String? ?? '') : '';
         if (code == 'sales_representative') salesRepresentatives++;
         if (code == 'manager') managers++;
       }
@@ -434,10 +428,8 @@ class EmployeeRepository {
           .isFilter('deleted_at', null)
           .maybeSingle();
       if (row == null) return null;
-      final summary =
-          EmployeeSummary.fromJson(Map<String, dynamic>.from(row));
-      final enriched =
-          await _attachAvatarsAndAssignments(companyId, [summary]);
+      final summary = EmployeeSummary.fromJson(Map<String, dynamic>.from(row));
+      final enriched = await _attachAvatarsAndAssignments(companyId, [summary]);
       return enriched.first;
     } on PostgrestException catch (e) {
       throw UnexpectedFailure(
@@ -504,6 +496,34 @@ class EmployeeRepository {
     }
   }
 
+  /// Signed-in employee changes only their own name and mobile number.
+  /// Role, email, branch and status stay with an Owner / Manager in Team.
+  Future<void> updateMyProfile({
+    required String fullName,
+    String? phone,
+  }) async {
+    final name = fullName.trim();
+    if (name.isEmpty) {
+      throw const ValidationFailure('Enter your name.');
+    }
+    try {
+      await _client.rpc(
+        'update_my_profile',
+        params: {'p_full_name': name, 'p_phone': _blankToNull(phone)},
+      );
+    } on PostgrestException catch (e) {
+      final message = e.message.trim();
+      throw ValidationFailure(
+        message.isEmpty || message.contains('update_my_profile')
+            ? 'Unable to save your profile right now.'
+            : message,
+      );
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw const UnexpectedFailure('Unable to save your profile right now.');
+    }
+  }
+
   Future<EmployeeUpsertResult> upsertEmployee({
     required String companyId,
     required String actorEmployeeId,
@@ -539,8 +559,9 @@ class EmployeeRepository {
       if (input.isCreate) {
         payload['created_by'] = actorEmployeeId;
         if (payload['employee_code'] == null) {
-          payload['employee_code'] =
-              await _nextEmployeeCode(companyId: companyId);
+          payload['employee_code'] = await _nextEmployeeCode(
+            companyId: companyId,
+          );
         }
         final inserted = await _client
             .from('employees')
@@ -590,7 +611,8 @@ class EmployeeRepository {
       );
 
       final nextEmail = input.email.trim().toLowerCase();
-      final emailChanged = !input.isCreate &&
+      final emailChanged =
+          !input.isCreate &&
           previousEmail != null &&
           previousEmail.isNotEmpty &&
           previousEmail != nextEmail;
@@ -598,9 +620,7 @@ class EmployeeRepository {
       TeamInviteResult? invite;
       if (input.isCreate || emailChanged) {
         onProgress?.call(
-          emailChanged
-              ? 'Sending set-password email…'
-              : 'Sending invitation…',
+          emailChanged ? 'Sending set-password email…' : 'Sending invitation…',
         );
         invite = await sendLoginInvite(
           companyId: companyId,
@@ -670,9 +690,7 @@ class EmployeeRepository {
         );
       }
 
-      final body = <String, dynamic>{
-        'employee_id': employeeId,
-      };
+      final body = <String, dynamic>{'employee_id': employeeId};
       final redirectTo =
           EmployeeLoginInviteResponse.redirectToForCurrentOrigin();
       if (redirectTo != null) {
@@ -724,18 +742,19 @@ class EmployeeRepository {
       rethrow;
     } on FunctionException catch (error) {
       // ignore: avoid_print
-      print('[invite-employee-login] FunctionException: '
-          'status=${error.status} '
-          'details=${error.details} '
-          'reason=${error.reasonPhrase}');
-      final data = EmployeeLoginInviteResponse.asMap(error.details) ??
+      print(
+        '[invite-employee-login] FunctionException: '
+        'status=${error.status} '
+        'details=${error.details} '
+        'reason=${error.reasonPhrase}',
+      );
+      final data =
+          EmployeeLoginInviteResponse.asMap(error.details) ??
           EmployeeLoginInviteResponse.asMap(error.reasonPhrase);
       throw AuthFailure(EmployeeLoginInviteResponse.failureMessage(data));
     } on PostgrestException catch (e) {
       final message = e.message.trim();
-      throw UnexpectedFailure(
-        message.isEmpty ? 'Request failed.' : message,
-      );
+      throw UnexpectedFailure(message.isEmpty ? 'Request failed.' : message);
     } catch (error) {
       // ignore: avoid_print
       print('[invite-employee-login] Unexpected: ${error.runtimeType}: $error');
@@ -783,9 +802,7 @@ class EmployeeRepository {
     try {
       final row = await _client
           .from('employee_assignments')
-          .select(
-            'employee_id, employees!employee_id (id, full_name)',
-          )
+          .select('employee_id, employees!employee_id (id, full_name)')
           .eq('company_id', companyId)
           .eq('assignment_type', EmployeeAssignmentType.customer.dbValue)
           .eq('target_id', customerId)
@@ -799,8 +816,7 @@ class EmployeeRepository {
       final employee = row['employees'];
       return (
         employeeId: row['employee_id'] as String?,
-        employeeName:
-            employee is Map ? employee['full_name'] as String? : null,
+        employeeName: employee is Map ? employee['full_name'] as String? : null,
       );
     } catch (_) {
       return (employeeId: null, employeeName: null);
@@ -872,10 +888,14 @@ class EmployeeRepository {
     required String employeeId,
   }) async {
     try {
-      await _client.from('employee_assignments').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-        'updated_by': actorEmployeeId,
-      }).eq('id', assignmentId).eq('company_id', companyId);
+      await _client
+          .from('employee_assignments')
+          .update({
+            'deleted_at': DateTime.now().toUtc().toIso8601String(),
+            'updated_by': actorEmployeeId,
+          })
+          .eq('id', assignmentId)
+          .eq('company_id', companyId);
 
       await logActivity(
         employeeId: actorEmployeeId,
@@ -900,10 +920,14 @@ class EmployeeRepository {
     required EmploymentStatus status,
   }) async {
     try {
-      await _client.from('employees').update({
-        'employment_status': status.code,
-        'updated_by': actorEmployeeId,
-      }).eq('id', employeeId).eq('company_id', companyId);
+      await _client
+          .from('employees')
+          .update({
+            'employment_status': status.code,
+            'updated_by': actorEmployeeId,
+          })
+          .eq('id', employeeId)
+          .eq('company_id', companyId);
 
       await logActivity(
         employeeId: actorEmployeeId,
@@ -1019,10 +1043,11 @@ class EmployeeRepository {
       bytes: processed.bytes,
       contentType: MediaConstants.jpegContentType,
     );
-    await _client.from('employees').update({
-      'avatar_url': path,
-      'updated_by': actorEmployeeId,
-    }).eq('id', employeeId).eq('company_id', companyId);
+    await _client
+        .from('employees')
+        .update({'avatar_url': path, 'updated_by': actorEmployeeId})
+        .eq('id', employeeId)
+        .eq('company_id', companyId);
   }
 
   Future<void> _clearAvatar({
@@ -1037,17 +1062,16 @@ class EmployeeRepository {
         .eq('company_id', companyId)
         .maybeSingle();
     final path = row?['avatar_url'] as String?;
-    if (path != null &&
-        path.isNotEmpty &&
-        !path.startsWith('http')) {
+    if (path != null && path.isNotEmpty && !path.startsWith('http')) {
       try {
         await _imageStorage.deleteEmployeeAvatar(path);
       } catch (_) {}
     }
-    await _client.from('employees').update({
-      'avatar_url': null,
-      'updated_by': actorEmployeeId,
-    }).eq('id', employeeId).eq('company_id', companyId);
+    await _client
+        .from('employees')
+        .update({'avatar_url': null, 'updated_by': actorEmployeeId})
+        .eq('id', employeeId)
+        .eq('company_id', companyId);
   }
 
   String? _blankToNull(String? value) {

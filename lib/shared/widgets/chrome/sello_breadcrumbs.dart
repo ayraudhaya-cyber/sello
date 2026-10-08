@@ -5,10 +5,7 @@ import 'package:sello/core/theme/theme.dart';
 
 /// Horizontal breadcrumb trail for Hub / desktop chrome.
 class SelloBreadcrumbs extends StatelessWidget {
-  const SelloBreadcrumbs({
-    super.key,
-    required this.items,
-  });
+  const SelloBreadcrumbs({super.key, required this.items});
 
   final List<BreadcrumbData> items;
 
@@ -29,10 +26,7 @@ class SelloBreadcrumbs extends StatelessWidget {
                 color: context.selloColors.textTertiary,
               ),
             ),
-          _Crumb(
-            data: items[i],
-            isLast: i == items.length - 1,
-          ),
+          _Crumb(data: items[i], isLast: i == items.length - 1),
         ],
       ],
     );
@@ -48,9 +42,7 @@ class _Crumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = context.texts.labelMedium?.copyWith(
-      color: isLast
-          ? AppColors.textPrimary
-          : context.selloColors.textSecondary,
+      color: isLast ? AppColors.textPrimary : context.selloColors.textSecondary,
       fontWeight: isLast ? FontWeight.w600 : FontWeight.w500,
     );
 

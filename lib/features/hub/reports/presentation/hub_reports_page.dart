@@ -57,7 +57,8 @@ class HubReportsPage extends ConsumerWidget {
           }
         },
         onDrillDown: () {
-          final route = definition.drillRoute ??
+          final route =
+              definition.drillRoute ??
               ref
                   .read(analyticsServiceProvider)
                   .drillRouteForReport(definition.id);
@@ -166,17 +167,18 @@ class HubReportsPage extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             SelloReportKpiGrid(
-              kpis: ref.read(analyticsServiceProvider).buildKpis(
-                    overview: overview,
-                    currencySymbol: currency,
-                  ),
+              kpis: ref
+                  .read(analyticsServiceProvider)
+                  .buildKpis(overview: overview, currencySymbol: currency),
               onKpiTap: (kpi) => _onKpiTap(context, ref, kpi),
             ),
             const SizedBox(height: AppSpacing.xl),
             _SalesTrendCard(
               overview: overview,
               currencySymbol: currency,
-              points: ref.read(analyticsServiceProvider).bucketTrend(
+              points: ref
+                  .read(analyticsServiceProvider)
+                  .bucketTrend(
                     overview.salesTrend,
                     granularity: state.query.granularity,
                   ),
@@ -192,16 +194,15 @@ class HubReportsPage extends ConsumerWidget {
                   subtitle: 'Revenue leaders this period',
                   child: ReportComparisonBars(
                     items: overview.topProducts,
-                    valueLabel: (i) => SelloFormatters.currency(
-                      i.value,
-                      symbol: currency,
-                    ),
+                    valueLabel: (i) =>
+                        SelloFormatters.currency(i.value, symbol: currency),
                   ),
                   onOpen: () => _openReport(
                     context,
                     ref,
-                    ReportCatalog.definitions
-                        .firstWhere((d) => d.id == 'sales_top_products'),
+                    ReportCatalog.definitions.firstWhere(
+                      (d) => d.id == 'sales_top_products',
+                    ),
                   ),
                 ),
                 _RankCard(
@@ -209,16 +210,15 @@ class HubReportsPage extends ConsumerWidget {
                   subtitle: 'Highest completed order value',
                   child: ReportComparisonBars(
                     items: overview.topCustomers,
-                    valueLabel: (i) => SelloFormatters.currency(
-                      i.value,
-                      symbol: currency,
-                    ),
+                    valueLabel: (i) =>
+                        SelloFormatters.currency(i.value, symbol: currency),
                   ),
                   onOpen: () => _openReport(
                     context,
                     ref,
-                    ReportCatalog.definitions
-                        .firstWhere((d) => d.id == 'customers_top'),
+                    ReportCatalog.definitions.firstWhere(
+                      (d) => d.id == 'customers_top',
+                    ),
                   ),
                 ),
               ],
@@ -234,16 +234,15 @@ class HubReportsPage extends ConsumerWidget {
                   subtitle: 'Completed order value by rep',
                   child: ReportComparisonBars(
                     items: overview.topSalesReps,
-                    valueLabel: (i) => SelloFormatters.currency(
-                      i.value,
-                      symbol: currency,
-                    ),
+                    valueLabel: (i) =>
+                        SelloFormatters.currency(i.value, symbol: currency),
                   ),
                   onOpen: () => _openReport(
                     context,
                     ref,
-                    ReportCatalog.definitions
-                        .firstWhere((d) => d.id == 'sales_top_reps'),
+                    ReportCatalog.definitions.firstWhere(
+                      (d) => d.id == 'sales_top_reps',
+                    ),
                   ),
                 ),
               ],
@@ -265,7 +264,6 @@ class HubReportsPage extends ConsumerWidget {
     );
   }
 }
-
 
 class _SalesTrendCard extends StatelessWidget {
   const _SalesTrendCard({
@@ -345,10 +343,7 @@ class _SalesTrendCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          ReportBarChart(
-            points: points,
-            currencySymbol: currencySymbol,
-          ),
+          ReportBarChart(points: points, currencySymbol: currencySymbol),
         ],
       ),
     );
@@ -403,10 +398,7 @@ class _RankCard extends StatelessWidget {
                 ),
               ),
               if (onOpen != null)
-                TextButton(
-                  onPressed: onOpen,
-                  child: const Text('Open'),
-                ),
+                TextButton(onPressed: onOpen, child: const Text('Open')),
             ],
           ),
           const SizedBox(height: 14),
@@ -486,10 +478,7 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _ReportLibrary extends StatelessWidget {
-  const _ReportLibrary({
-    required this.categoryFilter,
-    required this.onOpen,
-  });
+  const _ReportLibrary({required this.categoryFilter, required this.onOpen});
 
   final ReportCategory? categoryFilter;
   final ValueChanged<ReportDefinition> onOpen;
@@ -574,7 +563,7 @@ class _ReportLibrary extends StatelessWidget {
               );
               final width =
                   (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
-                      columns;
+                  columns;
               final items = ReportCatalog.forCategory(category);
               return Wrap(
                 spacing: AppSpacing.md,
@@ -625,7 +614,9 @@ class _LibraryCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: enabled ? context.brandAccentContainer : AppColors.surfaceMuted,
+              color: enabled
+                  ? context.brandAccentContainer
+                  : AppColors.surfaceMuted,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,

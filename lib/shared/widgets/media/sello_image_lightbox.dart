@@ -7,16 +7,17 @@ import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/models/product_image.dart';
+import 'package:sello/shared/widgets/media/sello_network_image.dart';
 
 /// A single high-resolution photo for the fullscreen presentation viewer.
 class SelloPhotoSource {
-  const SelloPhotoSource({
-    this.networkUrl,
-    this.bytes,
-  });
+  const SelloPhotoSource({this.networkUrl, this.bytes, this.cacheKey});
 
   final String? networkUrl;
   final Uint8List? bytes;
+
+  /// Stable disk-cache identity for [networkUrl].
+  final String? cacheKey;
 
   bool get hasPreview =>
       bytes != null || (networkUrl != null && networkUrl!.isNotEmpty);
@@ -25,6 +26,7 @@ class SelloPhotoSource {
     return SelloPhotoSource(
       networkUrl: draft.networkUrl,
       bytes: draft.localBytes,
+      cacheKey: draft.cacheKey,
     );
   }
 
@@ -32,6 +34,7 @@ class SelloPhotoSource {
     return SelloPhotoSource(
       networkUrl: image.networkUrl,
       bytes: image.localBytes,
+      cacheKey: image.cacheKey,
     );
   }
 }
@@ -87,17 +90,15 @@ Future<void> showSelloImageLightbox(
     context,
     images: [
       for (final image in images)
-        if (!image.removed && image.hasPreview) SelloPhotoSource.fromDraft(image),
+        if (!image.removed && image.hasPreview)
+          SelloPhotoSource.fromDraft(image),
     ],
     initialIndex: initialIndex,
   );
 }
 
 class _SelloPhotoViewer extends StatefulWidget {
-  const _SelloPhotoViewer({
-    required this.images,
-    required this.initialIndex,
-  });
+  const _SelloPhotoViewer({required this.images, required this.initialIndex});
 
   final List<SelloPhotoSource> images;
   final int initialIndex;
@@ -130,10 +131,8 @@ class _SelloPhotoViewerState extends State<_SelloPhotoViewer>
     super.initState();
     _index = widget.initialIndex;
     _pageController = PageController(initialPage: _index);
-    _dismissSnap = AnimationController(
-      vsync: this,
-      duration: AppDurations.fast,
-    )..addListener(() {
+    _dismissSnap = AnimationController(vsync: this, duration: AppDurations.fast)
+      ..addListener(() {
         if (!_dragging) {
           setState(() {
             _dragOffset = _dragOffset * (1 - _dismissSnap.value);
@@ -233,9 +232,9 @@ class _SelloPhotoViewerState extends State<_SelloPhotoViewer>
       return;
     }
 
-    final tap = _doubleTapLocal ?? Alignment.center.alongSize(
-      MediaQuery.sizeOf(context),
-    );
+    final tap =
+        _doubleTapLocal ??
+        Alignment.center.alongSize(MediaQuery.sizeOf(context));
     final matrix = Matrix4.identity()
       ..translateByDouble(tap.dx, tap.dy, 0, 1)
       ..scaleByDouble(_doubleTapScale, _doubleTapScale, 1, 1)
@@ -458,7 +457,10 @@ class _PhotoImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     // Keep portrait packaging readable while preserving the uploaded ratio.
-    final maxWidth = math.min(size.width, size.height * MediaConstants.aspectRatio);
+    final maxWidth = math.min(
+      size.width,
+      size.height * MediaConstants.aspectRatio,
+    );
 
     Widget child;
     if (image.bytes != null) {
@@ -469,30 +471,28 @@ class _PhotoImage extends StatelessWidget {
         gaplessPlayback: true,
       );
     } else if (image.networkUrl != null && image.networkUrl!.isNotEmpty) {
-      child = Image.network(
-        image.networkUrl!,
+      child = SelloNetworkImage(
+        url: image.networkUrl!,
+        cacheKey: image.cacheKey,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.high,
         gaplessPlayback: true,
-        // Intentionally no cacheWidth — fullscreen needs the full signed asset.
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return SizedBox(
-            width: maxWidth,
-            height: maxWidth / MediaConstants.aspectRatio,
-            child: const Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: Colors.white54,
-                ),
+        // No decode cap — fullscreen needs the full optimized photo.
+        placeholder: SizedBox(
+          width: maxWidth,
+          height: maxWidth / MediaConstants.aspectRatio,
+          child: const Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: Colors.white54,
               ),
             ),
-          );
-        },
-        errorBuilder: (_, error, stackTrace) => const Icon(
+          ),
+        ),
+        errorBuilder: (_, _, _) => const Icon(
           Icons.broken_image_outlined,
           color: Colors.white54,
           size: 48,
@@ -503,10 +503,7 @@ class _PhotoImage extends StatelessWidget {
     }
 
     return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: size.width,
-        maxHeight: size.height,
-      ),
+      constraints: BoxConstraints(maxWidth: size.width, maxHeight: size.height),
       child: child,
     );
   }

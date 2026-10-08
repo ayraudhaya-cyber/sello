@@ -24,9 +24,21 @@ enum OutboundNotificationType {
         OutboundNotificationType.orderNotification => 'New order',
         OutboundNotificationType.collectionAcknowledgement =>
           'Collection acknowledgement',
-        OutboundNotificationType.collectionSubmitted => 'Collection submitted',
+        OutboundNotificationType.collectionSubmitted => 'Collection notice',
         OutboundNotificationType.invoice => 'Invoices',
         OutboundNotificationType.receipt => 'Receipts',
+      };
+
+  /// Short heading used inside an event group in Settings.
+  String get audienceHeading => switch (this) {
+        OutboundNotificationType.orderConfirmation ||
+        OutboundNotificationType.collectionAcknowledgement ||
+        OutboundNotificationType.invoice ||
+        OutboundNotificationType.receipt =>
+          'Message to the buyer',
+        OutboundNotificationType.orderNotification ||
+        OutboundNotificationType.collectionSubmitted =>
+          'Message to your team',
       };
 
   String get audienceLabel => switch (this) {
@@ -44,9 +56,9 @@ enum OutboundNotificationType {
         OutboundNotificationType.orderNotification =>
           'Sent to the configured Owner / Manager when a new order is completed.',
         OutboundNotificationType.collectionAcknowledgement =>
-          'Confirms a collection was recorded for the store. Balances do not change until an Owner / Manager approves.',
+          'Sent when a Sales Rep submits a collection that needs approval. Balances do not change until an Owner / Manager approves.',
         OutboundNotificationType.collectionSubmitted =>
-          'Tells the Owner / Manager that a Sales Rep submitted a collection for review.',
+          'Tells the Owner / Manager about collections: by SMS when one is recorded, and with a WhatsApp prompt when a Sales Rep submits one for review. Choose below whether collections you record yourself are included.',
         OutboundNotificationType.invoice =>
           'Customer invoice messaging. Enable when you are ready to send invoices separately.',
         OutboundNotificationType.receipt =>
@@ -121,6 +133,7 @@ class OutboundTypePolicy extends Equatable {
     required this.sms,
     required this.includeDocumentLink,
     required this.recipients,
+    this.notifyWhenTeamRecords = true,
   });
 
   final bool enabled;
@@ -128,6 +141,10 @@ class OutboundTypePolicy extends Equatable {
   final bool sms;
   final bool includeDocumentLink;
   final List<OutboundRecipientTarget> recipients;
+
+  /// Collection notices only: also tell the team when an Owner / Manager
+  /// records the collection themselves. Sales Rep collections always notify.
+  final bool notifyWhenTeamRecords;
 
   bool get hasAnyChannel => whatsapp || sms;
 
@@ -139,6 +156,7 @@ class OutboundTypePolicy extends Equatable {
     bool? sms,
     bool? includeDocumentLink,
     List<OutboundRecipientTarget>? recipients,
+    bool? notifyWhenTeamRecords,
   }) {
     return OutboundTypePolicy(
       enabled: enabled ?? this.enabled,
@@ -146,6 +164,8 @@ class OutboundTypePolicy extends Equatable {
       sms: sms ?? this.sms,
       includeDocumentLink: includeDocumentLink ?? this.includeDocumentLink,
       recipients: recipients ?? this.recipients,
+      notifyWhenTeamRecords:
+          notifyWhenTeamRecords ?? this.notifyWhenTeamRecords,
     );
   }
 
@@ -155,6 +175,7 @@ class OutboundTypePolicy extends Equatable {
         'sms': sms,
         'include_document_link': includeDocumentLink,
         'recipients': [for (final r in recipients) r.dbKey],
+        'notify_when_team_records': notifyWhenTeamRecords,
       };
 
   factory OutboundTypePolicy.fromJson(
@@ -177,12 +198,21 @@ class OutboundTypePolicy extends Equatable {
       includeDocumentLink:
           json['include_document_link'] as bool? ?? fallback.includeDocumentLink,
       recipients: parsed.isEmpty ? fallback.recipients : parsed,
+      notifyWhenTeamRecords: json['notify_when_team_records'] as bool? ??
+          fallback.notifyWhenTeamRecords,
     );
   }
 
   @override
   List<Object?> get props =>
-      [enabled, whatsapp, sms, includeDocumentLink, recipients];
+      [
+        enabled,
+        whatsapp,
+        sms,
+        includeDocumentLink,
+        recipients,
+        notifyWhenTeamRecords,
+      ];
 }
 
 /// Tenant-wide outbound messaging configuration.

@@ -55,7 +55,8 @@ class _SelloCustomerSearchFieldState
   @override
   void didUpdateWidget(covariant SelloCustomerSearchField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.customer != null && oldWidget.customer?.id != widget.customer?.id) {
+    if (widget.customer != null &&
+        oldWidget.customer?.id != widget.customer?.id) {
       _search.clear();
       _showResults = false;
     }
@@ -83,11 +84,9 @@ class _SelloCustomerSearchFieldState
       _error = null;
     });
     try {
-      final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-            search: query,
-            isActive: true,
-            pageSize: 12,
-          );
+      final result = await ref
+          .read(customerRepositoryProvider)
+          .fetchCustomers(search: query, isActive: true, pageSize: 12);
       if (!mounted) return;
       final filtered = result.items
           .where((customer) => matchesCustomerSearch(customer, query))

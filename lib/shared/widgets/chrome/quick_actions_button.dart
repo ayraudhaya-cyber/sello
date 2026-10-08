@@ -58,16 +58,9 @@ class QuickActionsButton extends ConsumerWidget {
     ];
 
     if (_style == QuickActionsButtonStyle.menu) {
-      return PopupMenuButton<QuickActionId>(
-        tooltip: 'Quick Actions',
-        offset: const Offset(0, 8),
-        position: PopupMenuPosition.under,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
-        onSelected: (id) {
-          QuickActionsLauncher.launch(context, ref, id);
-        },
-        itemBuilder: items,
-        icon: const Icon(Icons.menu_rounded),
+      return _QuickActionsMenuButton(
+        actions: actions,
+        onSelected: (id) => QuickActionsLauncher.launch(context, ref, id),
       );
     }
 
@@ -114,6 +107,77 @@ class QuickActionsButton extends ConsumerWidget {
       return true;
     }
     return false;
+  }
+}
+
+/// Sales mobile hamburger. Shows a close icon while the menu is open and uses
+/// roomier rows than the desktop popup, since it is tapped with a thumb.
+class _QuickActionsMenuButton extends StatefulWidget {
+  const _QuickActionsMenuButton({
+    required this.actions,
+    required this.onSelected,
+  });
+
+  final List<QuickActionDefinition> actions;
+  final ValueChanged<QuickActionId> onSelected;
+
+  @override
+  State<_QuickActionsMenuButton> createState() =>
+      _QuickActionsMenuButtonState();
+}
+
+class _QuickActionsMenuButtonState extends State<_QuickActionsMenuButton> {
+  bool _open = false;
+
+  void _setOpen(bool value) {
+    if (mounted && _open != value) setState(() => _open = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = widget.actions;
+    final width = (MediaQuery.sizeOf(context).width - 24).clamp(260.0, 360.0);
+    return PopupMenuButton<QuickActionId>(
+      tooltip: _open ? 'Close menu' : 'Quick Actions',
+      offset: const Offset(0, 8),
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
+      constraints: BoxConstraints(minWidth: width, maxWidth: width),
+      menuPadding: const EdgeInsets.symmetric(vertical: 8),
+      onOpened: () => _setOpen(true),
+      onCanceled: () => _setOpen(false),
+      onSelected: (id) {
+        _setOpen(false);
+        widget.onSelected(id);
+      },
+      itemBuilder: (context) => [
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0 &&
+              QuickActionsButton._sectionBreak(
+                actions[i - 1].id,
+                actions[i].id,
+              ))
+            const PopupMenuDivider(height: 12),
+          PopupMenuItem<QuickActionId>(
+            value: actions[i].id,
+            height: 60,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _QuickActionRow(action: actions[i], large: true),
+          ),
+        ],
+      ],
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 160),
+        transitionBuilder: (child, animation) => RotationTransition(
+          turns: Tween<double>(begin: 0.75, end: 1).animate(animation),
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: Icon(
+          _open ? Icons.close_rounded : Icons.menu_rounded,
+          key: ValueKey(_open),
+        ),
+      ),
+    );
   }
 }
 
@@ -166,16 +230,28 @@ class _CompactChip extends StatelessWidget {
 }
 
 class _QuickActionRow extends StatelessWidget {
-  const _QuickActionRow({required this.action});
+  const _QuickActionRow({required this.action, this.large = false});
 
   final QuickActionDefinition action;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(action.icon, size: 20, color: context.brandAccent),
-        const SizedBox(width: 12),
+        if (large)
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: context.brandAccent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(action.icon, size: 21, color: context.brandAccent),
+          )
+        else
+          Icon(action.icon, size: 20, color: context.brandAccent),
+        SizedBox(width: large ? 14 : 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,25 +259,28 @@ class _QuickActionRow extends StatelessWidget {
             children: [
               Text(
                 action.label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontWeight: FontWeight.w600,
-                  fontSize: 13.5,
+                  fontSize: large ? 15 : 13.5,
                 ),
               ),
-              if (action.subtitle != null)
+              if (action.subtitle != null) ...[
+                if (large) const SizedBox(height: 2),
                 Text(
                   action.subtitle!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
-                    fontSize: 11.5,
+                    fontSize: large ? 12.5 : 11.5,
+                    height: 1.3,
                     color: AppColors.textTertiary,
                   ),
                 ),
+              ],
             ],
           ),
         ),
-        if (action.shortcutLabel != null) ...[
+        if (action.shortcutLabel != null && !large) ...[
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -211,7 +290,7 @@ class _QuickActionRow extends StatelessWidget {
               border: Border.all(color: AppColors.outlineSubtle),
             ),
             child: Text(
-              action.shortcutLabel!,
+              'Alt ${action.shortcutLabel!}',
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 11,
@@ -226,22 +305,41 @@ class _QuickActionRow extends StatelessWidget {
   }
 }
 
-/// Reserved host for a future Cmd/Ctrl+K command palette.
+/// Desktop keyboard shortcuts for Quick Actions: Alt + the letter shown in
+/// the menu (e.g. Alt+O for New Order). Only fires while focus is inside
+/// [child], so open dialogs do not stack a second flow on top.
 class QuickActionsShortcuts extends ConsumerWidget {
   const QuickActionsShortcuts({super.key, required this.child});
 
   final Widget child;
 
+  static LogicalKeyboardKey? _keyFor(String label) => switch (label) {
+    'C' => LogicalKeyboardKey.keyC,
+    'M' => LogicalKeyboardKey.keyM,
+    'O' => LogicalKeyboardKey.keyO,
+    'P' => LogicalKeyboardKey.keyP,
+    'V' => LogicalKeyboardKey.keyV,
+    _ => null,
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(currentSessionProvider);
+    final actions = session == null
+        ? const <QuickActionDefinition>[]
+        : QuickActionsCatalog.forRole(session.appRole);
+    final bindings = <ShortcutActivator, VoidCallback>{};
+    for (final action in actions) {
+      final key = action.shortcutLabel == null
+          ? null
+          : _keyFor(action.shortcutLabel!);
+      if (key == null) continue;
+      bindings[SingleActivator(key, alt: true)] = () =>
+          QuickActionsLauncher.launch(context, ref, action.id);
+    }
     return CallbackShortcuts(
-      bindings: const {
-        SingleActivator(LogicalKeyboardKey.keyK, meta: true): _noop,
-        SingleActivator(LogicalKeyboardKey.keyK, control: true): _noop,
-      },
-      child: Focus(autofocus: false, child: child),
+      bindings: bindings,
+      child: Focus(autofocus: true, child: child),
     );
   }
-
-  static void _noop() {}
 }

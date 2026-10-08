@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
+import 'package:sello/shared/utils/product_image_cache_key.dart';
 
 num _numValue(dynamic value) {
   if (value is num) return value;
@@ -43,6 +44,7 @@ class InventoryItem extends Equatable {
     this.preferredSupplierName,
     this.imageUrl,
     this.imageStoragePath,
+    this.imageUpdatedAt,
     this.lastMovementAt,
     this.updatedAt,
   });
@@ -65,6 +67,7 @@ class InventoryItem extends Equatable {
   final String name;
   final String sku;
   final num quantity;
+
   /// Held for future reservations / open orders — not deducted from on-hand yet.
   final num reservedQuantity;
   final num? reorderLevel;
@@ -83,6 +86,12 @@ class InventoryItem extends Equatable {
   final String? preferredSupplierName;
   final String? imageUrl;
   final String? imageStoragePath;
+
+  /// When the primary photo file was last replaced. Part of the disk-cache key.
+  final DateTime? imageUpdatedAt;
+
+  String? get imageCacheKey =>
+      ProductImageCacheKey.of(imageStoragePath, imageUpdatedAt);
   final DateTime? lastMovementAt;
   final DateTime? updatedAt;
 
@@ -105,7 +114,11 @@ class InventoryItem extends Equatable {
   bool get isLowStock => stockStatus == StockStatus.low;
   bool get isOutOfStock => stockStatus == StockStatus.out;
 
-  InventoryItem copyWith({String? imageUrl, num? costPrice, num? sellingPrice}) {
+  InventoryItem copyWith({
+    String? imageUrl,
+    num? costPrice,
+    num? sellingPrice,
+  }) {
     return InventoryItem(
       inventoryId: inventoryId,
       productId: productId,
@@ -129,6 +142,7 @@ class InventoryItem extends Equatable {
       preferredSupplierName: preferredSupplierName,
       imageUrl: imageUrl ?? this.imageUrl,
       imageStoragePath: imageStoragePath,
+      imageUpdatedAt: imageUpdatedAt,
       lastMovementAt: lastMovementAt,
       updatedAt: updatedAt,
     );
@@ -150,6 +164,7 @@ class InventoryItem extends Equatable {
     String? categoryName;
     String? categoryId;
     String? imagePath;
+    DateTime? imageUpdatedAt;
     String? preferredSupplierName;
     if (productMap != null) {
       final categories = productMap['categories'];
@@ -170,9 +185,11 @@ class InventoryItem extends Equatable {
             break;
           }
         }
-        primary ??=
-            images.first is Map ? Map<String, dynamic>.from(images.first as Map) : null;
+        primary ??= images.first is Map
+            ? Map<String, dynamic>.from(images.first as Map)
+            : null;
         imagePath = primary?['storage_path'] as String?;
+        imageUpdatedAt = _dateValue(primary?['updated_at']);
       }
     }
 
@@ -201,14 +218,21 @@ class InventoryItem extends Equatable {
       preferredSupplierId: productMap?['preferred_supplier_id'] as String?,
       preferredSupplierName: preferredSupplierName,
       imageStoragePath: imagePath,
+      imageUpdatedAt: imageUpdatedAt,
       updatedAt: _dateValue(json['updated_at']),
       lastMovementAt: _dateValue(json['last_movement_at']),
     );
   }
 
   @override
-  List<Object?> get props =>
-      [inventoryId, productId, variantId, quantity, reservedQuantity, updatedAt];
+  List<Object?> get props => [
+    inventoryId,
+    productId,
+    variantId,
+    quantity,
+    reservedQuantity,
+    updatedAt,
+  ];
 }
 
 class StockMovement extends Equatable {
@@ -333,6 +357,7 @@ class InventoryDashboardStats {
     required this.recentlyUpdated,
     this.negativeStock = 0,
     this.stockValue = 0,
+    this.stockSellingValue = 0,
     this.recentMovements = 0,
   });
 
@@ -344,6 +369,10 @@ class InventoryDashboardStats {
   final int negativeStock;
   final int recentlyUpdated;
   final num stockValue;
+
+  /// On-hand × catalog selling price (variants when present).
+  final num stockSellingValue;
+
   /// Movements in the last 7 days (branch-scoped when provided).
   final int recentMovements;
 }

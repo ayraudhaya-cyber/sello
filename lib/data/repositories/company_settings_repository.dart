@@ -10,8 +10,8 @@ class CompanySettingsRepository {
   CompanySettingsRepository({
     SupabaseClient? client,
     MediaStorageService? storage,
-  })  : _client = client ?? SupabaseService.client,
-        _storage = storage ?? MediaStorageService();
+  }) : _client = client ?? SupabaseService.client,
+       _storage = storage ?? MediaStorageService();
 
   final SupabaseClient _client;
   final MediaStorageService _storage;
@@ -69,10 +69,7 @@ class CompanySettingsRepository {
         return CompanySettings.fromJson(Map<String, dynamic>.from(row));
       }
 
-      return ensureDefaults(
-        companyId: companyId,
-        employeeId: employeeId,
-      );
+      return ensureDefaults(companyId: companyId, employeeId: employeeId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty
@@ -115,8 +112,7 @@ class CompanySettingsRepository {
                 CompanySettings.defaults.defaultReorderLevel,
             'default_product_status':
                 CompanySettings.defaults.defaultProductStatus.dbValue,
-            'allow_negative_stock':
-                CompanySettings.defaults.allowNegativeStock,
+            'allow_negative_stock': CompanySettings.defaults.allowNegativeStock,
             'enable_low_stock_alert':
                 CompanySettings.defaults.enableLowStockAlert,
             'allow_orders_above_available_stock':
@@ -125,8 +121,10 @@ class CompanySettingsRepository {
                 CompanySettings.defaults.salesRepsCanViewOutstandingBalances,
             'sales_reps_can_record_delivery':
                 CompanySettings.defaults.salesRepsCanRecordDelivery,
-            'financial_visibility_policies':
-                CompanySettings.defaults.financialVisibility.toJson(),
+            'financial_visibility_policies': CompanySettings
+                .defaults
+                .financialVisibility
+                .toJson(),
             'owner_setup_completed': true,
             'created_by': ?employeeId,
             'updated_by': ?employeeId,
@@ -278,10 +276,7 @@ class CompanySettingsRepository {
     return '$url?v=${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  Future<void> removeLogo({
-    required String companyId,
-    bool light = false,
-  }) {
+  Future<void> removeLogo({required String companyId, bool light = false}) {
     return _deleteLogoFiles(companyId, stem: light ? 'logo-light' : 'logo');
   }
 
@@ -297,9 +292,7 @@ class CompanySettingsRepository {
     try {
       await _storage.deleteMany(
         bucket: MediaConstants.companyBrandingBucket,
-        paths: [
-          for (final ext in extensions) '$companyId/$stem.$ext',
-        ],
+        paths: [for (final ext in extensions) '$companyId/$stem.$ext'],
       );
     } catch (_) {
       // Missing objects or older files — settings row is the source of truth.
@@ -308,7 +301,8 @@ class CompanySettingsRepository {
 
   AppFailure _brandingFailure(PostgrestException error) {
     final message = error.message.trim();
-    final denied = error.code == '42501' ||
+    final denied =
+        error.code == '42501' ||
         message.toLowerCase().contains('permission') ||
         message.toLowerCase().contains('custom_branding_enabled');
     if (denied) {
@@ -345,10 +339,7 @@ class CompanySettingsRepository {
     try {
       await _client
           .from('company_settings')
-          .update({
-            'owner_setup_completed': true,
-            'updated_by': employeeId,
-          })
+          .update({'owner_setup_completed': true, 'updated_by': employeeId})
           .eq('company_id', companyId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(

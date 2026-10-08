@@ -6,6 +6,7 @@ enum NeedsAttentionPriority { high, medium }
 
 /// Distinct alert kinds — order categories are mutually exclusive where noted.
 enum NeedsAttentionKind {
+  pendingCollections,
   negativeStock,
   waitingForStock,
   placedAwaitingFulfillment,
@@ -42,6 +43,7 @@ class NeedsAttentionCounts extends Equatable {
     this.waitingPlaced = 0,
     this.waitingPartial = 0,
     this.negativeStock = 0,
+    this.pendingCollections = 0,
   });
 
   /// Orders with status `placed`.
@@ -59,6 +61,9 @@ class NeedsAttentionCounts extends Equatable {
   /// Active products with physical `inventory.quantity < 0` (branch-scoped).
   final int negativeStock;
 
+  /// Sales Rep collections waiting for Owner / Manager approval.
+  final int pendingCollections;
+
   int get waitingForStock => waitingPlaced + waitingPartial;
 
   /// Placed orders that still need fulfillment and are not stock-blocked.
@@ -74,6 +79,7 @@ class NeedsAttentionCounts extends Equatable {
   }
 
   bool get isEmpty =>
+      pendingCollections <= 0 &&
       negativeStock <= 0 &&
       waitingForStock <= 0 &&
       placedAwaitingFulfillment <= 0 &&
@@ -81,6 +87,7 @@ class NeedsAttentionCounts extends Equatable {
 
   int get totalAlerts {
     var n = 0;
+    if (pendingCollections > 0) n++;
     if (negativeStock > 0) n++;
     if (waitingForStock > 0) n++;
     if (placedAwaitingFulfillment > 0) n++;
@@ -95,6 +102,7 @@ class NeedsAttentionCounts extends Equatable {
         waitingPlaced,
         waitingPartial,
         negativeStock,
+        pendingCollections,
       ];
 }
 
@@ -102,6 +110,20 @@ class NeedsAttentionCounts extends Equatable {
 abstract final class NeedsAttentionLogic {
   static List<NeedsAttentionItem> build(NeedsAttentionCounts counts) {
     final items = <NeedsAttentionItem>[];
+
+    if (counts.pendingCollections > 0) {
+      items.add(
+        NeedsAttentionItem(
+          kind: NeedsAttentionKind.pendingCollections,
+          priority: NeedsAttentionPriority.high,
+          count: counts.pendingCollections,
+          title: counts.pendingCollections == 1
+              ? '1 collection waiting for your approval'
+              : '${counts.pendingCollections} collections waiting for your approval',
+          route: RoutePaths.hubPayments,
+        ),
+      );
+    }
 
     if (counts.negativeStock > 0) {
       items.add(

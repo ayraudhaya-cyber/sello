@@ -16,10 +16,6 @@ class FeaturePlaceholderScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return HubFeaturePage(
-      title: title,
-      description: description,
-      icon: icon,
-    );
+    return HubFeaturePage(title: title, description: description, icon: icon);
   }
 }

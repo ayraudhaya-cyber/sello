@@ -20,6 +20,7 @@ class PaymentDetailsDialog extends StatefulWidget {
     this.canReview = false,
     this.onApprove,
     this.onReject,
+    this.onCorrect,
   });
 
   final PaymentDetail detail;
@@ -27,6 +28,7 @@ class PaymentDetailsDialog extends StatefulWidget {
   final bool canReview;
   final Future<void> Function()? onApprove;
   final Future<void> Function(String? reason)? onReject;
+  final VoidCallback? onCorrect;
 
   @override
   State<PaymentDetailsDialog> createState() => _PaymentDetailsDialogState();
@@ -354,14 +356,29 @@ class _PaymentDetailsDialogState extends State<PaymentDetailsDialog> {
               cancelLabel: 'Close',
               cancelVariant: SelloButtonVariant.outline,
               onCancel: () => Navigator.of(context).maybePop(),
-              primaryLabel: 'Done',
-              onPrimary: () => Navigator.of(context).maybePop(),
+              primaryLabel:
+                  widget.onCorrect == null ? 'Done' : 'Correct payment',
+              onPrimary: widget.onCorrect ??
+                  () => Navigator.of(context).maybePop(),
             ),
     );
   }
 }
 
 const double _gap = 36;
+
+/// Asks for an optional rejection reason. Returns null when cancelled, or
+/// a record whose `reason` may be null when left blank.
+Future<({String? reason})?> showRejectCollectionDialog(
+  BuildContext context,
+) async {
+  final result = await showDialog<_RejectResult>(
+    context: context,
+    builder: (context) => const _RejectReasonDialog(),
+  );
+  if (result == null || !result.submitted) return null;
+  return (reason: result.reason);
+}
 
 class _RejectResult {
   const _RejectResult({required this.submitted, this.reason});

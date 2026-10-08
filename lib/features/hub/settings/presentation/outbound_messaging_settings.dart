@@ -7,6 +7,7 @@ import 'package:sello/features/hub/settings/application/hub_settings_provider.da
 import 'package:sello/features/hub/shell/sms_quota_chip.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
 import 'package:sello/services/iam/iam_providers.dart';
+import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/services/notifications/outbound/messaging_phone.dart';
 import 'package:sello/services/notifications/outbound/outbound_message_template.dart';
 import 'package:sello/services/notifications/outbound/outbound_placeholders.dart';
@@ -48,109 +49,242 @@ class OutboundMessagingSettingsCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SettingsSubgroup(
-            title: 'Channels',
-            child: SettingsTwoUp(
-              children: [
-                SelloStatusToggle(
-                  value: policies.whatsappEnabled,
-                  label: 'WhatsApp',
-                  helper:
-                      'Opens WhatsApp with a prefilled confirmation or acknowledgement.',
-                  onChanged: (value) => ref
-                      .read(hubSettingsProvider.notifier)
-                      .patchDraft(
-                        (c) => c.copyWith(
-                          outboundNotificationPolicies: policies.copyWith(
-                            whatsappEnabled: value,
-                          ),
-                        ),
-                      ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SelloStatusToggle(
-                      value: policies.smsEnabled,
-                      label: 'SMS',
-                      helper: 'Sent automatically when a message is enabled.',
-                      onChanged: (value) => ref
-                          .read(hubSettingsProvider.notifier)
-                          .patchDraft(
-                            (c) => c.copyWith(
-                              outboundNotificationPolicies: policies.copyWith(
-                                smsEnabled: value,
-                              ),
+          if ((ref.watch(currentSessionProvider)?.employee.phone ?? '')
+              .trim()
+              .isEmpty) ...[
+            const _MissingPhoneNotice(),
+            const SizedBox(height: 20),
+          ],
+          _SettingsPanel(
+            child: SettingsSubgroup(
+              title: 'Channels',
+              child: SettingsTwoUp(
+                children: [
+                  SelloStatusToggle(
+                    value: policies.whatsappEnabled,
+                    label: 'WhatsApp',
+                    helper:
+                        'Opens WhatsApp with a prefilled confirmation or acknowledgement.',
+                    onChanged: (value) => ref
+                        .read(hubSettingsProvider.notifier)
+                        .patchDraft(
+                          (c) => c.copyWith(
+                            outboundNotificationPolicies: policies.copyWith(
+                              whatsappEnabled: value,
                             ),
                           ),
-                    ),
-                    const SmsQuotaChip(placement: SmsQuotaPlacement.settings),
-                    const SizedBox(height: 14),
-                    SettingsCompactField(
-                      label: 'SMS Sender ID',
-                      helper: canEditSenderId
-                          ? 'The name customers see when they receive SMS from '
-                                'your business.'
-                          : 'This Sender ID is managed by Sello.',
-                      child: _SmsSenderIdField(
-                        value: draft.smsSenderId,
-                        isDirty: state.isDirty,
-                        enabled: canEditSenderId,
-                        onChanged: canEditSenderId
-                            ? (normalized) {
-                                ref
-                                    .read(hubSettingsProvider.notifier)
-                                    .patchDraft(
-                                      (c) => c.copyWith(
-                                        smsSenderId: normalized,
-                                        clearSmsSenderId: normalized == null,
-                                      ),
-                                    );
-                              }
-                            : null,
+                        ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SelloStatusToggle(
+                        value: policies.smsEnabled,
+                        label: 'SMS',
+                        helper: 'Sent automatically when a message is enabled.',
+                        onChanged: (value) => ref
+                            .read(hubSettingsProvider.notifier)
+                            .patchDraft(
+                              (c) => c.copyWith(
+                                outboundNotificationPolicies: policies.copyWith(
+                                  smsEnabled: value,
+                                ),
+                              ),
+                            ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SmsQuotaChip(placement: SmsQuotaPlacement.settings),
+                      const SizedBox(height: 14),
+                      SettingsCompactField(
+                        label: 'SMS Sender ID',
+                        helper: canEditSenderId
+                            ? 'The name customers see when they receive SMS from '
+                                  'your business.'
+                            : 'This Sender ID is managed by Sello.',
+                        child: _SmsSenderIdField(
+                          value: draft.smsSenderId,
+                          isDirty: state.isDirty,
+                          enabled: canEditSenderId,
+                          onChanged: canEditSenderId
+                              ? (normalized) {
+                                  ref
+                                      .read(hubSettingsProvider.notifier)
+                                      .patchDraft(
+                                        (c) => c.copyWith(
+                                          smsSenderId: normalized,
+                                          clearSmsSenderId: normalized == null,
+                                        ),
+                                      );
+                                }
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           if (canSendTest) ...[
-            const SizedBox(height: 22),
-            SettingsSubgroup(
-              title: 'Test SMS',
-              helper: 'Sends a real SMS using the configured Sender ID.',
-              child: _TestSmsSection(blockReason: testBlockReason),
+            const SizedBox(height: 16),
+            _SettingsPanel(
+              child: SettingsSubgroup(
+                title: 'Test SMS',
+                helper: 'Sends a real SMS using the configured Sender ID.',
+                child: _TestSmsSection(blockReason: testBlockReason),
+              ),
             ),
           ],
-          const SizedBox(height: 22),
-          const Divider(height: 1, color: AppColors.outlinePanel),
-          const SizedBox(height: 22),
-          for (
-            var i = 0;
-            i < OutboundNotificationType.settingsOrder.length;
-            i++
-          ) ...[
-            if (i > 0) ...[
-              const SizedBox(height: 18),
-              const Divider(height: 1, color: AppColors.outlinePanel),
-              const SizedBox(height: 18),
-            ],
-            _MessageTypeEditor(
-              type: OutboundNotificationType.settingsOrder[i],
-              policies: policies,
-              isDirty: state.isDirty,
-              masterWhatsapp: policies.whatsappEnabled,
-              masterSms: policies.smsEnabled,
-              onChanged: (next) => ref
-                  .read(hubSettingsProvider.notifier)
-                  .patchDraft(
-                    (c) => c.copyWith(outboundNotificationPolicies: next),
-                  ),
+          const SizedBox(height: 28),
+          for (var g = 0; g < _eventGroups.length; g++) ...[
+            if (g > 0) const SizedBox(height: 28),
+            _EventGroupHeader(
+              title: _eventGroups[g].title,
+              subtitle: _eventGroups[g].subtitle,
             ),
+            const SizedBox(height: 14),
+            for (var i = 0; i < _eventGroups[g].types.length; i++) ...[
+              if (i > 0) const SizedBox(height: 16),
+              _MessageTypeEditor(
+                type: _eventGroups[g].types[i],
+                policies: policies,
+                isDirty: state.isDirty,
+                masterWhatsapp: policies.whatsappEnabled,
+                masterSms: policies.smsEnabled,
+                onChanged: (next) => ref
+                    .read(hubSettingsProvider.notifier)
+                    .patchDraft(
+                      (c) => c.copyWith(outboundNotificationPolicies: next),
+                    ),
+              ),
+            ],
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Soft bordered card used to separate each messaging setting from the next.
+class _SettingsPanel extends StatelessWidget {
+  const _SettingsPanel({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: AppRadius.panelAll,
+        border: Border.all(color: AppColors.outlineStrong),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _MissingPhoneNotice extends StatelessWidget {
+  const _MissingPhoneNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: AppRadius.cardAll,
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.phone_iphone_rounded, size: 18, color: AppColors.warning),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Your profile has no mobile number, so you will not receive '
+              'team SMS. Add it under Settings → Account.',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One business event with the message(s) it can send. Keeps "to the buyer"
+/// and "to your team" together instead of as unrelated cards.
+class _EventGroup {
+  const _EventGroup({
+    required this.title,
+    required this.subtitle,
+    required this.types,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<OutboundNotificationType> types;
+}
+
+const _eventGroups = <_EventGroup>[
+  _EventGroup(
+    title: 'When an order is completed',
+    subtitle: 'Confirm the sale with the buyer and let your team know.',
+    types: [
+      OutboundNotificationType.orderConfirmation,
+      OutboundNotificationType.orderNotification,
+    ],
+  ),
+  _EventGroup(
+    title: 'When a collection is recorded',
+    subtitle:
+        'Tell your team what was collected, and the buyer when a collection '
+        'needs approval.',
+    types: [
+      OutboundNotificationType.collectionSubmitted,
+      OutboundNotificationType.collectionAcknowledgement,
+    ],
+  ),
+];
+
+class _EventGroupHeader extends StatelessWidget {
+  const _EventGroupHeader({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 13,
+            height: 1.4,
+            color: AppColors.textTertiary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -396,146 +530,204 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
       ),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          '${widget.type.label} — ${widget.type.audienceLabel}',
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          widget.type.hint,
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 13,
-            height: 1.4,
-            color: AppColors.textTertiary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SettingsTwoUp(
-          children: [
-            SelloStatusToggle(
-              value: policy.enabled,
-              label: 'Send this message',
-              helper: 'When off, this event does not prepare a message.',
-              onChanged: (value) =>
-                  _patchPolicy(policy.copyWith(enabled: value)),
-            ),
-            SelloStatusToggle(
-              value: policy.includeDocumentLink,
-              label: widget.type.isOrderFamily
-                  ? 'Include invoice link'
-                  : 'Include receipt link',
-              helper:
-                  'Adds a secure link so the recipient can open the document in a browser.',
-              onChanged: (value) =>
-                  _patchPolicy(policy.copyWith(includeDocumentLink: value)),
-            ),
-          ],
-        ),
-        if (policy.enabled) ...[
-          const SizedBox(height: 14),
-          Text(
-            'Send to',
-            style: TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+    final toBuyer = widget.type.audienceHeading == 'Message to the buyer';
+    final whatsappOn = policy.whatsapp && widget.masterWhatsapp;
+    final smsOn = policy.sms && widget.masterSms;
+    return _SettingsPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final target in _allowedRecipients(widget.type))
-                FilterChip(
-                  label: Text(
-                    target.label,
-                    style: TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: policy.sendsTo(target)
-                          ? AppColors.primary
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                  selected: policy.sendsTo(target),
-                  showCheckmark: false,
-                  selectedColor: AppColors.primary.withValues(alpha: 0.12),
-                  backgroundColor: AppColors.surface,
-                  side: BorderSide(
-                    color: policy.sendsTo(target)
-                        ? AppColors.primary.withValues(alpha: 0.35)
-                        : AppColors.outlinePanel,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  onSelected: (selected) {
-                    final next = [...policy.recipients];
-                    if (selected) {
-                      if (!next.contains(target)) next.add(target);
-                    } else {
-                      next.remove(target);
-                    }
-                    if (next.isEmpty) return;
-                    _patchPolicy(policy.copyWith(recipients: next));
-                  },
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: toBuyer
+                      ? AppColors.opsSoft
+                      : AppColors.primaryContainer,
+                  borderRadius: BorderRadius.circular(11),
                 ),
+                child: Icon(
+                  toBuyer
+                      ? Icons.person_outline_rounded
+                      : Icons.groups_2_outlined,
+                  size: 20,
+                  color: toBuyer ? AppColors.ops : AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.type.audienceHeading,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.type.hint,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13,
+                        height: 1.4,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 14),
-          SettingsExpandable(
-            title: 'Channels for this message',
-            subtitle: 'Uses the company WhatsApp and SMS switches above.',
-            child: SettingsTwoUp(
+          const SizedBox(height: 16),
+          SettingsTwoUp(
+            children: [
+              SelloStatusToggle(
+                value: policy.enabled,
+                label: 'Send this message',
+                helper: 'When off, this event does not prepare a message.',
+                onChanged: (value) =>
+                    _patchPolicy(policy.copyWith(enabled: value)),
+              ),
+              SelloStatusToggle(
+                value: policy.includeDocumentLink,
+                label: widget.type.isOrderFamily
+                    ? 'Include invoice link'
+                    : 'Include receipt link',
+                helper:
+                    'Adds a secure link so the recipient can open the document in a browser.',
+                onChanged: (value) =>
+                    _patchPolicy(policy.copyWith(includeDocumentLink: value)),
+              ),
+            ],
+          ),
+          if (policy.enabled) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Send to',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textTertiary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                SelloStatusToggle(
-                  value: policy.whatsapp && widget.masterWhatsapp,
-                  label: 'WhatsApp',
-                  helper: widget.masterWhatsapp
-                      ? 'Uses the company WhatsApp channel.'
-                      : 'Enable WhatsApp under Channels first.',
-                  onChanged: widget.masterWhatsapp
-                      ? (value) =>
-                            _patchPolicy(policy.copyWith(whatsapp: value))
-                      : (_) {},
-                ),
-                SelloStatusToggle(
-                  value: policy.sms && widget.masterSms,
-                  label: 'SMS',
-                  helper: widget.masterSms
-                      ? 'Sent automatically using the company SMS channel.'
-                      : 'Enable SMS under Channels first.',
-                  onChanged: widget.masterSms
-                      ? (value) => _patchPolicy(policy.copyWith(sms: value))
-                      : (_) {},
-                ),
+                for (final target in _allowedRecipients(widget.type))
+                  FilterChip(
+                    label: Text(
+                      target.label,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: policy.sendsTo(target)
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    selected: policy.sendsTo(target),
+                    showCheckmark: false,
+                    selectedColor: AppColors.primary.withValues(alpha: 0.12),
+                    backgroundColor: AppColors.surface,
+                    side: BorderSide(
+                      color: policy.sendsTo(target)
+                          ? AppColors.primary.withValues(alpha: 0.35)
+                          : AppColors.outlinePanel,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                    onSelected: (selected) {
+                      final next = [...policy.recipients];
+                      if (selected) {
+                        if (!next.contains(target)) next.add(target);
+                      } else {
+                        next.remove(target);
+                      }
+                      if (next.isEmpty) return;
+                      _patchPolicy(policy.copyWith(recipients: next));
+                    },
+                  ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          _MessageAndPreviewPane(
-            controller: _controller,
-            placeholders: OutboundPlaceholders.forType(widget.type),
-            previewText: preview,
-            onInsertPlaceholder: _insertPlaceholder,
-            onMessageChanged: (value) => widget.onChanged(
-              widget.policies.copyWithTemplate(widget.type, value),
+            if (widget.type == OutboundNotificationType.collectionSubmitted &&
+                policy.sendsTo(OutboundRecipientTarget.hub)) ...[
+              const SizedBox(height: 14),
+              SelloStatusToggle(
+                value: policy.notifyWhenTeamRecords,
+                label: 'Also tell the team when an Owner / Manager records it',
+                helper:
+                    'Turn off if you only want to hear about collections your '
+                    'Sales Reps record. Rep collections always notify.',
+                onChanged: (value) =>
+                    _patchPolicy(policy.copyWith(notifyWhenTeamRecords: value)),
+              ),
+            ],
+            const SizedBox(height: 14),
+            SettingsExpandable(
+              panel: true,
+              icon: Icons.tune_rounded,
+              title: 'Channels for this message',
+              subtitle:
+                  'WhatsApp ${whatsappOn ? 'on' : 'off'} · '
+                  'SMS ${smsOn ? 'on' : 'off'}',
+              child: SettingsTwoUp(
+                children: [
+                  SelloStatusToggle(
+                    value: policy.whatsapp && widget.masterWhatsapp,
+                    label: 'WhatsApp',
+                    helper: widget.masterWhatsapp
+                        ? 'Uses the company WhatsApp channel.'
+                        : 'Enable WhatsApp under Channels first.',
+                    onChanged: widget.masterWhatsapp
+                        ? (value) =>
+                              _patchPolicy(policy.copyWith(whatsapp: value))
+                        : (_) {},
+                  ),
+                  SelloStatusToggle(
+                    value: policy.sms && widget.masterSms,
+                    label: 'SMS',
+                    helper: widget.masterSms
+                        ? 'Sent automatically using the company SMS channel.'
+                        : 'Enable SMS under Channels first.',
+                    onChanged: widget.masterSms
+                        ? (value) => _patchPolicy(policy.copyWith(sms: value))
+                        : (_) {},
+                  ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            SettingsExpandable(
+              panel: true,
+              icon: Icons.edit_note_rounded,
+              title: 'Message wording and preview',
+              subtitle: 'Change the text or see how it looks to the recipient.',
+              child: _MessageAndPreviewPane(
+                controller: _controller,
+                placeholders: OutboundPlaceholders.forType(widget.type),
+                previewText: preview,
+                onInsertPlaceholder: _insertPlaceholder,
+                onMessageChanged: (value) => widget.onChanged(
+                  widget.policies.copyWithTemplate(widget.type, value),
+                ),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -644,10 +836,7 @@ class _MessageAndPreviewPane extends StatelessWidget {
               maxLines: _stackedFieldLines,
             ),
             const SizedBox(height: 12),
-            _MessagePreviewCard(
-              text: previewText,
-              compact: true,
-            ),
+            _MessagePreviewCard(text: previewText, compact: true),
           ],
         );
       },
@@ -824,11 +1013,7 @@ class _MessagePreviewCard extends StatelessWidget {
           ),
           SizedBox(height: compact ? 8 : 10),
           if (expand)
-            Expanded(
-              child: SingleChildScrollView(
-                child: body,
-              ),
-            )
+            Expanded(child: SingleChildScrollView(child: body))
           else
             body,
         ],

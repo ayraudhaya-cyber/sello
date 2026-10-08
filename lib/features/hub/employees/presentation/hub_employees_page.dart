@@ -65,8 +65,8 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
         isCreate
             ? 'Team member added. Invitation email sent.'
             : emailChanged
-                ? 'Email updated. Set-password email sent to the new address.'
-                : 'Set-password email sent.',
+            ? 'Email updated. Set-password email sent to the new address.'
+            : 'Set-password email sent.',
       );
       return;
     }
@@ -77,10 +77,10 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
             ? 'Team member added, but the invitation email could not be sent. '
                   'Check Auth email / rate limits, then resend from their profile.'
             : emailChanged
-                ? 'Email updated, but the set-password email could not be sent. '
-                      'Check Auth email / rate limits, then send it from their profile.'
-                : 'Account is ready, but the set-password email could not be sent. '
-                      'Check Auth email / rate limits and try again.',
+            ? 'Email updated, but the set-password email could not be sent. '
+                  'Check Auth email / rate limits, then send it from their profile.'
+            : 'Account is ready, but the set-password email could not be sent. '
+                  'Check Auth email / rate limits and try again.',
       );
       return;
     }
@@ -89,8 +89,8 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
       isCreate
           ? 'Team member added.'
           : emailChanged
-              ? 'Email updated.'
-              : 'Invitation updated.',
+          ? 'Email updated.'
+          : 'Invitation updated.',
     );
   }
 
@@ -109,7 +109,8 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
 
     final isCreate = employee == null;
     final previous = employee;
-    final emailChanged = previous != null &&
+    final emailChanged =
+        previous != null &&
         previous.email.trim().toLowerCase() !=
             result.email.trim().toLowerCase();
     var inviteToasted = false;
@@ -340,9 +341,7 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (state.isSaving) ...[
-            _TeamSavingBanner(
-              message: state.savingProgress ?? 'Working…',
-            ),
+            _TeamSavingBanner(message: state.savingProgress ?? 'Working…'),
             const SizedBox(height: AppSpacing.md),
           ],
           _Toolbar(
@@ -373,6 +372,13 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
                 : () => ref.read(hubEmployeesProvider.notifier).refresh(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloClearFiltersBar(
+            visible: state.hasActiveFilters,
+            onClear: () {
+              _searchController.clear();
+              ref.read(hubEmployeesProvider.notifier).clearFilters();
+            },
+          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -381,6 +387,12 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
           ] else ...[
             _SummaryRow(stats: state.stats),
             const SizedBox(height: AppSpacing.lg),
+            if (state.errorMessage != null && state.items.isNotEmpty)
+              SelloInlineErrorBar(
+                message: state.errorMessage,
+                onRetry: () =>
+                    ref.read(hubEmployeesProvider.notifier).refresh(),
+              ),
             if (state.errorMessage != null && state.items.isEmpty)
               SizedBox(
                 height: 320,
@@ -540,11 +552,19 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
                             ),
                           ),
                           DataCell(
-                            SelloButton(
-                              label: 'View',
-                              variant: SelloButtonVariant.ghost,
-                              size: SelloButtonSize.small,
-                              onPressed: () => _openDetails(emp),
+                            SelloRowIconGroup(
+                              children: [
+                                SelloRowIconButton(
+                                  tooltip: 'View team member',
+                                  icon: Icons.visibility_outlined,
+                                  onPressed: () => _openDetails(emp),
+                                ),
+                                SelloRowIconButton(
+                                  tooltip: 'Edit team member',
+                                  icon: Icons.edit_outlined,
+                                  onPressed: () => _openEditor(employee: emp),
+                                ),
+                              ],
                             ),
                           ),
                         ],

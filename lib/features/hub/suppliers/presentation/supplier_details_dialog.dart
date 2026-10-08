@@ -300,9 +300,9 @@ class SupplierDetailsDialog extends StatelessWidget {
             child: Text(
               supplier.lastPurchaseAt == null
                   ? 'No purchases recorded yet. Purchase Orders and GRNs will '
-                      'appear here.'
+                        'appear here.'
                   : 'Last purchase ${SelloFormatters.date(supplier.lastPurchaseAt)}. '
-                      'Full PO / invoice history arrives with purchasing.',
+                        'Full PO / invoice history arrives with purchasing.',
               style: const TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 13,
@@ -324,8 +324,9 @@ class SupplierDetailsDialog extends StatelessWidget {
                   )
                 : Column(
                     children: [
-                      for (final movement
-                          in detail.recentMovements.take(8)) ...[
+                      for (final movement in detail.recentMovements.take(
+                        8,
+                      )) ...[
                         _MovementRow(movement: movement),
                         const SizedBox(height: 10),
                       ],
@@ -394,10 +395,7 @@ class SupplierDetailsDialog extends StatelessWidget {
 }
 
 class _ProductRow extends StatelessWidget {
-  const _ProductRow({
-    required this.product,
-    required this.currencySymbol,
-  });
+  const _ProductRow({required this.product, required this.currencySymbol});
 
   final SupplierProductLink product;
   final String currencySymbol;
@@ -621,11 +619,7 @@ class _Section extends StatelessWidget {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.value,
-    this.muted = false,
-  });
+  const _Field({required this.label, required this.value, this.muted = false});
 
   final String label;
   final String value;

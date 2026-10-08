@@ -92,7 +92,9 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
 
   Future<void> _submitBusiness() async {
     if (!(_businessFormKey.currentState?.validate() ?? false)) return;
-    await ref.read(ownerSetupProvider.notifier).saveBusiness(
+    await ref
+        .read(ownerSetupProvider.notifier)
+        .saveBusiness(
           businessName: _businessName.text,
           phone: _phone.text,
           address: _address.text,
@@ -102,14 +104,16 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
 
   Future<void> _submitProfile() async {
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
-    await ref.read(ownerSetupProvider.notifier).saveProfile(
-          fullName: _fullName.text,
-        );
+    await ref
+        .read(ownerSetupProvider.notifier)
+        .saveProfile(fullName: _fullName.text);
   }
 
   Future<void> _addRep() async {
     if (!(_teamFormKey.currentState?.validate() ?? false)) return;
-    final ok = await ref.read(ownerSetupProvider.notifier).addSalesRep(
+    final ok = await ref
+        .read(ownerSetupProvider.notifier)
+        .addSalesRep(
           fullName: _repName.text,
           email: _repEmail.text,
           phone: _repPhone.text,
@@ -133,10 +137,9 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
   }
 
   Future<void> _testSms() async {
-    await ref.read(ownerSetupProvider.notifier).verifySms(
-          senderId: _smsSenderId.text,
-          phone: _smsTestPhone.text,
-        );
+    await ref
+        .read(ownerSetupProvider.notifier)
+        .verifySms(senderId: _smsSenderId.text, phone: _smsTestPhone.text);
   }
 
   Future<void> _finish() async {
@@ -148,7 +151,8 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
   @override
   Widget build(BuildContext context) {
     final setup = ref.watch(ownerSetupProvider);
-    final showProgress = setup.step != OwnerSetupStep.welcome &&
+    final showProgress =
+        setup.step != OwnerSetupStep.welcome &&
         setup.step != OwnerSetupStep.ready;
 
     return Scaffold(
@@ -222,64 +226,63 @@ class _OwnerSetupPageState extends ConsumerState<OwnerSetupPage> {
   Widget _body(OwnerSetupState setup) {
     return switch (setup.step) {
       OwnerSetupStep.welcome => _WelcomeStep(
-          onStart: () =>
-              ref.read(ownerSetupProvider.notifier).goTo(OwnerSetupStep.business),
-        ),
+        onStart: () =>
+            ref.read(ownerSetupProvider.notifier).goTo(OwnerSetupStep.business),
+      ),
       OwnerSetupStep.business => _BusinessStep(
-          formKey: _businessFormKey,
-          nameController: _businessName,
-          phoneController: _phone,
-          addressController: _address,
-          showLogo: setup.customBrandingEnabled,
-          pickingLogo: _pickingLogo,
-          hasLogo: _pendingLogo != null,
-          onPickLogo: _pickLogo,
-          saving: setup.isSaving,
-          error: setup.errorMessage,
-          onContinue: _submitBusiness,
-        ),
+        formKey: _businessFormKey,
+        nameController: _businessName,
+        phoneController: _phone,
+        addressController: _address,
+        showLogo: setup.customBrandingEnabled,
+        pickingLogo: _pickingLogo,
+        hasLogo: _pendingLogo != null,
+        onPickLogo: _pickLogo,
+        saving: setup.isSaving,
+        error: setup.errorMessage,
+        onContinue: _submitBusiness,
+      ),
       OwnerSetupStep.profile => _ProfileStep(
-          formKey: _profileFormKey,
-          nameController: _fullName,
-          emailController: _email,
-          saving: setup.isSaving,
-          error: setup.errorMessage,
-          onBack: () =>
-              ref.read(ownerSetupProvider.notifier).goTo(OwnerSetupStep.business),
-          onContinue: _submitProfile,
-        ),
+        formKey: _profileFormKey,
+        nameController: _fullName,
+        emailController: _email,
+        saving: setup.isSaving,
+        error: setup.errorMessage,
+        onBack: () =>
+            ref.read(ownerSetupProvider.notifier).goTo(OwnerSetupStep.business),
+        onContinue: _submitProfile,
+      ),
       OwnerSetupStep.team => _TeamStep(
-          formKey: _teamFormKey,
-          nameController: _repName,
-          emailController: _repEmail,
-          phoneController: _repPhone,
-          added: setup.addedReps,
-          saving: setup.isSaving,
-          error: setup.errorMessage,
-          onAdd: _addRep,
-          onSkip: () => ref.read(ownerSetupProvider.notifier).skipTeam(),
-          onContinue: () =>
-              ref.read(ownerSetupProvider.notifier).skipTeam(),
-        ),
+        formKey: _teamFormKey,
+        nameController: _repName,
+        emailController: _repEmail,
+        phoneController: _repPhone,
+        added: setup.addedReps,
+        saving: setup.isSaving,
+        error: setup.errorMessage,
+        onAdd: _addRep,
+        onSkip: () => ref.read(ownerSetupProvider.notifier).skipTeam(),
+        onContinue: () => ref.read(ownerSetupProvider.notifier).skipTeam(),
+      ),
       OwnerSetupStep.sms => _SmsStep(
-          senderIdController: _smsSenderId,
-          phoneController: _smsTestPhone,
-          ready: setup.smsReady,
-          configuredSenderId: setup.smsSenderId,
-          saving: setup.isSaving,
-          error: setup.errorMessage,
-          onTest: _testSms,
-          onSkip: () => ref.read(ownerSetupProvider.notifier).skipSms(),
-          onContinue: () =>
-              ref.read(ownerSetupProvider.notifier).continueAfterSms(),
-          onBack: () =>
-              ref.read(ownerSetupProvider.notifier).goTo(OwnerSetupStep.team),
-        ),
+        senderIdController: _smsSenderId,
+        phoneController: _smsTestPhone,
+        ready: setup.smsReady,
+        configuredSenderId: setup.smsSenderId,
+        saving: setup.isSaving,
+        error: setup.errorMessage,
+        onTest: _testSms,
+        onSkip: () => ref.read(ownerSetupProvider.notifier).skipSms(),
+        onContinue: () =>
+            ref.read(ownerSetupProvider.notifier).continueAfterSms(),
+        onBack: () =>
+            ref.read(ownerSetupProvider.notifier).goTo(OwnerSetupStep.team),
+      ),
       OwnerSetupStep.ready => _ReadyStep(
-          saving: setup.isSaving,
-          error: setup.errorMessage,
-          onFinish: _finish,
-        ),
+        saving: setup.isSaving,
+        error: setup.errorMessage,
+        onFinish: _finish,
+      ),
     };
   }
 }
@@ -350,11 +353,7 @@ class _WelcomeStep extends StatelessWidget {
             subtitle: 'Invite sales reps and optionally set up SMS',
           ),
           const SizedBox(height: 32),
-          SelloButton(
-            label: 'Get started',
-            onPressed: onStart,
-            expanded: true,
-          ),
+          SelloButton(label: 'Get started', onPressed: onStart, expanded: true),
         ],
       ),
     );
@@ -441,8 +440,8 @@ class _BusinessStep extends StatelessWidget {
                     label: pickingLogo
                         ? 'Preparing…'
                         : hasLogo
-                            ? 'Logo selected'
-                            : 'Add logo',
+                        ? 'Logo selected'
+                        : 'Add logo',
                     variant: SelloButtonVariant.outline,
                     size: SelloButtonSize.small,
                     icon: Icons.image_outlined,
@@ -587,7 +586,8 @@ class _TeamStep extends StatelessWidget {
       key: formKey,
       child: SettingsGroupCard(
         title: 'Add your sales team',
-        description: 'Invite Sales Reps now, or skip and add them later from Team.',
+        description:
+            'Invite Sales Reps now, or skip and add them later from Team.',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1040,12 +1040,12 @@ class _SetupProgress extends StatelessWidget {
   static const _labels = ['Business', 'Profile', 'Team', 'SMS'];
 
   int get _index => switch (step) {
-        OwnerSetupStep.business => 0,
-        OwnerSetupStep.profile => 1,
-        OwnerSetupStep.team => 2,
-        OwnerSetupStep.sms => 3,
-        _ => 0,
-      };
+    OwnerSetupStep.business => 0,
+    OwnerSetupStep.profile => 1,
+    OwnerSetupStep.team => 2,
+    OwnerSetupStep.sms => 3,
+    _ => 0,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -1118,7 +1118,11 @@ class _ProgressDot extends StatelessWidget {
         boxShadow: current ? AppShadows.level1 : null,
       ),
       child: done
-          ? const Icon(Icons.check_rounded, size: 14, color: AppColors.onPrimary)
+          ? const Icon(
+              Icons.check_rounded,
+              size: 14,
+              color: AppColors.onPrimary,
+            )
           : Text(
               label,
               style: TextStyle(
@@ -1144,10 +1148,7 @@ class _AmbientOrb extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:equatable/equatable.dart';
+import 'package:sello/shared/utils/product_image_cache_key.dart';
 
 /// Persisted product gallery row (+ optional signed URL / local draft bytes).
 class ProductImage extends Equatable {
@@ -10,6 +11,7 @@ class ProductImage extends Equatable {
     required this.storagePath,
     required this.sortOrder,
     required this.isPrimary,
+    this.updatedAt,
     this.networkUrl,
     this.localBytes,
     this.pendingUpload = false,
@@ -20,7 +22,12 @@ class ProductImage extends Equatable {
   final String storagePath;
   final int sortOrder;
   final bool isPrimary;
+
+  /// When this photo file was last replaced. Part of the disk-cache key.
+  final DateTime? updatedAt;
   final String? networkUrl;
+
+  String? get cacheKey => ProductImageCacheKey.of(storagePath, updatedAt);
   final Uint8List? localBytes;
   final bool pendingUpload;
 
@@ -33,6 +40,7 @@ class ProductImage extends Equatable {
     String? storagePath,
     int? sortOrder,
     bool? isPrimary,
+    DateTime? updatedAt,
     String? networkUrl,
     Uint8List? localBytes,
     bool? pendingUpload,
@@ -45,6 +53,7 @@ class ProductImage extends Equatable {
       storagePath: storagePath ?? this.storagePath,
       sortOrder: sortOrder ?? this.sortOrder,
       isPrimary: isPrimary ?? this.isPrimary,
+      updatedAt: updatedAt ?? this.updatedAt,
       networkUrl: clearNetworkUrl ? null : (networkUrl ?? this.networkUrl),
       localBytes: clearLocalBytes ? null : (localBytes ?? this.localBytes),
       pendingUpload: pendingUpload ?? this.pendingUpload,
@@ -58,20 +67,22 @@ class ProductImage extends Equatable {
       storagePath: json['storage_path'] as String,
       sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
       isPrimary: json['is_primary'] as bool? ?? false,
+      updatedAt: _dateValue(json['updated_at']),
     );
   }
 
   @override
   List<Object?> get props => [
-        id,
-        productId,
-        storagePath,
-        sortOrder,
-        isPrimary,
-        networkUrl,
-        localBytes,
-        pendingUpload,
-      ];
+    id,
+    productId,
+    storagePath,
+    sortOrder,
+    isPrimary,
+    updatedAt,
+    networkUrl,
+    localBytes,
+    pendingUpload,
+  ];
 }
 
 /// Local editor draft slot before / during save.
@@ -88,6 +99,7 @@ class MediaGalleryDraft extends Equatable {
     this.removed = false,
     this.processing = false,
     this.optimized = false,
+    this.imageUpdatedAt,
   });
 
   final String clientId;
@@ -106,6 +118,11 @@ class MediaGalleryDraft extends Equatable {
   /// True after local bytes have been resized/compressed for upload.
   final bool optimized;
 
+  /// When the stored photo was last replaced. Null for a photo not yet saved.
+  final DateTime? imageUpdatedAt;
+
+  String? get cacheKey => ProductImageCacheKey.of(storagePath, imageUpdatedAt);
+
   bool get hasPreview =>
       localBytes != null || (networkUrl != null && networkUrl!.isNotEmpty);
 
@@ -123,6 +140,7 @@ class MediaGalleryDraft extends Equatable {
     bool? removed,
     bool? processing,
     bool? optimized,
+    DateTime? imageUpdatedAt,
     bool clearLocalBytes = false,
     bool clearNetworkUrl = false,
     bool clearRemote = false,
@@ -139,6 +157,7 @@ class MediaGalleryDraft extends Equatable {
       removed: removed ?? this.removed,
       processing: processing ?? this.processing,
       optimized: optimized ?? this.optimized,
+      imageUpdatedAt: imageUpdatedAt ?? this.imageUpdatedAt,
     );
   }
 
@@ -152,6 +171,7 @@ class MediaGalleryDraft extends Equatable {
       isPrimary: image.isPrimary,
       sortOrder: image.sortOrder,
       optimized: true,
+      imageUpdatedAt: image.updatedAt,
     );
   }
 
@@ -176,16 +196,22 @@ class MediaGalleryDraft extends Equatable {
 
   @override
   List<Object?> get props => [
-        clientId,
-        remoteId,
-        storagePath,
-        networkUrl,
-        localBytes,
-        isPrimary,
-        sortOrder,
-        dirty,
-        removed,
-        processing,
-        optimized,
-      ];
+    clientId,
+    remoteId,
+    storagePath,
+    networkUrl,
+    localBytes,
+    isPrimary,
+    sortOrder,
+    dirty,
+    removed,
+    processing,
+    optimized,
+    imageUpdatedAt,
+  ];
+}
+
+DateTime? _dateValue(dynamic value) {
+  if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
+  return null;
 }

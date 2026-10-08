@@ -8,10 +8,7 @@ import 'package:sello/shared/models/supplier_upsert_input.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupplierPageResult {
-  const SupplierPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const SupplierPageResult({required this.items, required this.hasMore});
 
   final List<SupplierSummary> items;
   final bool hasMore;
@@ -19,11 +16,9 @@ class SupplierPageResult {
 
 /// Shared procurement repository — Hub today; future POs / GRN / payments.
 class SupplierRepository {
-  SupplierRepository({
-    SupabaseClient? client,
-    BusinessEventBus? events,
-  })  : _client = client ?? SupabaseService.client,
-        _events = events ?? BusinessEventBus();
+  SupplierRepository({SupabaseClient? client, BusinessEventBus? events})
+    : _client = client ?? SupabaseService.client,
+      _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
@@ -70,8 +65,7 @@ class SupplierRepository {
           .eq('company_id', companyId)
           .isFilter('deleted_at', null);
 
-      final cutoff =
-          DateTime.now().toUtc().subtract(const Duration(days: 30));
+      final cutoff = DateTime.now().toUtc().subtract(const Duration(days: 30));
       var total = 0;
       var active = 0;
       var recentlyAdded = 0;
@@ -239,10 +233,9 @@ class SupplierRepository {
           .toList();
 
       // Cost is not selectable from products; resolve it for cost-visible roles.
-      final costs = await fetchProductUnitCosts(
-        _client,
-        [for (final link in links) link.id],
-      );
+      final costs = await fetchProductUnitCosts(_client, [
+        for (final link in links) link.id,
+      ]);
       if (costs.isEmpty) return links;
 
       return [
@@ -367,7 +360,10 @@ class SupplierRepository {
 
     if (supplier.updatedAt != null &&
         (supplier.createdAt == null ||
-            supplier.updatedAt!.difference(supplier.createdAt!).inSeconds.abs() >
+            supplier.updatedAt!
+                    .difference(supplier.createdAt!)
+                    .inSeconds
+                    .abs() >
                 2)) {
       events.add(
         SupplierTimelineEvent(
@@ -513,8 +509,11 @@ class SupplierRepository {
 
   Future<bool> _referenced(String table, String column, String id) async {
     try {
-      final rows =
-          await _client.from(table).select('id').eq(column, id).limit(1);
+      final rows = await _client
+          .from(table)
+          .select('id')
+          .eq(column, id)
+          .limit(1);
       return (rows as List).isNotEmpty;
     } catch (_) {
       return true;
@@ -543,10 +542,11 @@ class SupplierRepository {
         );
       }
 
-      await _client.from('suppliers').update({
-        'is_active': !archived,
-        'updated_by': employeeId,
-      }).eq('id', supplierId).eq('company_id', companyId);
+      await _client
+          .from('suppliers')
+          .update({'is_active': !archived, 'updated_by': employeeId})
+          .eq('id', supplierId)
+          .eq('company_id', companyId);
     } on ValidationFailure {
       rethrow;
     } on PostgrestException catch (error) {
@@ -578,7 +578,7 @@ class SupplierRepository {
       }
       final used =
           await _referenced('products', 'preferred_supplier_id', supplierId) ||
-              await _referenced('product_suppliers', 'supplier_id', supplierId);
+          await _referenced('product_suppliers', 'supplier_id', supplierId);
       final decision = BusinessEntityLifecycle.permanentDelete(
         isActive: existing['is_active'] == true,
         hasHistoricalUse: used,
@@ -588,11 +588,15 @@ class SupplierRepository {
         throw ValidationFailure(decision.message!);
       }
 
-      await _client.from('suppliers').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-        'is_active': false,
-        'updated_by': employeeId,
-      }).eq('id', supplierId).eq('company_id', companyId);
+      await _client
+          .from('suppliers')
+          .update({
+            'deleted_at': DateTime.now().toUtc().toIso8601String(),
+            'is_active': false,
+            'updated_by': employeeId,
+          })
+          .eq('id', supplierId)
+          .eq('company_id', companyId);
     } on ValidationFailure {
       rethrow;
     } on PostgrestException catch (error) {

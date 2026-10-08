@@ -8,15 +8,16 @@ import 'package:sello/shared/utils/formatters.dart';
 ///
 /// Falls back to [CompanySettings.defaults] while loading or on failure so
 /// Home always has a full four-card grid.
-final selloCompanySettingsProvider = FutureProvider<CompanySettings>((ref) async {
+final selloCompanySettingsProvider = FutureProvider<CompanySettings>((
+  ref,
+) async {
   final session = ref.watch(currentSessionProvider);
   if (session == null) return CompanySettings.defaults;
 
   try {
-    return await ref.read(companySettingsRepositoryProvider).fetchForCompany(
-          session.company.id,
-          employeeId: session.employee.id,
-        );
+    return await ref
+        .read(companySettingsRepositoryProvider)
+        .fetchForCompany(session.company.id, employeeId: session.employee.id);
   } catch (_) {
     return CompanySettings.defaults;
   }
@@ -27,7 +28,9 @@ final selloCompanySettingsProvider = FutureProvider<CompanySettings>((ref) async
 /// Watches [selloCompanySettingsProvider] so Hub currency changes apply on the
 /// next Sales settings fetch / rebuild.
 final selloCurrencySymbolProvider = Provider<String>((ref) {
-  final currency =
-      ref.watch(selloCompanySettingsProvider).valueOrNull?.currency;
+  final currency = ref
+      .watch(selloCompanySettingsProvider)
+      .valueOrNull
+      ?.currency;
   return SelloFormatters.currencySymbol(currency);
 });

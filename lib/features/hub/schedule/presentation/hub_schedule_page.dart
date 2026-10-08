@@ -51,14 +51,12 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
       final result = await showDialog<VisitUpsertInput>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => EditVisitDialog(
-          visit: visit,
-          reps: state.reps,
-        ),
+        builder: (context) => EditVisitDialog(visit: visit, reps: state.reps),
       );
       if (result == null) return;
-      final error =
-          await ref.read(hubScheduleProvider.notifier).saveVisit(result);
+      final error = await ref
+          .read(hubScheduleProvider.notifier)
+          .saveVisit(result);
       if (!mounted) return;
       if (error != null) {
         SelloSnackbars.error(context, error);
@@ -71,39 +69,37 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
     final planned = await showDialog<List<VisitUpsertInput>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => PlanRouteDialog(
-        reps: state.reps,
-        initialDate: state.day,
-      ),
+      builder: (context) =>
+          PlanRouteDialog(reps: state.reps, initialDate: state.day),
     );
     if (planned == null || planned.isEmpty) return;
 
-    final error =
-        await ref.read(hubScheduleProvider.notifier).saveVisits(planned);
+    final error = await ref
+        .read(hubScheduleProvider.notifier)
+        .saveVisits(planned);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
     } else {
-      final customerStops =
-          planned.where((p) => p.customerId != null).length;
-      final areaOnly = customerStops == 0 &&
+      final customerStops = planned.where((p) => p.customerId != null).length;
+      final areaOnly =
+          customerStops == 0 &&
           planned.any((p) => p.area != null && p.area!.trim().isNotEmpty);
       SelloSnackbars.success(
         context,
         areaOnly
             ? 'Area planned.'
             : customerStops == 1
-                ? '1 stop planned.'
-                : '$customerStops stops planned.',
+            ? '1 stop planned.'
+            : '$customerStops stops planned.',
       );
     }
   }
 
   Future<void> _setStatus(ScheduledVisit visit, VisitStatus status) async {
-    final error = await ref.read(hubScheduleProvider.notifier).setStatus(
-          visitId: visit.id,
-          status: status,
-        );
+    final error = await ref
+        .read(hubScheduleProvider.notifier)
+        .setStatus(visitId: visit.id, status: status);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -117,9 +113,7 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove visit?'),
-        content: Text(
-          'Remove ${visit.displayTitle}?',
-        ),
+        content: Text('Remove ${visit.displayTitle}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -133,8 +127,9 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
       ),
     );
     if (confirmed != true) return;
-    final error =
-        await ref.read(hubScheduleProvider.notifier).removeVisit(visit.id);
+    final error = await ref
+        .read(hubScheduleProvider.notifier)
+        .removeVisit(visit.id);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -170,8 +165,7 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
               _debounce?.cancel();
               _debounce = Timer(
                 const Duration(milliseconds: 300),
-                () =>
-                    ref.read(hubScheduleProvider.notifier).setSearch(value),
+                () => ref.read(hubScheduleProvider.notifier).setSearch(value),
               );
             },
             onViewChanged: (mode) {
@@ -181,9 +175,7 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
             },
             onStatusChanged: (value) {
               if (value != null) {
-                ref
-                    .read(hubScheduleProvider.notifier)
-                    .setStatusFilter(value);
+                ref.read(hubScheduleProvider.notifier).setStatusFilter(value);
               }
             },
             onRepChanged: (value) {
@@ -191,10 +183,8 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
                   .read(hubScheduleProvider.notifier)
                   .setEmployeeFilter(value == _allReps ? null : value);
             },
-            onPrev: () =>
-                ref.read(hubScheduleProvider.notifier).shiftFocus(-1),
-            onNext: () =>
-                ref.read(hubScheduleProvider.notifier).shiftFocus(1),
+            onPrev: () => ref.read(hubScheduleProvider.notifier).shiftFocus(-1),
+            onNext: () => ref.read(hubScheduleProvider.notifier).shiftFocus(1),
             onToday: () => ref
                 .read(hubScheduleProvider.notifier)
                 .setFocusDate(DateTime.now()),
@@ -247,40 +237,37 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
               SelloFadeIn(
                 child: switch (state.viewMode) {
                   ScheduleViewMode.day => _DayView(
-                      day: state.day,
-                      visits: state.items,
-                      onEdit: (v) => _openEditor(visit: v),
-                      onStatus: _setStatus,
-                      onRemove: _remove,
-                    ),
+                    day: state.day,
+                    visits: state.items,
+                    onEdit: (v) => _openEditor(visit: v),
+                    onStatus: _setStatus,
+                    onRemove: _remove,
+                  ),
                   ScheduleViewMode.week => _WeekView(
-                      focus: state.day,
-                      visits: state.items,
-                      onSelectDay: (d) => ref
-                          .read(hubScheduleProvider.notifier)
-                          .setFocusDate(d),
-                      onEdit: (v) => _openEditor(visit: v),
-                      onStatus: _setStatus,
-                      onRemove: _remove,
-                    ),
+                    focus: state.day,
+                    visits: state.items,
+                    onSelectDay: (d) =>
+                        ref.read(hubScheduleProvider.notifier).setFocusDate(d),
+                    onEdit: (v) => _openEditor(visit: v),
+                    onStatus: _setStatus,
+                    onRemove: _remove,
+                  ),
                   ScheduleViewMode.calendar => _CalendarView(
-                      focus: state.day,
-                      visits: state.items,
-                      onSelectDay: (d) {
-                        ref
-                            .read(hubScheduleProvider.notifier)
-                            .setFocusDate(d);
-                        ref
-                            .read(hubScheduleProvider.notifier)
-                            .setViewMode(ScheduleViewMode.day);
-                      },
-                    ),
+                    focus: state.day,
+                    visits: state.items,
+                    onSelectDay: (d) {
+                      ref.read(hubScheduleProvider.notifier).setFocusDate(d);
+                      ref
+                          .read(hubScheduleProvider.notifier)
+                          .setViewMode(ScheduleViewMode.day);
+                    },
+                  ),
                   ScheduleViewMode.list => _ListView(
-                      visits: state.items,
-                      onEdit: (v) => _openEditor(visit: v),
-                      onStatus: _setStatus,
-                      onRemove: _remove,
-                    ),
+                    visits: state.items,
+                    onEdit: (v) => _openEditor(visit: v),
+                    onStatus: _setStatus,
+                    onRemove: _remove,
+                  ),
                 },
               ),
           ],
@@ -458,13 +445,10 @@ class _ScheduleToolbar extends StatelessWidget {
   String _focusLabel(HubScheduleState state) {
     final d = state.day;
     return switch (state.viewMode) {
-      ScheduleViewMode.day || ScheduleViewMode.list =>
-        SelloFormatters.date(d),
-      ScheduleViewMode.week => 'Week of ${SelloFormatters.date(
-          d.subtract(Duration(days: d.weekday - 1)),
-        )}',
-      ScheduleViewMode.calendar =>
-        '${_monthName(d.month)} ${d.year}',
+      ScheduleViewMode.day || ScheduleViewMode.list => SelloFormatters.date(d),
+      ScheduleViewMode.week =>
+        'Week of ${SelloFormatters.date(d.subtract(Duration(days: d.weekday - 1)))}',
+      ScheduleViewMode.calendar => '${_monthName(d.month)} ${d.year}',
     };
   }
 
@@ -727,7 +711,15 @@ class _CalendarView extends StatelessWidget {
         children: [
           Row(
             children: [
-              for (final label in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+              for (final label in [
+                'Mon',
+                'Tue',
+                'Wed',
+                'Thu',
+                'Fri',
+                'Sat',
+                'Sun',
+              ])
                 Expanded(
                   child: Center(
                     child: Text(

@@ -45,8 +45,9 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final file =
-          await ref.read(hubInventoryProvider.notifier).exportStockWorkbook();
+      final file = await ref
+          .read(hubInventoryProvider.notifier)
+          .exportStockWorkbook();
       if (!mounted) return;
       downloadBrowserFile(
         bytes: file.bytes,
@@ -82,8 +83,9 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   }
 
   Future<void> _openDetails(InventoryItem item) async {
-    final movements =
-        await ref.read(hubInventoryProvider.notifier).loadMovements(item);
+    final movements = await ref
+        .read(hubInventoryProvider.notifier)
+        .loadMovements(item);
     if (!mounted) return;
 
     await showDialog<void>(
@@ -148,6 +150,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
               SelloEntityThumb(
                 name: item.name,
                 imageUrl: item.imageUrl,
+                cacheKey: item.imageCacheKey,
                 width: 44,
               ),
               const SizedBox(width: AppSpacing.md),
@@ -156,10 +159,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SelloTableText(
-                      item.name,
-                      tone: SelloTableTone.strong,
-                    ),
+                    SelloTableText(item.name, tone: SelloTableTone.strong),
                     if (item.categoryName != null) ...[
                       const SizedBox(height: 2),
                       SelloTableText(
@@ -209,20 +209,16 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
+          SelloRowIconGroup(
             children: [
-              SelloButton(
-                label: 'View',
-                size: SelloButtonSize.small,
-                variant: SelloButtonVariant.ghost,
+              SelloRowIconButton(
+                tooltip: 'View stock',
+                icon: Icons.visibility_outlined,
                 onPressed: () => _openDetails(item),
               ),
-              const SizedBox(width: 4),
-              SelloButton(
-                label: 'Adjust',
-                size: SelloButtonSize.small,
-                variant: SelloButtonVariant.outline,
+              SelloRowIconButton(
+                tooltip: 'Adjust stock',
+                icon: Icons.tune_rounded,
                 onPressed: () => _openAdjust(item),
               ),
             ],
@@ -243,6 +239,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
               SelloEntityThumb(
                 name: item.name,
                 imageUrl: item.imageUrl,
+                cacheKey: item.imageCacheKey,
                 width: 44,
               ),
               const SizedBox(width: AppSpacing.md),
@@ -251,10 +248,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SelloTableText(
-                      item.name,
-                      tone: SelloTableTone.strong,
-                    ),
+                    SelloTableText(item.name, tone: SelloTableTone.strong),
                     const SizedBox(height: 2),
                     SelloTableText(
                       '${group.items.length} options'
@@ -346,10 +340,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   tone: SelloTableTone.strong,
                 ),
                 const SizedBox(height: 2),
-                SelloTableText(
-                  'Option',
-                  tone: SelloTableTone.muted,
-                ),
+                SelloTableText('Option', tone: SelloTableTone.muted),
               ],
             ),
           ),
@@ -390,20 +381,16 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
+          SelloRowIconGroup(
             children: [
-              SelloButton(
-                label: 'View',
-                size: SelloButtonSize.small,
-                variant: SelloButtonVariant.ghost,
+              SelloRowIconButton(
+                tooltip: 'View stock',
+                icon: Icons.visibility_outlined,
                 onPressed: () => _openDetails(item),
               ),
-              const SizedBox(width: 4),
-              SelloButton(
-                label: 'Adjust',
-                size: SelloButtonSize.small,
-                variant: SelloButtonVariant.outline,
+              SelloRowIconButton(
+                tooltip: 'Adjust stock',
+                icon: Icons.tune_rounded,
                 onPressed: () => _openAdjust(item),
               ),
             ],
@@ -442,8 +429,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
               _debounce?.cancel();
               _debounce = Timer(
                 const Duration(milliseconds: 300),
-                () =>
-                    ref.read(hubInventoryProvider.notifier).setSearch(value),
+                () => ref.read(hubInventoryProvider.notifier).setSearch(value),
               );
             },
             onStatusChanged: (value) {
@@ -452,9 +438,9 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
               }
             },
             onCategoryChanged: (value) {
-              ref.read(hubInventoryProvider.notifier).setCategoryFilter(
-                    value == _allCategories ? null : value,
-                  );
+              ref
+                  .read(hubInventoryProvider.notifier)
+                  .setCategoryFilter(value == _allCategories ? null : value);
             },
             onRefresh: () => ref.read(hubInventoryProvider.notifier).refresh(),
             isRefreshing: state.isLoading,
@@ -462,6 +448,13 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             isExporting: _exporting,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloClearFiltersBar(
+            visible: state.hasActiveFilters,
+            onClear: () {
+              _searchController.clear();
+              ref.read(hubInventoryProvider.notifier).clearFilters();
+            },
+          ),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,
           ),
@@ -479,6 +472,12 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   .setStatusFilter(filter),
             ),
             const SizedBox(height: AppSpacing.lg),
+            if (state.errorMessage != null && state.items.isNotEmpty)
+              SelloInlineErrorBar(
+                message: state.errorMessage,
+                onRetry: () =>
+                    ref.read(hubInventoryProvider.notifier).refresh(),
+              ),
             if (state.errorMessage != null && state.items.isEmpty)
               SizedBox(
                 height: 320,
@@ -513,6 +512,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                               SelloEntityThumb(
                                 name: group.primary.name,
                                 imageUrl: group.primary.imageUrl,
+                                cacheKey: group.primary.imageCacheKey,
                                 width: 48,
                               ),
                               const SizedBox(width: 12),
@@ -551,6 +551,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                               SelloEntityThumb(
                                 name: group.primary.name,
                                 imageUrl: group.primary.imageUrl,
+                                cacheKey: group.primary.imageCacheKey,
                                 width: 48,
                               ),
                               const SizedBox(width: 12),
@@ -603,7 +604,9 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            item.variantLabel?.trim().isNotEmpty ==
+                                            item.variantLabel
+                                                        ?.trim()
+                                                        .isNotEmpty ==
                                                     true
                                                 ? item.variantLabel!.trim()
                                                 : (item.variantSku ?? item.sku),
@@ -646,13 +649,13 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                       onPrev: state.page <= 0
                           ? null
                           : () => ref
-                              .read(hubInventoryProvider.notifier)
-                              .goToPage(state.page - 1),
+                                .read(hubInventoryProvider.notifier)
+                                .goToPage(state.page - 1),
                       onNext: !state.hasMore
                           ? null
                           : () => ref
-                              .read(hubInventoryProvider.notifier)
-                              .goToPage(state.page + 1),
+                                .read(hubInventoryProvider.notifier)
+                                .goToPage(state.page + 1),
                     ),
                   ],
                 ),
@@ -677,13 +680,13 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                     onPrev: state.page <= 0
                         ? null
                         : () => ref
-                            .read(hubInventoryProvider.notifier)
-                            .goToPage(state.page - 1),
+                              .read(hubInventoryProvider.notifier)
+                              .goToPage(state.page - 1),
                     onNext: !state.hasMore
                         ? null
                         : () => ref
-                            .read(hubInventoryProvider.notifier)
-                            .goToPage(state.page + 1),
+                              .read(hubInventoryProvider.notifier)
+                              .goToPage(state.page + 1),
                   ),
                 ),
               ),
@@ -749,10 +752,7 @@ class _Toolbar extends StatelessWidget {
         hint: 'Stock status',
         onChanged: onStatusChanged,
         items: const [
-          DropdownMenuItem(
-            value: StockStatusFilter.all,
-            child: Text('All'),
-          ),
+          DropdownMenuItem(value: StockStatusFilter.all, child: Text('All')),
           DropdownMenuItem(
             value: StockStatusFilter.inStock,
             child: Text('In stock'),
@@ -862,22 +862,24 @@ class _SummaryRow extends StatelessWidget {
           onTap: () => onFilter(StockStatusFilter.all),
         ),
         SelloStatCard(
-          label: 'Stock value',
+          label: 'Stock at cost',
           value: SelloFormatters.currency(
             stats.stockValue,
             symbol: currencySymbol,
           ),
-          hint: 'At cost',
+          hint: 'Quantity × cost price',
           icon: Icons.payments_outlined,
           tone: AppColors.finance,
         ),
         SelloStatCard(
-          label: 'Low stock',
-          value: '${stats.lowStock}',
-          hint: 'At or below reorder',
-          icon: Icons.warning_amber_rounded,
-          tone: AppColors.warning,
-          onTap: () => onFilter(StockStatusFilter.lowStock),
+          label: 'Stock at selling price',
+          value: SelloFormatters.currency(
+            stats.stockSellingValue,
+            symbol: currencySymbol,
+          ),
+          hint: 'Quantity × selling price',
+          icon: Icons.storefront_outlined,
+          tone: AppColors.success,
         ),
         SelloStatCard(
           label: 'Out of stock',
@@ -918,10 +920,7 @@ class _RecentMovementsStrip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'RECENTLY ADJUSTED',
-            style: AppTypography.eyebrow,
-          ),
+          Text('RECENTLY ADJUSTED', style: AppTypography.eyebrow),
           const SizedBox(height: 12),
           for (var i = 0; i < shown.length; i++) ...[
             if (i > 0) const SizedBox(height: 10),

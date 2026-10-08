@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/shared/widgets/media/sello_network_image.dart';
 
 /// Portrait thumbnail for records that may or may not have an image.
 ///
@@ -11,12 +12,16 @@ class SelloEntityThumb extends StatelessWidget {
     super.key,
     required this.name,
     this.imageUrl,
+    this.cacheKey,
     this.width = 48,
     this.height,
   });
 
   final String name;
   final String? imageUrl;
+
+  /// Stable disk-cache identity. See [ProductImageCacheKey].
+  final String? cacheKey;
 
   /// Thumbnail width. Height defaults to 4:5 portrait.
   final double width;
@@ -43,8 +48,9 @@ class SelloEntityThumb extends StatelessWidget {
           border: Border.all(color: AppColors.outlinePanel),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Image.network(
-          imageUrl!,
+        child: SelloNetworkImage(
+          url: imageUrl!,
+          cacheKey: cacheKey,
           width: width,
           height: h,
           fit: BoxFit.cover,
@@ -77,8 +83,10 @@ class SelloEntityThumb extends StatelessWidget {
           style: context.texts.titleMedium?.copyWith(
             color: context.brandAccent,
             fontWeight: FontWeight.w700,
-            fontSize: ((width.isFinite ? width * 0.36 : 18.0).clamp(14.0, 36.0))
-                .toDouble(),
+            fontSize: ((width.isFinite ? width * 0.36 : 18.0).clamp(
+              14.0,
+              36.0,
+            )).toDouble(),
           ),
         ),
       ),

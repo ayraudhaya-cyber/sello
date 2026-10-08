@@ -59,4 +59,22 @@ abstract final class VisitCheckoutPaymentRules {
     }
     return lines;
   }
+
+  /// Shown after a visit with lines is saved. Does not change accounting.
+  static String visitSavedMessage({
+    required VisitPaymentArrangement arrangement,
+    required bool hasLines,
+    required bool skippedOptionalCheque,
+  }) {
+    if (skippedOptionalCheque && hasLines) {
+      return 'Visit saved. Record the cheque later from the order.';
+    }
+    if (hasLines &&
+        (arrangement == VisitPaymentArrangement.creditSale ||
+            arrangement == VisitPaymentArrangement.chequeCollectionScheduled ||
+            arrangement == VisitPaymentArrangement.noneYet)) {
+      return 'Order saved. Outstanding updates when goods are delivered.';
+    }
+    return 'Visit saved.';
+  }
 }

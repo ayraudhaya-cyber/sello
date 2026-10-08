@@ -6,6 +6,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/hub/dashboard/application/hub_needs_attention_provider.dart';
 import 'package:sello/features/hub/inventory/application/hub_inventory_provider.dart';
 import 'package:sello/features/hub/orders/application/hub_orders_provider.dart';
+import 'package:sello/features/hub/payments/application/hub_payments_provider.dart';
 import 'package:sello/services/dashboard/needs_attention.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -44,7 +45,8 @@ class HubNeedsAttentionCard extends ConsumerWidget {
           title: 'Needs attention',
           countBadge: '${items.length}',
           action: SelloViewAllLink(
-            onTap: () => _openOrders(ref, context, OrderStatusFilter.openFulfillment),
+            onTap: () =>
+                _openOrders(ref, context, OrderStatusFilter.openFulfillment),
           ),
           child: Column(
             children: [
@@ -98,6 +100,12 @@ class HubNeedsAttentionCard extends ConsumerWidget {
     NeedsAttentionItem item,
   ) async {
     switch (item.kind) {
+      case NeedsAttentionKind.pendingCollections:
+        await ref
+            .read(hubPaymentsProvider.notifier)
+            .setStatusFilter(PaymentStatusFilter.pending);
+        if (!context.mounted) return;
+        context.go(RoutePaths.hubPayments);
       case NeedsAttentionKind.negativeStock:
         await ref
             .read(hubInventoryProvider.notifier)
@@ -148,6 +156,7 @@ class _NeedsAttentionRowState extends State<_NeedsAttentionRow> {
     final tone = high ? AppColors.attention : AppColors.warning;
     final soft = high ? AppColors.attentionSoft : AppColors.warningContainer;
     final icon = switch (widget.item.kind) {
+      NeedsAttentionKind.pendingCollections => Icons.fact_check_outlined,
       NeedsAttentionKind.negativeStock => Icons.error_outline_rounded,
       NeedsAttentionKind.waitingForStock => Icons.inventory_2_outlined,
       NeedsAttentionKind.placedAwaitingFulfillment =>
@@ -167,7 +176,10 @@ class _NeedsAttentionRowState extends State<_NeedsAttentionRow> {
               onTap: widget.onTap,
               borderRadius: BorderRadius.circular(10),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 4,
+                ),
                 child: Row(
                   children: [
                     Container(

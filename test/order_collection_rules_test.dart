@@ -132,6 +132,31 @@ void main() {
       );
     });
 
+    test('order method is pre-selected, wallet/credit fall back to cash', () {
+      expect(
+        OrderCollectionAssociation.suggestedMethodFromOrder(
+          PaymentMethod.cheque,
+        ),
+        PaymentMethod.cheque,
+      );
+      expect(
+        OrderCollectionAssociation.suggestedMethodFromOrder(
+          PaymentMethod.bankTransfer,
+        ),
+        PaymentMethod.bankTransfer,
+      );
+      expect(
+        OrderCollectionAssociation.suggestedMethodFromOrder(
+          PaymentMethod.wallet,
+        ),
+        PaymentMethod.cash,
+      );
+      expect(
+        OrderCollectionAssociation.suggestedMethodFromOrder(null),
+        PaymentMethod.cash,
+      );
+    });
+
     test('checkout method is never inherited for a new collection', () {
       expect(
         OrderCollectionAssociation.methodForNewCollection(

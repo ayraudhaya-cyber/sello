@@ -111,11 +111,7 @@ class _StatsRow extends StatelessWidget {
         final children = [
           for (final card in cards)
             Expanded(
-              child: _StatTile(
-                label: card.$1,
-                value: card.$2,
-                tone: card.$3,
-              ),
+              child: _StatTile(label: card.$1, value: card.$2, tone: card.$3),
             ),
         ];
         if (wide) {
@@ -130,9 +126,13 @@ class _StatsRow extends StatelessWidget {
         }
         return Column(
           children: [
-            Row(children: [children[0], const SizedBox(width: 10), children[1]]),
+            Row(
+              children: [children[0], const SizedBox(width: 10), children[1]],
+            ),
             const SizedBox(height: 10),
-            Row(children: [children[2], const SizedBox(width: 10), children[3]]),
+            Row(
+              children: [children[2], const SizedBox(width: 10), children[3]],
+            ),
           ],
         );
       },
@@ -278,11 +278,11 @@ class _VisitCard extends StatelessWidget {
 
 extension on SelloStatusTone {
   Color accentFor(BuildContext context) => switch (this) {
-        SelloStatusTone.success => AppColors.success,
-        SelloStatusTone.warning => AppColors.warning,
-        SelloStatusTone.danger => AppColors.error,
-        SelloStatusTone.brand => context.brandAccent,
-        SelloStatusTone.info => AppColors.info,
-        SelloStatusTone.neutral => AppColors.textTertiary,
-      };
+    SelloStatusTone.success => AppColors.success,
+    SelloStatusTone.warning => AppColors.warning,
+    SelloStatusTone.danger => AppColors.error,
+    SelloStatusTone.brand => context.brandAccent,
+    SelloStatusTone.info => AppColors.info,
+    SelloStatusTone.neutral => AppColors.textTertiary,
+  };
 }

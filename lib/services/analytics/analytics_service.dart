@@ -84,7 +84,7 @@ class AnalyticsService {
         id: 'collections_due',
         label: 'Outstanding collections',
         value: money(overview.payments.outstandingReceivables),
-        hint: 'Customer receivables',
+        hint: 'All customers still owing',
         iconKey: 'request_quote',
         tone: ReportKpiTone.finance,
         drillRoute: RoutePaths.hubPayments,

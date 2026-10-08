@@ -117,6 +117,10 @@ class PaymentSummary extends Equatable {
     this.reviewedAt,
     this.reviewerName,
     this.rejectionReason,
+    this.correctsPaymentId,
+    this.correctedByPaymentId,
+    this.correctionReason,
+    this.allocations = const [],
   });
 
   final String id;
@@ -140,6 +144,36 @@ class PaymentSummary extends Equatable {
   final DateTime? reviewedAt;
   final String? reviewerName;
   final String? rejectionReason;
+  final String? correctsPaymentId;
+  final String? correctedByPaymentId;
+  final String? correctionReason;
+
+  /// What this collection paid (orders and/or opening-balance invoices).
+  final List<PaymentAllocation> allocations;
+
+  bool get paysOrder => allocations.any((a) => !a.isOpeningBalance);
+
+  bool get paysOpeningBalance => allocations.any((a) => a.isOpeningBalance);
+
+  /// Plain-language type for lists and exports.
+  String get collectionTypeLabel {
+    if (paysOrder && paysOpeningBalance) return 'Order + Opening balance';
+    if (paysOpeningBalance) return 'Opening balance';
+    if (paysOrder) return 'Order';
+    return 'On account';
+  }
+
+  /// "SO-1001, Opening balance · OB-0003" — empty when nothing is allocated.
+  String get allocationSummary => allocations
+      .map((a) => a.displayLabel.trim())
+      .where((label) => label.isNotEmpty)
+      .join(', ');
+
+  bool get isCorrected =>
+      status == PaymentRecordStatus.cancelled &&
+      (correctedByPaymentId ?? '').isNotEmpty;
+
+  String get displayStatusLabel => isCorrected ? 'Corrected' : status.label;
 
   factory PaymentSummary.fromJson(Map<String, dynamic> json) {
     String? relatedOrder;
@@ -177,6 +211,15 @@ class PaymentSummary extends Equatable {
       reviewedAt: _dateValue(json['reviewed_at']),
       reviewerName: _embedName(json['reviewed_by_employee'], 'full_name'),
       rejectionReason: _stringValue(json['rejection_reason']),
+      correctsPaymentId: json['corrects_payment_id'] as String?,
+      correctedByPaymentId: json['corrected_by_payment_id'] as String?,
+      correctionReason: _stringValue(json['correction_reason']),
+      allocations: [
+        if (allocations is List)
+          for (final raw in allocations)
+            if (raw is Map && raw['id'] is String)
+              PaymentAllocation.fromJson(Map<String, dynamic>.from(raw)),
+      ],
     );
   }
 

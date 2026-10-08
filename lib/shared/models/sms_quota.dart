@@ -93,3 +93,51 @@ class SmsQuota {
     return 0;
   }
 }
+
+/// Header / Settings presentation. Distinct from "this company has no token".
+enum SmsQuotaVisibility {
+  /// No token, or Sales Rep — hide the block.
+  hidden,
+
+  /// Token exists (or should) but Text.lk / Edge could not be read.
+  unavailable,
+
+  /// Live remainder is on screen.
+  ready,
+}
+
+class SmsQuotaView {
+  const SmsQuotaView._(this.visibility, this.quota);
+
+  const SmsQuotaView.hidden()
+      : visibility = SmsQuotaVisibility.hidden,
+        quota = null;
+
+  const SmsQuotaView.unavailable()
+      : visibility = SmsQuotaVisibility.unavailable,
+        quota = null;
+
+  factory SmsQuotaView.ready(SmsQuota quota) =>
+      SmsQuotaView._(SmsQuotaVisibility.ready, quota);
+
+  final SmsQuotaVisibility visibility;
+  final SmsQuota? quota;
+
+  bool get isHidden => visibility == SmsQuotaVisibility.hidden;
+  bool get isUnavailable => visibility == SmsQuotaVisibility.unavailable;
+  bool get isReady => visibility == SmsQuotaVisibility.ready && quota != null;
+
+  static SmsQuotaView fromEdgeJson(Map<String, dynamic>? json) {
+    if (json == null) return const SmsQuotaView.unavailable();
+    final status = json['status'] as String?;
+    if (status == 'ok') {
+      final quota = SmsQuota.tryParse(json);
+      if (quota != null) return SmsQuotaView.ready(quota);
+      return const SmsQuotaView.unavailable();
+    }
+    if (status == 'unconfigured' || status == 'hidden') {
+      return const SmsQuotaView.hidden();
+    }
+    return const SmsQuotaView.unavailable();
+  }
+}

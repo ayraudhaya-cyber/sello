@@ -46,11 +46,7 @@ class _SelloSkeletonBoneState extends State<SelloSkeletonBone>
             gradient: LinearGradient(
               begin: Alignment(-1.2 + 2.4 * t, 0),
               end: Alignment(-0.2 + 2.4 * t, 0),
-              colors: const [
-                AppColors.veil,
-                Color(0xFFF7F5FC),
-                AppColors.veil,
-              ],
+              colors: const [AppColors.veil, Color(0xFFF7F5FC), AppColors.veil],
               stops: const [0.25, 0.5, 0.75],
             ),
           ),
@@ -98,7 +94,11 @@ class SelloTableSkeleton extends StatelessWidget {
                       children: [
                         SelloSkeletonBone(width: 72, height: 10),
                         Spacer(),
-                        SelloSkeletonBone(width: 48, height: 22, borderRadius: 8),
+                        SelloSkeletonBone(
+                          width: 48,
+                          height: 22,
+                          borderRadius: 8,
+                        ),
                       ],
                     ),
                   ),

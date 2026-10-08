@@ -27,6 +27,7 @@ Future<bool> showRecordOrderCollectionSheet({
   num amountPaid = 0,
   num amountPending = 0,
   List<OrderCollectionEntry> priorEntries = const [],
+  PaymentMethod? orderPaymentMethod,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -47,6 +48,7 @@ Future<bool> showRecordOrderCollectionSheet({
       amountPaid: amountPaid,
       amountPending: amountPending,
       priorEntries: priorEntries,
+      orderPaymentMethod: orderPaymentMethod,
     ),
   ).then((value) => value ?? false);
 }
@@ -65,6 +67,7 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
     this.amountPaid = 0,
     this.amountPending = 0,
     this.priorEntries = const [],
+    this.orderPaymentMethod,
   });
 
   final String customerId;
@@ -79,6 +82,9 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
   final num amountPending;
   final List<OrderCollectionEntry> priorEntries;
 
+  /// How the order was placed. Only used to pre-select the method chip.
+  final PaymentMethod? orderPaymentMethod;
+
   @override
   ConsumerState<RecordOrderCollectionSheet> createState() =>
       _RecordOrderCollectionSheetState();
@@ -90,7 +96,7 @@ class _RecordOrderCollectionSheetState
   final _bank = TextEditingController();
   final _chequeNumber = TextEditingController();
   final _holder = TextEditingController();
-  PaymentMethod _method = OrderCollectionAssociation.defaultNewCollectionMethod;
+  late PaymentMethod _method;
   DateTime _chequeDate = DateTime.now();
   bool _saving = false;
   bool _loading = true;
@@ -114,6 +120,9 @@ class _RecordOrderCollectionSheetState
   @override
   void initState() {
     super.initState();
+    _method = OrderCollectionAssociation.suggestedMethodFromOrder(
+      widget.orderPaymentMethod,
+    );
     _holder.text = widget.customerName;
     _writeAmount(widget.outstanding);
     Future.microtask(_loadAssociatedCheques);
@@ -378,6 +387,16 @@ class _RecordOrderCollectionSheetState
                 color: AppColors.textSecondary,
               ),
             ),
+            const SizedBox(height: 8),
+            const Text(
+              'Collect money for this order. This does not create a new sale.',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13,
+                height: 1.35,
+                color: AppColors.textTertiary,
+              ),
+            ),
             if (_loading) ...[
               const SizedBox(height: 24),
               const Center(
@@ -416,6 +435,19 @@ class _RecordOrderCollectionSheetState
                 ),
                 const SizedBox(height: 8),
                 _LabeledValue(label: 'Remaining', value: outstandingMoney),
+              ],
+              if (widget.amountPending > 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'A collection is waiting for Owner or Manager approval. Outstanding changes after they approve it.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12.5,
+                    height: 1.35,
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
               if (match != null) ...[
                 const SizedBox(height: 12),
@@ -466,6 +498,19 @@ class _RecordOrderCollectionSheetState
                     ),
                 ],
               ),
+              if (widget.orderPaymentMethod != null &&
+                  _method == widget.orderPaymentMethod) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Pre-selected from the order. Change it if the customer '
+                  'paid another way.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
               if (_method == PaymentMethod.cheque && !_usingExisting) ...[
                 const SizedBox(height: 14),
                 SelloSriLankaBankField(

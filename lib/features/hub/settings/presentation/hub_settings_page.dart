@@ -147,7 +147,8 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
           : SelloFadeIn(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final split = constraints.maxWidth >=
+                  final split =
+                      constraints.maxWidth >=
                       ResponsiveLayout.settingsSplitMinWidth;
                   if (split) {
                     return _buildSplit(
@@ -595,9 +596,8 @@ class _InventorySection extends StatelessWidget {
                         if (confirmed != true) return;
                       }
                       onChanged(
-                        (c) => c.copyWith(
-                          allowOrdersAboveAvailableStock: value,
-                        ),
+                        (c) =>
+                            c.copyWith(allowOrdersAboveAvailableStock: value),
                       );
                     },
                   ),

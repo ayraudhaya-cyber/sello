@@ -523,13 +523,25 @@ class CollectionAcknowledgementDispatcher {
     OutboundNotificationType.collectionSubmitted,
   ];
 
-  Future<OrderConfirmationOutcome?> dispatch(String paymentId) async {
+  /// [pendingReview] true: the collection waits for Owner / Manager approval
+  /// (customer acknowledgement + team message, WhatsApp share sheet included).
+  ///
+  /// [pendingReview] false: the collection is already applied. Only the
+  /// team message is sent, by SMS only (no share sheet pops up), so the Owner
+  /// or Manager always knows what was collected and by whom.
+  Future<OrderConfirmationOutcome?> dispatch(
+    String paymentId, {
+    bool pendingReview = true,
+  }) async {
     final resolver = policiesResolver;
     final effectivePolicies =
         resolver == null ? policies : await resolver();
     final activeTypes = [
       for (final type in _collectionTypes)
-        if (effectivePolicies.isActive(type)) type,
+        if ((pendingReview ||
+                type == OutboundNotificationType.collectionSubmitted) &&
+            effectivePolicies.isActive(type))
+          type,
     ];
     if (activeTypes.isEmpty) return null;
 
@@ -562,6 +574,11 @@ class CollectionAcknowledgementDispatcher {
           'payment_number': prepared.paymentNumber,
           'payment_method': prepared.methodLabel,
           'date': SelloFormatters.date(prepared.receivedAt),
+          'collection_status':
+              pendingReview ? 'submitted for review' : 'recorded',
+          'approval_note': pendingReview
+              ? 'Balances update only after owner/manager approval.'
+              : null,
           'receipt_link': documentUrl.trim().isEmpty ? null : documentUrl.trim(),
           'document_link':
               documentUrl.trim().isEmpty ? null : documentUrl.trim(),
@@ -575,11 +592,13 @@ class CollectionAcknowledgementDispatcher {
       final channelPolicy = OutboundChannelPolicy.fromType(
         masterWhatsapp: effectivePolicies.whatsappEnabled,
         masterSms: effectivePolicies.smsEnabled,
-        typeWhatsapp: typePolicy.whatsapp,
+        // Applied collections never open a WhatsApp share sheet.
+        typeWhatsapp: pendingReview && typePolicy.whatsapp,
         typeSms: typePolicy.sms,
       );
 
-      if (typePolicy.sendsTo(OutboundRecipientTarget.customer)) {
+      if (pendingReview &&
+          typePolicy.sendsTo(OutboundRecipientTarget.customer)) {
         final skipped = await _addCustomerActions(
           prepared: prepared,
           actions: actions,
@@ -589,7 +608,11 @@ class CollectionAcknowledgementDispatcher {
         customerSkipped ??= skipped;
       }
 
-      if (typePolicy.sendsTo(OutboundRecipientTarget.hub)) {
+      // An Owner / Manager recording their own collection only notifies the
+      // team when the business has asked for it (Settings → Notifications).
+      final teamWanted =
+          !prepared.recordedByTeam || typePolicy.notifyWhenTeamRecords;
+      if (teamWanted && typePolicy.sendsTo(OutboundRecipientTarget.hub)) {
         await _addHubActions(
           prepared: prepared,
           actions: actions,
@@ -678,7 +701,20 @@ class CollectionAcknowledgementDispatcher {
   }) async {
     for (final hub in prepared.hubRecipients) {
       final digits = MessagingPhone.digits(hub.phone);
-      if (digits == null) continue;
+      if (digits == null) {
+        // Leave a trace so "why didn't they get it?" has an answer.
+        await recordDispatch(
+          eventId: prepared.eventId,
+          channel:
+              channelPolicy.sms ? OutboundChannel.sms : OutboundChannel.whatsapp,
+          recipientKind: OutboundRecipientKind.hub,
+          recipientKey: 'employee:${hub.id}',
+          address: null,
+          status: OutboundDispatchStatus.skipped,
+          skipReason: 'No mobile number on ${hub.name}\'s profile.',
+        );
+        continue;
+      }
       if (channelPolicy.whatsapp) {
         await recordDispatch(
           eventId: prepared.eventId,
@@ -777,6 +813,7 @@ class CollectionAcknowledgementPrepareResult {
     this.salesRepName,
     this.customer,
     this.hubRecipients = const [],
+    this.recordedByTeam = false,
   });
 
   final bool alreadyPrepared;
@@ -792,6 +829,10 @@ class CollectionAcknowledgementPrepareResult {
   final String? salesRepName;
   final OrderConfirmationContact? customer;
   final List<OrderConfirmationHubRecipient> hubRecipients;
+
+  /// True when an Owner / Manager / Administrator recorded the collection
+  /// themselves (as opposed to a Sales Rep).
+  final bool recordedByTeam;
 
   factory CollectionAcknowledgementPrepareResult.fromJson(
     Map<String, dynamic> json,
@@ -831,6 +872,7 @@ class CollectionAcknowledgementPrepareResult {
           DateTime.now().toUtc(),
       salesRepName: paymentMap['sales_rep_name']?.toString(),
       customer: parseContact(customerJson),
+      recordedByTeam: json['recorded_by_team'] == true,
       hubRecipients: [
         if (hubJson is List)
           for (final row in hubJson)

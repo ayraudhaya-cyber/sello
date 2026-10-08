@@ -39,18 +39,18 @@ class _CollectionsReportDialogState
   String? _error;
 
   String get _currencySymbol => SelloFormatters.currencySymbol(
-        ref.read(companySettingsProvider).currency,
-      );
+    ref.read(companySettingsProvider).currency,
+  );
 
   List<String> get _selectedNames => [
-        for (final rep in _reps)
-          if (_selectedRepIds.contains(rep.id)) rep.fullName,
-      ];
+    for (final rep in _reps)
+      if (_selectedRepIds.contains(rep.id)) rep.fullName,
+  ];
 
   String get _salesRepsLabel => CollectionsReportMath.salesRepsLabel(
-        selectedIds: _selectedRepIds.toList(),
-        selectedNames: _selectedNames,
-      );
+    selectedIds: _selectedRepIds.toList(),
+    selectedNames: _selectedNames,
+  );
 
   @override
   void initState() {
@@ -79,7 +79,9 @@ class _CollectionsReportDialogState
       _error = null;
     });
     try {
-      final page = await ref.read(employeeRepositoryProvider).fetchEmployees(
+      final page = await ref
+          .read(employeeRepositoryProvider)
+          .fetchEmployees(
             companyId: session.company.id,
             roleCode: 'sales_representative',
             pageSize: 200,
@@ -172,7 +174,9 @@ class _CollectionsReportDialogState
     try {
       downloadBrowserFile(
         bytes: CollectionsReportExcelExporter.buildBytes(snapshot),
-        filename: CollectionsReportExcelExporter.filename(asOf: snapshot.asOfDate),
+        filename: CollectionsReportExcelExporter.filename(
+          asOf: snapshot.asOfDate,
+        ),
         mimeType: 'application/vnd.ms-excel',
       );
       if (!mounted) return;
@@ -357,8 +361,15 @@ class _Filters extends StatelessWidget {
                 borderRadius: AppRadius.inputAll,
                 child: InputDecorator(
                   decoration: InputDecoration(
-                    label: const SelloFieldLabel(label: 'As of'),
-                    suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                    label: const SelloFieldLabel(
+                      label: 'As of',
+                      hint:
+                          'Unpaid amounts at the end of this day, including this date.',
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 18,
+                    ),
                   ),
                   child: Text(
                     SelloFormatters.date(asOf),

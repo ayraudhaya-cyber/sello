@@ -12,6 +12,7 @@ import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/models/payment_status.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum OrderStatusFilter {
   all,
@@ -26,6 +27,15 @@ enum OrderStatusFilter {
 enum OrderPaymentFilter { all, unpaid, partial, paid }
 
 enum OrderDateFilter { all, today, last7Days, thisMonth }
+
+enum OrderSort {
+  orderedAt('ordered_at'),
+  orderNumber('order_number'),
+  total('total');
+
+  const OrderSort(this.column);
+  final String column;
+}
 
 class HubOrdersState {
   const HubOrdersState({
@@ -42,8 +52,10 @@ class HubOrdersState {
     this.paymentFilter = OrderPaymentFilter.all,
     this.dateFilter = OrderDateFilter.all,
     this.employeeId,
+    this.sort = OrderSort.orderedAt,
+    this.sortAscending = false,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -59,6 +71,8 @@ class HubOrdersState {
   final OrderPaymentFilter paymentFilter;
   final OrderDateFilter dateFilter;
   final String? employeeId;
+  final OrderSort sort;
+  final bool sortAscending;
   final int page;
   final int pageSize;
   final bool hasMore;
@@ -68,6 +82,13 @@ class HubOrdersState {
   final bool initialized;
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
+
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      statusFilter != OrderStatusFilter.all ||
+      paymentFilter != OrderPaymentFilter.all ||
+      dateFilter != OrderDateFilter.all ||
+      employeeId != null;
 
   HubOrdersState copyWith({
     List<OrderSummary>? items,
@@ -79,6 +100,8 @@ class HubOrdersState {
     OrderDateFilter? dateFilter,
     String? employeeId,
     bool clearEmployee = false,
+    OrderSort? sort,
+    bool? sortAscending,
     int? page,
     int? pageSize,
     bool? hasMore,
@@ -97,6 +120,8 @@ class HubOrdersState {
       paymentFilter: paymentFilter ?? this.paymentFilter,
       dateFilter: dateFilter ?? this.dateFilter,
       employeeId: clearEmployee ? null : (employeeId ?? this.employeeId),
+      sort: sort ?? this.sort,
+      sortAscending: sortAscending ?? this.sortAscending,
       page: page ?? this.page,
       pageSize: pageSize ?? this.pageSize,
       hasMore: hasMore ?? this.hasMore,
@@ -117,8 +142,9 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -128,10 +154,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
   }
 
   Future<void> _initialize() async {
-    await Future.wait([
-      _loadReps(),
-      loadOrders(resetPage: true),
-    ]);
+    await Future.wait([_loadReps(), loadOrders(resetPage: true)]);
   }
 
   Future<void> _loadReps() async {
@@ -144,10 +167,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
   }
 
   Future<void> refresh() async {
-    await Future.wait([
-      _loadReps(),
-      loadOrders(resetPage: true),
-    ]);
+    await Future.wait([_loadReps(), loadOrders(resetPage: true)]);
   }
 
   Future<void> loadOrders({
@@ -155,6 +175,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     bool showLoading = true,
   }) async {
     final page = resetPage ? 0 : state.page;
+    final generation = ++_loadGeneration;
     state = state.copyWith(
       isLoading: showLoading ? true : state.isLoading,
       clearError: true,
@@ -163,48 +184,12 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     );
 
     try {
-      final now = DateTime.now().toUtc();
-      final orderedFrom = switch (state.dateFilter) {
-        OrderDateFilter.all => null,
-        OrderDateFilter.today => DateTime.utc(now.year, now.month, now.day),
-        OrderDateFilter.last7Days => now.subtract(const Duration(days: 7)),
-        OrderDateFilter.thisMonth => DateTime.utc(now.year, now.month, 1),
-      };
-
-      final ordersFuture = _repo.fetchOrders(
-        search: state.search,
-        statuses: switch (state.statusFilter) {
-          OrderStatusFilter.all => null,
-          OrderStatusFilter.draft => const [
-              OrderStatus.draft,
-              OrderStatus.placed,
-              OrderStatus.partiallyDelivered,
-            ],
-          OrderStatusFilter.openFulfillment => const [
-              OrderStatus.placed,
-              OrderStatus.partiallyDelivered,
-            ],
-          OrderStatusFilter.placed => const [OrderStatus.placed],
-          OrderStatusFilter.partiallyDelivered => const [
-              OrderStatus.partiallyDelivered,
-            ],
-          OrderStatusFilter.completed => const [OrderStatus.completed],
-          OrderStatusFilter.cancelled => const [OrderStatus.cancelled],
-        },
-        paymentStatus: switch (state.paymentFilter) {
-          OrderPaymentFilter.all => null,
-          OrderPaymentFilter.unpaid => PaymentStatus.unpaid,
-          OrderPaymentFilter.partial => PaymentStatus.partial,
-          OrderPaymentFilter.paid => PaymentStatus.paid,
-        },
-        employeeId: state.employeeId,
-        orderedFrom: orderedFrom,
-        page: page,
-        pageSize: state.pageSize,
-      );
+      final ordersFuture = _fetchFiltered(page: page, pageSize: state.pageSize);
       final countsFuture = _repo.fetchCounts();
+      countsFuture.ignore();
       final result = await ordersFuture;
       final counts = await countsFuture;
+      if (generation != _loadGeneration) return;
 
       state = state.copyWith(
         items: result.items,
@@ -215,9 +200,9 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
+      // Keep the rows already on screen; the error banner explains the rest.
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
@@ -225,8 +210,77 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     }
   }
 
+  /// Every order matching the current filters (for Excel export).
+  Future<List<OrderSummary>> fetchAllForExport({int maxRows = 20000}) async {
+    const pageSize = 500;
+    final rows = <OrderSummary>[];
+    for (var page = 0; rows.length < maxRows; page++) {
+      final result = await _fetchFiltered(page: page, pageSize: pageSize);
+      rows.addAll(result.items);
+      if (!result.hasMore) break;
+    }
+    return rows;
+  }
+
+  Future<OrderPageResult> _fetchFiltered({
+    required int page,
+    required int pageSize,
+  }) {
+    final now = DateTime.now();
+    final orderedFrom = switch (state.dateFilter) {
+      OrderDateFilter.all => null,
+      OrderDateFilter.today => DateTime(now.year, now.month, now.day),
+      OrderDateFilter.last7Days => now.subtract(const Duration(days: 7)),
+      OrderDateFilter.thisMonth => DateTime(now.year, now.month, 1),
+    };
+
+    return _repo.fetchOrders(
+      search: state.search,
+      statuses: switch (state.statusFilter) {
+        OrderStatusFilter.all => null,
+        OrderStatusFilter.draft => const [
+          OrderStatus.draft,
+          OrderStatus.placed,
+          OrderStatus.partiallyDelivered,
+        ],
+        OrderStatusFilter.openFulfillment => const [
+          OrderStatus.placed,
+          OrderStatus.partiallyDelivered,
+        ],
+        OrderStatusFilter.placed => const [OrderStatus.placed],
+        OrderStatusFilter.partiallyDelivered => const [
+          OrderStatus.partiallyDelivered,
+        ],
+        OrderStatusFilter.completed => const [OrderStatus.completed],
+        OrderStatusFilter.cancelled => const [OrderStatus.cancelled],
+      },
+      paymentStatus: switch (state.paymentFilter) {
+        OrderPaymentFilter.all => null,
+        OrderPaymentFilter.unpaid => PaymentStatus.unpaid,
+        OrderPaymentFilter.partial => PaymentStatus.partial,
+        OrderPaymentFilter.paid => PaymentStatus.paid,
+      },
+      employeeId: state.employeeId,
+      orderedFrom: orderedFrom,
+      orderBy: state.sort.column,
+      ascending: state.sortAscending,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  int _loadGeneration = 0;
+
   Future<void> setSearch(String value) async {
     state = state.copyWith(search: value, page: 0);
+    await loadOrders(resetPage: true);
+  }
+
+  /// Tapping the active column flips direction; a new column starts newest /
+  /// largest first.
+  Future<void> setSort(OrderSort sort) async {
+    final ascending = state.sort == sort ? !state.sortAscending : false;
+    state = state.copyWith(sort: sort, sortAscending: ascending, page: 0);
     await loadOrders(resetPage: true);
   }
 
@@ -249,6 +303,18 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     state = state.copyWith(
       employeeId: employeeId,
       clearEmployee: employeeId == null,
+      page: 0,
+    );
+    await loadOrders(resetPage: true);
+  }
+
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: OrderStatusFilter.all,
+      paymentFilter: OrderPaymentFilter.all,
+      dateFilter: OrderDateFilter.all,
+      clearEmployee: true,
       page: 0,
     );
     await loadOrders(resetPage: true);
@@ -401,5 +467,6 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
   }
 }
 
-final hubOrdersProvider =
-    NotifierProvider<HubOrdersNotifier, HubOrdersState>(HubOrdersNotifier.new);
+final hubOrdersProvider = NotifierProvider<HubOrdersNotifier, HubOrdersState>(
+  HubOrdersNotifier.new,
+);

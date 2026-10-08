@@ -16,6 +16,7 @@ class SelloCustomersState {
     this.pageSize = 40,
     this.hasMore = false,
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.errorMessage,
     this.initialized = false,
   });
@@ -26,6 +27,7 @@ class SelloCustomersState {
   final int pageSize;
   final bool hasMore;
   final bool isLoading;
+  final bool isLoadingMore;
   final String? errorMessage;
   final bool initialized;
 
@@ -38,6 +40,7 @@ class SelloCustomersState {
     int? pageSize,
     bool? hasMore,
     bool? isLoading,
+    bool? isLoadingMore,
     String? errorMessage,
     bool clearError = false,
     bool? initialized,
@@ -49,6 +52,7 @@ class SelloCustomersState {
       pageSize: pageSize ?? this.pageSize,
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       initialized: initialized ?? this.initialized,
     );
@@ -64,8 +68,9 @@ class SelloCustomersNotifier extends Notifier<SelloCustomersState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -76,10 +81,14 @@ class SelloCustomersNotifier extends Notifier<SelloCustomersState> {
 
   Future<void> refresh() => loadCustomers(resetPage: true);
 
+  int _loadGeneration = 0;
+
   Future<void> loadCustomers({bool resetPage = false}) async {
+    final generation = ++_loadGeneration;
     final page = resetPage ? 0 : state.page;
     state = state.copyWith(
       isLoading: true,
+      isLoadingMore: false,
       clearError: true,
       page: page,
       initialized: true,
@@ -92,6 +101,7 @@ class SelloCustomersNotifier extends Notifier<SelloCustomersState> {
         page: page,
         pageSize: state.pageSize,
       );
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
         items: result.items,
         hasMore: result.hasMore,
@@ -100,13 +110,43 @@ class SelloCustomersNotifier extends Notifier<SelloCustomersState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
       );
+    }
+  }
+
+  /// Appends the next page (infinite scroll).
+  Future<void> loadMore() async {
+    if (!state.hasMore || state.isLoading || state.isLoadingMore) return;
+    final generation = _loadGeneration;
+    final nextPage = state.page + 1;
+    state = state.copyWith(isLoadingMore: true);
+    try {
+      final result = await _repo.fetchCustomers(
+        search: state.search,
+        isActive: true,
+        page: nextPage,
+        pageSize: state.pageSize,
+      );
+      if (generation != _loadGeneration) return;
+      final seen = {for (final c in state.items) c.id};
+      state = state.copyWith(
+        items: [
+          ...state.items,
+          for (final c in result.items)
+            if (!seen.contains(c.id)) c,
+        ],
+        page: nextPage,
+        hasMore: result.hasMore,
+        isLoadingMore: false,
+      );
+    } on AppFailure {
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(isLoadingMore: false);
     }
   }
 
@@ -118,5 +158,5 @@ class SelloCustomersNotifier extends Notifier<SelloCustomersState> {
 
 final selloCustomersProvider =
     NotifierProvider<SelloCustomersNotifier, SelloCustomersState>(
-  SelloCustomersNotifier.new,
-);
+      SelloCustomersNotifier.new,
+    );

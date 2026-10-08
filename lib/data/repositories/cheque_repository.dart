@@ -444,6 +444,41 @@ class ChequeRepository {
     );
   }
 
+  Future<ChequeSummary> updateDetails({
+    required String chequeId,
+    String? bankName,
+    String? chequeNumber,
+    String? holderName,
+    DateTime? chequeDate,
+    String? notes,
+    String? photoPath,
+  }) async {
+    try {
+      await _client.rpc(
+        'update_cheque_details',
+        params: {
+          'p_cheque_id': chequeId,
+          'p_bank_name': bankName,
+          'p_cheque_number': chequeNumber,
+          'p_holder_name': holderName,
+          'p_cheque_date': chequeDate == null ? null : _dateOnly(chequeDate),
+          'p_notes': notes,
+          'p_photo_path': photoPath,
+        },
+      );
+      final detail = await fetchById(chequeId);
+      if (detail == null) {
+        throw const UnexpectedFailure('Unable to load cheque.');
+      }
+      return detail;
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapChequeError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
   Future<ChequeSummary> cancelCheque(String chequeId, {String? reason}) async {
     return _transition(
       rpc: 'cancel_cheque',

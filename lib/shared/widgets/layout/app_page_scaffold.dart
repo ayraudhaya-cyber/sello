@@ -28,6 +28,10 @@ class AppPageScaffold extends StatelessWidget {
     this.breadcrumbs,
     this.headerSpacing = AppSpacing.section,
     this.scrollable = true,
+    this.inlineActions = false,
+    this.onRefresh,
+    this.onNearEnd,
+    this.leading,
   });
 
   final String title;
@@ -48,6 +52,19 @@ class AppPageScaffold extends StatelessWidget {
   /// When false, the page does not scroll as a whole so a child can pin a
   /// side nav and scroll only its content pane.
   final bool scrollable;
+
+  /// Keeps [actions] on the title row on phones (see
+  /// [SelloSectionHeader.inlineAction]). Pair with compact actions.
+  final bool inlineActions;
+
+  /// Pull-to-refresh for scrollable pages.
+  final Future<void> Function()? onRefresh;
+
+  /// Fires as the user nears the bottom of a scrollable page (load more).
+  final VoidCallback? onNearEnd;
+
+  /// Placed before the title (e.g. a back button on pushed pages).
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +97,8 @@ class AppPageScaffold extends StatelessWidget {
                 maxWidth: maxWidth,
                 padding: padding,
                 scrollable: scrollable,
+                onRefresh: onRefresh,
+                onNearEnd: onNearEnd,
                 child: Column(
                   mainAxisSize: scrollable
                       ? MainAxisSize.min
@@ -94,8 +113,21 @@ class AppPageScaffold extends StatelessWidget {
                       SelloSectionHeader(
                         title: title,
                         subtitle: subtitle,
+                        leading: leading,
+                        inlineAction: inlineActions,
                         action: actions == null
                             ? null
+                            : inlineActions
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (var i = 0; i < actions!.length; i++) ...[
+                                    if (i > 0)
+                                      const SizedBox(width: AppSpacing.xs),
+                                    actions![i],
+                                  ],
+                                ],
+                              )
                             : Wrap(
                                 spacing: AppSpacing.xs,
                                 runSpacing: AppSpacing.xs,

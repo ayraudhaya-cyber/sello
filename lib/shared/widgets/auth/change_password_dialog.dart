@@ -53,7 +53,9 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
 
     setState(() => _saving = true);
     try {
-      await ref.read(authServiceProvider).changePassword(
+      await ref
+          .read(authServiceProvider)
+          .changePassword(
             currentPassword: _currentController.text,
             newPassword: _newController.text,
           );

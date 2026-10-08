@@ -8,10 +8,7 @@ import 'package:sello/shared/models/scheduled_visit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class VisitPageResult {
-  const VisitPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const VisitPageResult({required this.items, required this.hasMore});
 
   final List<ScheduledVisit> items;
   final bool hasMore;
@@ -19,11 +16,9 @@ class VisitPageResult {
 
 /// Shared visit planning repository — Hub schedules; Sales Home reads today.
 class VisitRepository {
-  VisitRepository({
-    SupabaseClient? client,
-    BusinessEventBus? events,
-  })  : _client = client ?? SupabaseService.client,
-        _events = events ?? BusinessEventBus();
+  VisitRepository({SupabaseClient? client, BusinessEventBus? events})
+    : _client = client ?? SupabaseService.client,
+      _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
@@ -161,29 +156,22 @@ class VisitRepository {
       var items = rows;
       final needle = search.trim().toLowerCase();
       if (needle.isNotEmpty) {
-        items = items
-            .where((visit) {
-              final hay = [
-                visit.customerName,
-                visit.employeeName,
-                visit.purpose,
-                visit.notes,
-                visit.customerPhone,
-              ].whereType<String>().join(' ').toLowerCase();
-              return hay.contains(needle);
-            })
-            .toList();
+        items = items.where((visit) {
+          final hay = [
+            visit.customerName,
+            visit.employeeName,
+            visit.purpose,
+            visit.notes,
+            visit.customerPhone,
+          ].whereType<String>().join(' ').toLowerCase();
+          return hay.contains(needle);
+        }).toList();
       }
 
-      return VisitPageResult(
-        items: items,
-        hasMore: hasMore,
-      );
+      return VisitPageResult(items: items, hasMore: hasMore);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load visits.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to load visits.' : error.message,
       );
     } catch (_) {
       throw const UnexpectedFailure('Unable to load visits.');
@@ -246,7 +234,8 @@ class VisitRepository {
     }
   }
 
-  Future<({DateTime? lastVisitAt, DateTime? nextVisitAt})> fetchCustomerVisitPeek({
+  Future<({DateTime? lastVisitAt, DateTime? nextVisitAt})>
+  fetchCustomerVisitPeek({
     required String companyId,
     required String customerId,
   }) async {
@@ -319,7 +308,8 @@ class VisitRepository {
           event: BusinessEvents.visitScheduled(
             visitId: visitId,
             recipientEmployeeId: input.employeeId,
-            priority: input.priority == VisitPriority.urgent ||
+            priority:
+                input.priority == VisitPriority.urgent ||
                     input.priority == VisitPriority.high
                 ? NotificationPriority.high
                 : NotificationPriority.normal,
@@ -391,17 +381,14 @@ class VisitRepository {
               'customer_id': creates[i].customerId,
               'employee_id': creates[i].employeeId,
               'visit_date': _dateKey(creates[i].visitDate),
-              'preferred_time':
-                  _minutesToTime(creates[i].preferredTimeMinutes),
+              'preferred_time': _minutesToTime(creates[i].preferredTimeMinutes),
               'expected_duration_minutes': creates[i].expectedDurationMinutes,
               'status': creates[i].status.dbValue,
               'priority': creates[i].priority.dbValue,
               'purpose': _blankToNull(creates[i].purpose),
               'notes': _blankToNull(creates[i].notes),
               'area': _blankToNull(creates[i].area),
-              'sort_order': creates[i].sortOrder > 0
-                  ? creates[i].sortOrder
-                  : i,
+              'sort_order': creates[i].sortOrder > 0 ? creates[i].sortOrder : i,
               'recurrence_rule': _blankToNull(creates[i].recurrenceRule),
               'created_by': actorEmployeeId,
               'updated_by': actorEmployeeId,
@@ -507,10 +494,14 @@ class VisitRepository {
     required String actorEmployeeId,
   }) async {
     try {
-      await _client.from('scheduled_visits').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-        'updated_by': actorEmployeeId,
-      }).eq('id', visitId).eq('company_id', companyId);
+      await _client
+          .from('scheduled_visits')
+          .update({
+            'deleted_at': DateTime.now().toUtc().toIso8601String(),
+            'updated_by': actorEmployeeId,
+          })
+          .eq('id', visitId)
+          .eq('company_id', companyId);
     } on PostgrestException catch (error) {
       throw ValidationFailure(
         error.message.trim().isEmpty
@@ -530,10 +521,11 @@ class VisitRepository {
   }) async {
     try {
       for (var i = 0; i < visitIdsInOrder.length; i++) {
-        await _client.from('scheduled_visits').update({
-          'sort_order': i,
-          'updated_by': actorEmployeeId,
-        }).eq('id', visitIdsInOrder[i]).eq('company_id', companyId);
+        await _client
+            .from('scheduled_visits')
+            .update({'sort_order': i, 'updated_by': actorEmployeeId})
+            .eq('id', visitIdsInOrder[i])
+            .eq('company_id', companyId);
       }
     } on PostgrestException catch (error) {
       throw ValidationFailure(
@@ -619,9 +611,7 @@ class VisitRepository {
       return CustomerVisit.fromJson(Map<String, dynamic>.from(row));
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load visit.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to load visit.' : error.message,
       );
     } catch (_) {
       throw const UnexpectedFailure('Unable to load visit.');
@@ -644,9 +634,7 @@ class VisitRepository {
       return CustomerVisit.fromJson(Map<String, dynamic>.from(row));
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load visit.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to load visit.' : error.message,
       );
     } catch (_) {
       throw const UnexpectedFailure('Unable to load visit.');
@@ -691,9 +679,8 @@ class VisitRepository {
 
       final visits = (response as List)
           .map(
-            (row) => CustomerVisit.fromJson(
-              Map<String, dynamic>.from(row as Map),
-            ),
+            (row) =>
+                CustomerVisit.fromJson(Map<String, dynamic>.from(row as Map)),
           )
           .toList();
       return _enrichVisitLinkCounts(companyId: companyId, visits: visits);
@@ -761,8 +748,9 @@ class VisitRepository {
       final scheduledPending = scheduled
           .where((v) => v.status == VisitStatus.scheduled)
           .length;
-      final missed =
-          scheduled.where((v) => v.status == VisitStatus.missed).length;
+      final missed = scheduled
+          .where((v) => v.status == VisitStatus.missed)
+          .length;
 
       return CustomerVisitDayStats(
         completed: completed,
@@ -830,15 +818,34 @@ class VisitRepository {
         );
       }
       throw ValidationFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to start visit.'
-            : error.message,
+        error.message.trim().isEmpty ? 'Unable to start visit.' : error.message,
       );
     } on AppFailure {
       rethrow;
     } catch (_) {
       throw const UnexpectedFailure('Unable to start visit.');
     }
+  }
+
+  /// Fills in the start location after the visit has already opened, so a
+  /// slow GPS fix never delays the rep. Never overwrites an existing fix.
+  Future<void> attachStartGps({
+    required String companyId,
+    required String visitId,
+    required VisitGpsPoint gps,
+  }) async {
+    try {
+      await _client
+          .from('customer_visits')
+          .update({
+            'start_latitude': gps.latitude,
+            'start_longitude': gps.longitude,
+            'start_accuracy_meters': gps.accuracyMeters,
+          })
+          .eq('id', visitId)
+          .eq('company_id', companyId)
+          .isFilter('start_latitude', null);
+    } catch (_) {}
   }
 
   Future<CustomerVisit> completeCustomerVisit({
@@ -859,8 +866,10 @@ class VisitRepository {
       }
 
       final endedAt = DateTime.now().toUtc();
-      final durationMinutes =
-          endedAt.difference(existing.startedAt.toUtc()).inMinutes.clamp(0, 24 * 60);
+      final durationMinutes = endedAt
+          .difference(existing.startedAt.toUtc())
+          .inMinutes
+          .clamp(0, 24 * 60);
 
       final payload = <String, dynamic>{
         'status': CustomerVisitStatus.completed.dbValue,
@@ -952,12 +961,16 @@ class VisitRepository {
     String? notes,
   }) async {
     try {
-      await _client.from('customer_visits').update({
-        'status': CustomerVisitStatus.cancelled.dbValue,
-        'ended_at': DateTime.now().toUtc().toIso8601String(),
-        'notes': _blankToNull(notes),
-        'updated_by': actorEmployeeId,
-      }).eq('id', visitId).eq('company_id', companyId);
+      await _client
+          .from('customer_visits')
+          .update({
+            'status': CustomerVisitStatus.cancelled.dbValue,
+            'ended_at': DateTime.now().toUtc().toIso8601String(),
+            'notes': _blankToNull(notes),
+            'updated_by': actorEmployeeId,
+          })
+          .eq('id', visitId)
+          .eq('company_id', companyId);
     } on PostgrestException catch (error) {
       throw ValidationFailure(
         error.message.trim().isEmpty
@@ -970,17 +983,20 @@ class VisitRepository {
   }
 
   /// Report foundation — completed / missed / conversion for a period.
-  Future<({
-    int completed,
-    int missed,
-    int scheduled,
-    int withOrders,
-    int withPayments,
-    int ordersLinked,
-    num collectionsAmount,
-    List<({String employeeId, String name, int completed, int withOrders})>
-        byRepresentative,
-  })> fetchVisitReportMetrics({
+  Future<
+    ({
+      int completed,
+      int missed,
+      int scheduled,
+      int withOrders,
+      int withPayments,
+      int ordersLinked,
+      num collectionsAmount,
+      List<({String employeeId, String name, int completed, int withOrders})>
+      byRepresentative,
+    })
+  >
+  fetchVisitReportMetrics({
     required String companyId,
     required DateTime from,
     required DateTime to,
@@ -1004,10 +1020,12 @@ class VisitRepository {
           .where((v) => v.status == VisitStatus.missed)
           .length;
       final planned = scheduled.items
-          .where((v) =>
-              v.status == VisitStatus.scheduled ||
-              v.status == VisitStatus.completed ||
-              v.status == VisitStatus.missed)
+          .where(
+            (v) =>
+                v.status == VisitStatus.scheduled ||
+                v.status == VisitStatus.completed ||
+                v.status == VisitStatus.missed,
+          )
           .length;
 
       var withOrders = 0;

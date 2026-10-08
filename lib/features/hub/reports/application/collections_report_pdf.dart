@@ -12,7 +12,9 @@ abstract final class CollectionsReportPdf {
   static const _line = PdfColor.fromInt(0xFFEBE6F8);
   static const _totalFill = PdfColor.fromInt(0xFFFBFAFE);
 
-  static Future<List<int>> buildBytes(CollectionsReportSnapshot snapshot) async {
+  static Future<List<int>> buildBytes(
+    CollectionsReportSnapshot snapshot,
+  ) async {
     String money(num value) =>
         SelloFormatters.currency(value, symbol: snapshot.currencySymbol);
     final asOf = SelloFormatters.date(snapshot.asOfDate);

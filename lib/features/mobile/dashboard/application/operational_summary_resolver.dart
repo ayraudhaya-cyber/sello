@@ -84,9 +84,7 @@ abstract final class OperationalSummaryResolver {
         kind: OperationalMetricKind.followUps,
         label: 'Follow-ups',
         value: '${insights.followUpsDue}',
-        trendLabel: insights.followUpsDue > 0
-            ? 'Need attention'
-            : 'All clear',
+        trendLabel: insights.followUpsDue > 0 ? 'Need attention' : 'All clear',
         trendPositive: insights.followUpsDue == 0,
         icon: Icons.flag_rounded,
         tone: AppColors.attention,

@@ -10,10 +10,16 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/documents/presentation/order_document_print.dart';
 import 'package:sello/features/hub/orders/application/hub_orders_provider.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
+import 'package:sello/features/corrections/application/correction_rules.dart';
+import 'package:sello/features/corrections/presentation/reassign_order_sales_rep_dialog.dart';
+import 'package:sello/features/orders/application/orders_excel_exporter.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/orders/presentation/order_fulfillment_dialog.dart';
+import 'package:sello/features/payments/application/order_collection_rules.dart';
+import 'package:sello/features/payments/presentation/record_order_collection_sheet.dart';
+import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
 import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/notifications/outbound/outbound_sms.dart';
@@ -21,6 +27,7 @@ import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/payment_status.dart';
+import 'package:sello/shared/utils/browser_file_download.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/utils/quick_new_query.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -59,6 +66,87 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     return SelloFormatters.currencySymbol(currency);
   }
 
+  bool _exporting = false;
+
+  String _filterLabel(HubOrdersState state) {
+    final repName = state.reps
+        .where((r) => r.id == state.employeeId)
+        .map((r) => r.name)
+        .firstOrNull;
+    final parts = <String>[
+      if (state.statusFilter != OrderStatusFilter.all)
+        'Status: ${switch (state.statusFilter) {
+          OrderStatusFilter.all => 'All',
+          OrderStatusFilter.draft => 'Open',
+          OrderStatusFilter.openFulfillment => 'Waiting to deliver',
+          OrderStatusFilter.placed => 'Placed',
+          OrderStatusFilter.partiallyDelivered => 'Partially delivered',
+          OrderStatusFilter.completed => 'Completed',
+          OrderStatusFilter.cancelled => 'Cancelled',
+        }}',
+      if (state.paymentFilter != OrderPaymentFilter.all)
+        'Payment: ${switch (state.paymentFilter) {
+          OrderPaymentFilter.all => 'All',
+          OrderPaymentFilter.unpaid => 'Unpaid',
+          OrderPaymentFilter.partial => 'Partial',
+          OrderPaymentFilter.paid => 'Paid',
+        }}',
+      if (state.dateFilter != OrderDateFilter.all)
+        'Date: ${switch (state.dateFilter) {
+          OrderDateFilter.all => 'All time',
+          OrderDateFilter.today => 'Today',
+          OrderDateFilter.last7Days => 'Last 7 days',
+          OrderDateFilter.thisMonth => 'This month',
+        }}',
+      if (repName != null) 'Rep: $repName',
+      if (state.search.trim().isNotEmpty) 'Search: "${state.search.trim()}"',
+    ];
+    return parts.isEmpty ? 'All orders' : parts.join(' · ');
+  }
+
+  Future<void> _exportOrders() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final notifier = ref.read(hubOrdersProvider.notifier);
+      final rows = await notifier.fetchAllForExport();
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        SelloSnackbars.info(context, 'No orders match these filters.');
+        return;
+      }
+      downloadBrowserFile(
+        bytes: OrdersExcelExporter.buildBytes(
+          orders: rows,
+          filterLabel: _filterLabel(ref.read(hubOrdersProvider)),
+        ),
+        filename: OrdersExcelExporter.filename(),
+        mimeType: 'application/vnd.ms-excel',
+      );
+      SelloSnackbars.success(
+        context,
+        rows.length == 1
+            ? '1 order exported.'
+            : '${rows.length} orders exported.',
+      );
+    } on AppFailure catch (failure) {
+      if (mounted) SelloSnackbars.error(context, failure.message);
+    } on UnsupportedError {
+      if (mounted) {
+        SelloSnackbars.warning(
+          context,
+          'Export download is available in the web app.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        SelloSnackbars.error(context, 'Unable to export orders right now.');
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _openEditor({OrderDetail? existing}) async {
     final result = await showDialog<OrderEditorResult>(
       context: context,
@@ -70,7 +158,9 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     );
     if (result == null) return;
 
-    final saved = await ref.read(hubOrdersProvider.notifier).saveOrder(
+    final saved = await ref
+        .read(hubOrdersProvider.notifier)
+        .saveOrder(
           result.input,
           complete: result.complete,
           place: result.place,
@@ -91,21 +181,40 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     } else if (result.place) {
       SelloSnackbars.success(context, 'Order placed.');
     } else {
-      SelloSnackbars.success(
-        context,
-        'Saved for later.',
-      );
+      SelloSnackbars.success(context, 'Saved for later.');
     }
   }
 
-  Future<void> _openDetails(OrderSummary order) async {
-    final detail =
-        await ref.read(orderRepositoryProvider).fetchById(order.id);
-    if (!mounted) return;
-    if (detail == null) {
-      SelloSnackbars.error(context, 'Unable to load that order.');
-      return;
+  String? _busyRowKey;
+
+  Future<OrderDetail?> _loadDetail(OrderSummary order, String action) async {
+    if (_busyRowKey != null) return null;
+    setState(() => _busyRowKey = '$action:${order.id}');
+    try {
+      final detail = await ref
+          .read(orderRepositoryProvider)
+          .fetchById(order.id);
+      if (detail == null && mounted) {
+        SelloSnackbars.error(context, 'Unable to load that order.');
+      }
+      return detail;
+    } on AppFailure catch (failure) {
+      if (mounted) SelloSnackbars.error(context, failure.message);
+      return null;
+    } catch (_) {
+      if (mounted) SelloSnackbars.error(context, 'Unable to load that order.');
+      return null;
+    } finally {
+      if (mounted) setState(() => _busyRowKey = null);
     }
+  }
+
+  bool _isBusy(OrderSummary order, String action) =>
+      _busyRowKey == '$action:${order.id}';
+
+  Future<void> _openDetails(OrderSummary order) async {
+    final detail = await _loadDetail(order, 'view');
+    if (!mounted || detail == null) return;
 
     await showDialog<void>(
       context: context,
@@ -143,7 +252,8 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                 await _cancelRemaining(detail.summary);
               }
             : null,
-        onCancelOrder: detail.summary.isEditable ||
+        onCancelOrder:
+            detail.summary.isEditable ||
                 detail.summary.status == OrderStatus.placed
             ? () async {
                 Navigator.of(context).pop();
@@ -165,22 +275,78 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         onCollectionSaved: () {
           ref.read(hubOrdersProvider.notifier).refresh();
         },
+        onChangeSalesRep:
+            (ref.read(permissionServiceProvider)?.canCorrectFinancials ??
+                    false) &&
+                OrderCorrectionRules.canChangeSalesRep(detail.summary.status)
+            ? () async {
+                final reps = ref.read(hubOrdersProvider).reps;
+                final changed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => ReassignOrderSalesRepDialog(
+                    order: detail.summary,
+                    reps: reps,
+                  ),
+                );
+                if (changed == true && context.mounted) {
+                  Navigator.of(context).pop();
+                  ref.read(hubOrdersProvider.notifier).refresh();
+                  if (mounted) {
+                    SelloSnackbars.success(context, 'Sales Rep updated.');
+                    await _openDetails(order);
+                  }
+                }
+              }
+            : null,
       ),
     );
   }
 
-  Future<OrderConfirmationOutcome?> _prepareInvoiceShare(
-    String orderId,
-  ) async {
-    return ref.read(orderConfirmationDispatcherProvider).dispatch(
-          orderId,
-          smsMode: OrderConfirmationSmsMode.shareActions,
-        );
+  Future<void> _recordCollectionFromRow(OrderSummary order) async {
+    try {
+      final balance = await ref
+          .read(paymentRepositoryProvider)
+          .fetchOrderCollections(order.id);
+      if (!mounted) return;
+      final outstanding = balance.outstandingFor(order.total);
+      final saved = await showRecordOrderCollectionSheet(
+        context: context,
+        customerId: order.customerId,
+        customerName: order.customerName ?? 'Customer',
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        outstanding: outstanding,
+        currencySymbol: _currencySymbol(),
+        orderVisitId: order.visitId,
+        orderTotal: order.total,
+        amountPaid: balance.amountPaid,
+        amountPending: balance.amountPending,
+        priorEntries: balance.entries,
+        orderPaymentMethod: order.paymentMethod,
+      );
+      if (saved && mounted) {
+        ref.read(hubOrdersProvider.notifier).refresh();
+        SelloSnackbars.success(context, 'Collection saved.');
+      }
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, 'Unable to record this collection.');
+    }
+  }
+
+  Future<OrderConfirmationOutcome?> _prepareInvoiceShare(String orderId) async {
+    return ref
+        .read(orderConfirmationDispatcherProvider)
+        .dispatch(orderId, smsMode: OrderConfirmationSmsMode.shareActions);
   }
 
   Future<String> _messagingUnavailableMessage() async {
-    final policies =
-        await ref.read(orderDocumentRepositoryProvider).fetchOutboundPolicies();
+    final policies = await ref
+        .read(orderDocumentRepositoryProvider)
+        .fetchOutboundPolicies();
     return policies.inactiveOrderMessagingReason() ??
         'Unable to prepare the confirmation for this order.';
   }
@@ -330,10 +496,7 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       case OutboundSmsStatus.sent:
         SelloSnackbars.success(context, 'SMS sent to the customer.');
       case OutboundSmsStatus.alreadySent:
-        SelloSnackbars.success(
-          context,
-          'SMS was already sent for this order.',
-        );
+        SelloSnackbars.success(context, 'SMS was already sent for this order.');
       case OutboundSmsStatus.skippedMissingSender:
         SelloSnackbars.warning(
           context,
@@ -360,10 +523,9 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     );
     if (result == null || !mounted) return;
 
-    final error = await ref.read(hubOrdersProvider.notifier).fulfillOrderItems(
-          orderId: detail.summary.id,
-          lines: result.lines,
-        );
+    final error = await ref
+        .read(hubOrdersProvider.notifier)
+        .fulfillOrderItems(orderId: detail.summary.id, lines: result.lines);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -375,26 +537,24 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     }
   }
 
-  Future<void> _fulfillAll(
-    OrderSummary order, {
-    bool fromDraft = false,
-  }) async {
+  Future<void> _fulfillAll(OrderSummary order, {bool fromDraft = false}) async {
     final confirmed = await showSelloDialog(
       context: context,
       title: fromDraft ? 'Mark as delivered?' : 'Deliver remaining?',
       message: fromDraft
           ? '${order.orderNumber} will be placed and all quantities delivered. '
-              'Stock will be reduced for every line. Payment is not settled automatically.'
+                'Stock will be reduced for every line. Payment is not settled automatically.'
           : '${order.orderNumber}: deliver every remaining unit now. '
-              'Stock will be reduced only for remaining quantities. Payment is not settled automatically.',
+                'Stock will be reduced only for remaining quantities. Payment is not settled automatically.',
       confirmLabel: fromDraft ? 'Mark as delivered' : 'Deliver remaining',
       cancelLabel: 'Back',
     );
     if (confirmed != true || !mounted) return;
 
     if (fromDraft) {
-      final saved =
-          await ref.read(hubOrdersProvider.notifier).completeExisting(order);
+      final saved = await ref
+          .read(hubOrdersProvider.notifier)
+          .completeExisting(order);
       if (!mounted) return;
       if (!saved.isOk) {
         SelloSnackbars.error(
@@ -415,8 +575,9 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       return;
     }
 
-    final saved =
-        await ref.read(hubOrdersProvider.notifier).fulfillAllRemaining(order);
+    final saved = await ref
+        .read(hubOrdersProvider.notifier)
+        .fulfillAllRemaining(order);
     if (!mounted) return;
     if (!saved.isOk) {
       SelloSnackbars.error(
@@ -467,15 +628,14 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       message: order.status == OrderStatus.placed
           ? '${order.orderNumber} will be cancelled. No inventory will change.'
           : '${order.orderNumber} will be cancelled. Draft and cancelled orders '
-              'never reduce inventory.',
+                'never reduce inventory.',
       confirmLabel: 'Cancel order',
       cancelLabel: 'Keep',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
 
-    final error =
-        await ref.read(hubOrdersProvider.notifier).cancelOrder(order);
+    final error = await ref.read(hubOrdersProvider.notifier).cancelOrder(order);
     if (!mounted) return;
     if (error != null) {
       SelloSnackbars.error(context, error);
@@ -489,6 +649,8 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     final state = ref.watch(hubOrdersProvider);
     ref.watch(hubSettingsProvider);
     final currencySymbol = _currencySymbol();
+    DataColumnSortCallback sortBy(OrderSort sort) =>
+        (_, _) => ref.read(hubOrdersProvider.notifier).setSort(sort);
 
     if (_searchController.text != state.search) {
       _searchController.value = TextEditingValue(
@@ -532,15 +694,24 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
               }
             },
             onRepChanged: (value) {
-              ref.read(hubOrdersProvider.notifier).setEmployeeFilter(
-                    value == _allReps ? null : value,
-                  );
+              ref
+                  .read(hubOrdersProvider.notifier)
+                  .setEmployeeFilter(value == _allReps ? null : value);
             },
             onRefresh: () => ref.read(hubOrdersProvider.notifier).refresh(),
             isRefreshing: state.isLoading,
+            onExport: _exporting ? null : _exportOrders,
+            isExporting: _exporting,
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloClearFiltersBar(
+            visible: state.hasActiveFilters,
+            onClear: () {
+              _searchController.clear();
+              ref.read(hubOrdersProvider.notifier).clearFilters();
+            },
+          ),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,
           ),
@@ -552,6 +723,11 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
           ] else ...[
             _OrdersSummaryRow(counts: state.counts),
             const SizedBox(height: AppSpacing.lg),
+            if (state.errorMessage != null && state.items.isNotEmpty)
+              SelloInlineErrorBar(
+                message: state.errorMessage,
+                onRetry: () => ref.read(hubOrdersProvider.notifier).refresh(),
+              ),
             if (state.errorMessage != null && state.items.isEmpty)
               SizedBox(
                 height: 320,
@@ -584,12 +760,12 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                       _OrderMobileCard(
                         order: order,
                         currencySymbol: currencySymbol,
+                        opening: _isBusy(order, 'view'),
+                        editing: _isBusy(order, 'edit'),
                         onOpen: () => _openDetails(order),
                         onEdit: order.isEditable
                             ? () async {
-                                final detail = await ref
-                                    .read(orderRepositoryProvider)
-                                    .fetchById(order.id);
+                                final detail = await _loadDetail(order, 'edit');
                                 if (detail != null && mounted) {
                                   await _openEditor(existing: detail);
                                 }
@@ -604,13 +780,13 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                       onPrev: state.page <= 0
                           ? null
                           : () => ref
-                              .read(hubOrdersProvider.notifier)
-                              .goToPage(state.page - 1),
+                                .read(hubOrdersProvider.notifier)
+                                .goToPage(state.page - 1),
                       onNext: !state.hasMore
                           ? null
                           : () => ref
-                              .read(hubOrdersProvider.notifier)
-                              .goToPage(state.page + 1),
+                                .read(hubOrdersProvider.notifier)
+                                .goToPage(state.page + 1),
                     ),
                   ],
                 ),
@@ -618,14 +794,31 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
             else
               SelloFadeIn(
                 child: SelloDataTable(
+                  flexColumnIndex: 1,
+                  sortColumnIndex: switch (state.sort) {
+                    OrderSort.orderNumber => 0,
+                    OrderSort.total => 3,
+                    OrderSort.orderedAt => 6,
+                  },
+                  sortAscending: state.sortAscending,
                   columns: [
-                    selloDataColumn('Invoice No'),
+                    selloDataColumn(
+                      'Invoice No',
+                      onSort: sortBy(OrderSort.orderNumber),
+                    ),
                     selloDataColumn('Customer'),
                     selloDataColumn('Representative'),
-                    selloDataColumn('Total', numeric: true),
+                    selloDataColumn(
+                      'Total',
+                      numeric: true,
+                      onSort: sortBy(OrderSort.total),
+                    ),
                     selloDataColumn('Payment'),
                     selloDataColumn('Status'),
-                    selloDataColumn('Created'),
+                    selloDataColumn(
+                      'Created',
+                      onSort: sortBy(OrderSort.orderedAt),
+                    ),
                     selloDataColumn('Actions'),
                   ],
                   rows: [
@@ -657,9 +850,7 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                               ],
                             ),
                           ),
-                          DataCell(
-                            SelloTableText(order.employeeName ?? '—'),
-                          ),
+                          DataCell(SelloTableText(order.employeeName ?? '—')),
                           DataCell(
                             SelloTableText(
                               SelloFormatters.currency(
@@ -679,31 +870,55 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                             ),
                           ),
                           DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                            SelloRowIconGroup(
                               children: [
-                                SelloButton(
-                                  label: 'View',
-                                  size: SelloButtonSize.small,
-                                  variant: SelloButtonVariant.ghost,
+                                SelloRowIconButton(
+                                  tooltip: 'View order',
+                                  icon: Icons.visibility_outlined,
+                                  loading: _isBusy(order, 'view'),
                                   onPressed: () => _openDetails(order),
                                 ),
-                                if (order.isEditable) ...[
-                                  const SizedBox(width: 4),
-                                  SelloButton(
-                                    label: 'Edit',
-                                    size: SelloButtonSize.small,
-                                    variant: SelloButtonVariant.outline,
+                                if (order.isEditable)
+                                  SelloRowIconButton(
+                                    tooltip: 'Edit draft',
+                                    icon: Icons.edit_outlined,
+                                    loading: _isBusy(order, 'edit'),
                                     onPressed: () async {
-                                      final detail = await ref
-                                          .read(orderRepositoryProvider)
-                                          .fetchById(order.id);
+                                      final detail = await _loadDetail(
+                                        order,
+                                        'edit',
+                                      );
                                       if (detail != null && mounted) {
                                         await _openEditor(existing: detail);
                                       }
                                     },
                                   ),
-                                ],
+                                if (order.status.canFulfill)
+                                  SelloRowIconButton(
+                                    tooltip: 'Record delivery',
+                                    icon: Icons.local_shipping_outlined,
+                                    loading: _isBusy(order, 'deliver'),
+                                    onPressed: () async {
+                                      final detail = await _loadDetail(
+                                        order,
+                                        'deliver',
+                                      );
+                                      if (detail != null && mounted) {
+                                        await _recordDelivery(detail);
+                                      }
+                                    },
+                                  ),
+                                if (OrderCollectionRules.canCollect(
+                                  status: order.status,
+                                  paymentStatus: order.paymentStatus,
+                                  total: order.total,
+                                ))
+                                  SelloRowIconButton(
+                                    tooltip: 'Record collection',
+                                    icon: Icons.payments_outlined,
+                                    onPressed: () =>
+                                        _recordCollectionFromRow(order),
+                                  ),
                               ],
                             ),
                           ),
@@ -716,13 +931,13 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                     onPrev: state.page <= 0
                         ? null
                         : () => ref
-                            .read(hubOrdersProvider.notifier)
-                            .goToPage(state.page - 1),
+                              .read(hubOrdersProvider.notifier)
+                              .goToPage(state.page - 1),
                     onNext: !state.hasMore
                         ? null
                         : () => ref
-                            .read(hubOrdersProvider.notifier)
-                            .goToPage(state.page + 1),
+                              .read(hubOrdersProvider.notifier)
+                              .goToPage(state.page + 1),
                   ),
                 ),
               ),
@@ -771,6 +986,8 @@ class _OrdersToolbar extends StatelessWidget {
     required this.onRepChanged,
     required this.onRefresh,
     required this.isRefreshing,
+    required this.onExport,
+    required this.isExporting,
     required this.onAdd,
   });
 
@@ -783,6 +1000,8 @@ class _OrdersToolbar extends StatelessWidget {
   final ValueChanged<String?> onRepChanged;
   final VoidCallback onRefresh;
   final bool isRefreshing;
+  final VoidCallback? onExport;
+  final bool isExporting;
   final VoidCallback? onAdd;
 
   @override
@@ -799,10 +1018,7 @@ class _OrdersToolbar extends StatelessWidget {
         onChanged: onStatusChanged,
         items: const [
           DropdownMenuItem(value: OrderStatusFilter.all, child: Text('All')),
-          DropdownMenuItem(
-            value: OrderStatusFilter.draft,
-            child: Text('Open'),
-          ),
+          DropdownMenuItem(value: OrderStatusFilter.draft, child: Text('Open')),
           DropdownMenuItem(
             value: OrderStatusFilter.openFulfillment,
             child: Text('Waiting to deliver'),
@@ -836,10 +1052,7 @@ class _OrdersToolbar extends StatelessWidget {
         hint: 'All',
         onChanged: onPaymentChanged,
         items: const [
-          DropdownMenuItem(
-            value: OrderPaymentFilter.all,
-            child: Text('All'),
-          ),
+          DropdownMenuItem(value: OrderPaymentFilter.all, child: Text('All')),
           DropdownMenuItem(
             value: OrderPaymentFilter.unpaid,
             child: Text('Unpaid'),
@@ -848,10 +1061,7 @@ class _OrdersToolbar extends StatelessWidget {
             value: OrderPaymentFilter.partial,
             child: Text('Partial'),
           ),
-          DropdownMenuItem(
-            value: OrderPaymentFilter.paid,
-            child: Text('Paid'),
-          ),
+          DropdownMenuItem(value: OrderPaymentFilter.paid, child: Text('Paid')),
         ],
       ),
     );
@@ -865,14 +1075,8 @@ class _OrdersToolbar extends StatelessWidget {
         hint: 'All time',
         onChanged: onDateChanged,
         items: const [
-          DropdownMenuItem(
-            value: OrderDateFilter.all,
-            child: Text('All time'),
-          ),
-          DropdownMenuItem(
-            value: OrderDateFilter.today,
-            child: Text('Today'),
-          ),
+          DropdownMenuItem(value: OrderDateFilter.all, child: Text('All time')),
+          DropdownMenuItem(value: OrderDateFilter.today, child: Text('Today')),
           DropdownMenuItem(
             value: OrderDateFilter.last7Days,
             child: Text('Last 7 days'),
@@ -909,6 +1113,14 @@ class _OrdersToolbar extends StatelessWidget {
       onPressed: isRefreshing ? null : onRefresh,
     );
 
+    final export = SelloButton(
+      label: 'Export',
+      icon: Icons.download_rounded,
+      variant: SelloButtonVariant.outline,
+      loading: isExporting,
+      onPressed: onExport,
+    );
+
     final add = SelloButton(
       label: 'New Order',
       icon: Icons.add_rounded,
@@ -933,7 +1145,7 @@ class _OrdersToolbar extends StatelessWidget {
       child: SelloToolbarBody(
         search: search,
         filters: [status, payment, date, rep],
-        actions: [refresh, add],
+        actions: [refresh, export, add],
         filtersOnOwnRow: true,
       ),
     );
@@ -988,12 +1200,16 @@ class _OrderMobileCard extends StatelessWidget {
     required this.currencySymbol,
     required this.onOpen,
     this.onEdit,
+    this.opening = false,
+    this.editing = false,
   });
 
   final OrderSummary order;
   final String currencySymbol;
   final VoidCallback onOpen;
   final VoidCallback? onEdit;
+  final bool opening;
+  final bool editing;
 
   @override
   Widget build(BuildContext context) {
@@ -1014,6 +1230,13 @@ class _OrderMobileCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (opening) ...[
+                const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 10),
+              ],
               _statusBadge(order.status),
             ],
           ),
@@ -1029,10 +1252,7 @@ class _OrderMobileCard extends StatelessWidget {
           Row(
             children: [
               Text(
-                SelloFormatters.currency(
-                  order.total,
-                  symbol: currencySymbol,
-                ),
+                SelloFormatters.currency(order.total, symbol: currencySymbol),
                 style: const TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontWeight: FontWeight.w700,
@@ -1044,6 +1264,7 @@ class _OrderMobileCard extends StatelessWidget {
                   label: 'Edit',
                   size: SelloButtonSize.small,
                   variant: SelloButtonVariant.outline,
+                  loading: editing,
                   onPressed: onEdit,
                 ),
             ],

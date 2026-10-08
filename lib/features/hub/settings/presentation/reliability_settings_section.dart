@@ -63,10 +63,7 @@ class _ReliabilityBody extends ConsumerWidget {
               SettingsTwoColumn(
                 gap: 12,
                 children: [
-                  _MetricRow(
-                    label: 'Sync health',
-                    value: diag.syncHealthLabel,
-                  ),
+                  _MetricRow(label: 'Sync health', value: diag.syncHealthLabel),
                   _MetricRow(
                     label: 'Pending sync',
                     value: '${diag.pendingSyncCount}',
@@ -77,10 +74,7 @@ class _ReliabilityBody extends ConsumerWidget {
                         ? 'Not yet'
                         : fmt.format(diag.lastSyncAt!.toLocal()),
                   ),
-                  _MetricRow(
-                    label: 'Backup',
-                    value: diag.backupHealth.label,
-                  ),
+                  _MetricRow(label: 'Backup', value: diag.backupHealth.label),
                   _MetricRow(
                     label: 'Last backup',
                     value: diag.lastSuccessfulBackup == null
@@ -121,10 +115,7 @@ class _ReliabilityBody extends ConsumerWidget {
                           .createManualBackup();
                       ref.invalidate(reliabilityDiagnosticsProvider);
                       if (!context.mounted) return;
-                      SelloSnackbars.success(
-                        context,
-                        'Safeguard saved.',
-                      );
+                      SelloSnackbars.success(context, 'Safeguard saved.');
                     },
                   ),
                 ],
@@ -178,7 +169,9 @@ class _ReliabilityBody extends ConsumerWidget {
                                 final ok = await showDialog<bool>(
                                   context: context,
                                   builder: (ctx) => AlertDialog(
-                                    title: const Text('Restore this safeguard?'),
+                                    title: const Text(
+                                      'Restore this safeguard?',
+                                    ),
                                     content: const Text(
                                       'Your business will return to this '
                                       'point. Confirm only if you are sure.',
@@ -198,9 +191,12 @@ class _ReliabilityBody extends ConsumerWidget {
                                   ),
                                 );
                                 if (ok != true) return;
-                                final restore = ref.read(restoreServiceProvider);
-                                final session = await restore
-                                    .beginConfirm(diag.recentBackups[i].id);
+                                final restore = ref.read(
+                                  restoreServiceProvider,
+                                );
+                                final session = await restore.beginConfirm(
+                                  diag.recentBackups[i].id,
+                                );
                                 await restore.runRestore(session.id);
                                 ref.invalidate(reliabilityDiagnosticsProvider);
                                 if (!context.mounted) return;
@@ -236,16 +232,13 @@ class _StatusBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            switch (status) {
-              ConnectivityStatus.online => Icons.cloud_done_outlined,
-              ConnectivityStatus.offline => Icons.cloud_off_outlined,
-              ConnectivityStatus.synchronizing => Icons.sync_rounded,
-              ConnectivityStatus.syncFailed => Icons.sync_problem_rounded,
-              ConnectivityStatus.waitingToSync => Icons.hourglass_top_rounded,
-            },
-            color: context.brandAccent,
-          ),
+          Icon(switch (status) {
+            ConnectivityStatus.online => Icons.cloud_done_outlined,
+            ConnectivityStatus.offline => Icons.cloud_off_outlined,
+            ConnectivityStatus.synchronizing => Icons.sync_rounded,
+            ConnectivityStatus.syncFailed => Icons.sync_problem_rounded,
+            ConnectivityStatus.waitingToSync => Icons.hourglass_top_rounded,
+          }, color: context.brandAccent),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -345,9 +338,7 @@ class _SyncItemRow extends StatelessWidget {
         ),
         Text(
           '#${item.sequence ?? '—'}',
-          style: context.texts.labelSmall?.copyWith(
-            color: AppColors.textFaint,
-          ),
+          style: context.texts.labelSmall?.copyWith(color: AppColors.textFaint),
         ),
       ],
     );
@@ -387,10 +378,7 @@ class _BackupRow extends StatelessWidget {
           ),
         ),
         if (onRestore != null)
-          TextButton(
-            onPressed: onRestore,
-            child: const Text('Restore'),
-          ),
+          TextButton(onPressed: onRestore, child: const Text('Restore')),
       ],
     );
   }

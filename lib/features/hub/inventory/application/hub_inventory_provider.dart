@@ -10,6 +10,7 @@ import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 class HubInventoryState {
   const HubInventoryState({
@@ -26,7 +27,7 @@ class HubInventoryState {
     this.categoryId,
     this.statusFilter = StockStatusFilter.all,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -50,6 +51,11 @@ class HubInventoryState {
   final bool initialized;
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
+
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      categoryId != null ||
+      statusFilter != StockStatusFilter.all;
 
   HubInventoryState copyWith({
     List<InventoryItem>? items,
@@ -97,8 +103,9 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -110,10 +117,7 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
   String? get _branchId => ref.read(currentSessionProvider)?.branch?.id;
 
   Future<void> _initialize() async {
-    await Future.wait([
-      _loadCategories(),
-      loadStock(resetPage: true),
-    ]);
+    await Future.wait([_loadCategories(), loadStock(resetPage: true)]);
   }
 
   Future<void> _loadCategories() async {
@@ -126,16 +130,17 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
   }
 
   Future<void> refresh() async {
-    await Future.wait([
-      _loadCategories(),
-      loadStock(resetPage: true),
-    ]);
+    await Future.wait([_loadCategories(), loadStock(resetPage: true)]);
   }
+
+  int _loadGeneration = 0;
 
   Future<void> loadStock({
     bool resetPage = false,
     bool showLoading = true,
+    bool refreshStats = true,
   }) async {
+    final generation = ++_loadGeneration;
     final page = resetPage ? 0 : state.page;
     state = state.copyWith(
       isLoading: showLoading ? true : state.isLoading,
@@ -153,17 +158,24 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
         page: page,
         pageSize: state.pageSize,
       );
-      final statsFuture = _repo.fetchDashboardStats(branchId: _branchId);
-      final recentFuture = _repo.fetchRecentMovements(branchId: _branchId);
+      final statsFuture = refreshStats
+          ? _repo.fetchDashboardStats(branchId: _branchId)
+          : null;
+      final recentFuture = refreshStats
+          ? _repo.fetchRecentMovements(branchId: _branchId)
+          : null;
+      statsFuture?.ignore();
+      recentFuture?.ignore();
 
       final result = await stockFuture;
       final stats = await statsFuture;
       List<StockMovement> recent = state.recentMovements;
       try {
-        recent = await recentFuture;
+        if (recentFuture != null) recent = await recentFuture;
       } catch (_) {
         // Non-fatal.
       }
+      if (generation != _loadGeneration) return;
 
       state = state.copyWith(
         items: result.items,
@@ -175,9 +187,8 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
@@ -204,9 +215,19 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
     await loadStock(resetPage: true);
   }
 
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: StockStatusFilter.all,
+      clearCategory: true,
+      page: 0,
+    );
+    await loadStock(resetPage: true);
+  }
+
   Future<void> goToPage(int page) async {
     state = state.copyWith(page: page);
-    await loadStock();
+    await loadStock(refreshStats: false);
   }
 
   Future<String?> adjustStock(StockAdjustInput input) async {
@@ -247,5 +268,5 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
 
 final hubInventoryProvider =
     NotifierProvider<HubInventoryNotifier, HubInventoryState>(
-  HubInventoryNotifier.new,
-);
+      HubInventoryNotifier.new,
+    );

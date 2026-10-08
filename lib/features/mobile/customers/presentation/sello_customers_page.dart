@@ -60,17 +60,26 @@ class _SelloCustomersPageState extends ConsumerState<SelloCustomersPage> {
     context.go('${RoutePaths.selloVisit}?walkin=1');
   }
 
+  String? _openingCustomerId;
+
   Future<void> _openDetails(CustomerSummary customer) async {
+    if (_openingCustomerId != null) return;
     final session = ref.read(currentSessionProvider);
     String? assigneeName;
     if (session != null) {
-      final assignee = await ref
-          .read(employeeRepositoryProvider)
-          .fetchCustomerAssignee(
-            companyId: session.company.id,
-            customerId: customer.id,
-          );
-      assigneeName = assignee.employeeName;
+      setState(() => _openingCustomerId = customer.id);
+      try {
+        final assignee = await ref
+            .read(employeeRepositoryProvider)
+            .fetchCustomerAssignee(
+              companyId: session.company.id,
+              customerId: customer.id,
+            );
+        assigneeName = assignee.employeeName;
+      } catch (_) {
+        // Details still open without the assignee line.
+      }
+      if (mounted) setState(() => _openingCustomerId = null);
     }
     if (!mounted) return;
     await showDialog<void>(
@@ -101,7 +110,15 @@ class _SelloCustomersPageState extends ConsumerState<SelloCustomersPage> {
       showBreadcrumbs: false,
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.sm,
+      inlineActions: true,
+      onRefresh: () => ref.read(selloCustomersProvider.notifier).refresh(),
+      onNearEnd: () => ref.read(selloCustomersProvider.notifier).loadMore(),
       actions: [
+        SelloHeaderAction(
+          icon: Icons.refresh_rounded,
+          label: 'Refresh',
+          onPressed: () => ref.read(selloCustomersProvider.notifier).refresh(),
+        ),
         SelloButton(
           label: 'Walk-in',
           icon: Icons.add_rounded,
@@ -120,13 +137,23 @@ class _SelloCustomersPageState extends ConsumerState<SelloCustomersPage> {
               _searchDebounce?.cancel();
               _searchDebounce = Timer(
                 const Duration(milliseconds: 300),
-                () => ref
-                    .read(selloCustomersProvider.notifier)
-                    .setSearch(value),
+                () =>
+                    ref.read(selloCustomersProvider.notifier).setSearch(value),
               );
             },
           ),
           const SizedBox(height: AppSpacing.sm),
+          SelloInlineRefreshBar(
+            active: state.isLoading && state.items.isNotEmpty,
+          ),
+          if (state.errorMessage != null && state.items.isNotEmpty) ...[
+            SelloInlineErrorBar(
+              message: state.errorMessage,
+              onRetry: () =>
+                  ref.read(selloCustomersProvider.notifier).refresh(),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           if (state.isLoading && state.items.isEmpty)
             const SelloListSkeleton()
           else if (state.errorMessage != null && state.items.isEmpty)
@@ -158,11 +185,13 @@ class _SelloCustomersPageState extends ConsumerState<SelloCustomersPage> {
                   for (final customer in state.items) ...[
                     _CustomerRow(
                       customer: customer,
+                      opening: _openingCustomerId == customer.id,
                       onVisit: () => _startVisit(customer),
                       onDetails: () => _openDetails(customer),
                     ),
                     const Divider(height: 1, color: AppColors.outlineSubtle),
                   ],
+                  SelloLoadMoreFooter(active: state.isLoadingMore),
                 ],
               ),
             ),
@@ -177,11 +206,13 @@ class _CustomerRow extends ConsumerWidget {
     required this.customer,
     required this.onVisit,
     required this.onDetails,
+    this.opening = false,
   });
 
   final CustomerSummary customer;
   final VoidCallback onVisit;
   final VoidCallback onDetails;
+  final bool opening;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -240,6 +271,24 @@ class _CustomerRow extends ConsumerWidget {
                 ),
               ),
             ],
+            const SizedBox(width: AppSpacing.xxs),
+            IconButton(
+              tooltip: 'Customer details',
+              onPressed: onDetails,
+              icon: opening
+                  ? SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.brandAccent,
+                      ),
+                    )
+                  : Icon(
+                      Icons.info_outline_rounded,
+                      size: 20,
+                      color: context.selloColors.textTertiary,
+                    ),
+            ),
           ],
         ),
       ),

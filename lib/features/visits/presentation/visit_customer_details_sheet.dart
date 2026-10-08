@@ -20,9 +20,7 @@ Future<void> showVisitCustomerDetailsSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: AppRadius.bottomSheetAll,
-    ),
+    shape: const RoundedRectangleBorder(borderRadius: AppRadius.bottomSheetAll),
     builder: (sheetContext) {
       return Padding(
         padding: EdgeInsets.fromLTRB(
@@ -62,16 +60,13 @@ Future<void> showVisitCustomerDetailsSheet(
                 ),
               )
             else ...[
-              _DetailRow(
-                label: 'Phone',
-                value: customer.phone ?? '—',
-              ),
+              _DetailRow(label: 'Phone', value: customer.phone ?? '—'),
               if (customer.lastPurchaseAt != null)
                 _DetailRow(
                   label: 'Last order',
-                  value: DateFormat('d MMM yyyy').format(
-                    customer.lastPurchaseAt!.toLocal(),
-                  ),
+                  value: DateFormat(
+                    'd MMM yyyy',
+                  ).format(customer.lastPurchaseAt!.toLocal()),
                 ),
               if (showOutstanding)
                 _DetailRow(
@@ -138,11 +133,7 @@ Future<void> showVisitCustomerDetailsSheet(
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    this.hint,
-  });
+  const _DetailRow({required this.label, required this.value, this.hint});
 
   final String label;
   final String value;

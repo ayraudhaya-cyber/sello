@@ -352,11 +352,11 @@ class _OptionCardToolbar extends StatelessWidget {
   Widget get _title => Text('Option ${index + 1}', style: _titleStyle);
 
   Widget get _toggle => SelloStatusToggle(
-        value: isActive,
-        onChanged: onToggleActive,
-        label: 'Active',
-        helper: 'Inactive options stay in history but cannot be sold.',
-      );
+    value: isActive,
+    onChanged: onToggleActive,
+    label: 'Active',
+    helper: 'Inactive options stay in history but cannot be sold.',
+  );
 
   Widget? get _remove {
     if (!canRemove || onRemove == null) return null;
@@ -388,10 +388,7 @@ class _OptionCardToolbar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _toggle,
-          ),
+          Align(alignment: Alignment.centerLeft, child: _toggle),
         ],
       );
     }

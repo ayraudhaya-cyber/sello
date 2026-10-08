@@ -122,10 +122,10 @@ class _DocumentIdentitySettingsSectionState
     }
   }
 
-  Future<void> _save({
-    required bool savedShowName,
-  }) async {
-    final error = await ref.read(hubSettingsProvider.notifier).saveDocumentIdentity(
+  Future<void> _save({required bool savedShowName}) async {
+    final error = await ref
+        .read(hubSettingsProvider.notifier)
+        .saveDocumentIdentity(
           logo: _pendingLogo,
           clearLogo: _clearLogo,
           showBusinessNameWithLogo: _showNameWithLogo ?? savedShowName,
@@ -195,8 +195,8 @@ class _DocumentIdentitySettingsSectionState
     final previewUrl = _clearLogo
         ? null
         : (_pendingLogo == null
-            ? DocumentIssuerIdentity.resolveLogoUrl(saved?.documentLogoUrl)
-            : null);
+              ? DocumentIssuerIdentity.resolveLogoUrl(saved?.documentLogoUrl)
+              : null);
     final showName = _showNameWithLogo ?? savedShow;
     final hasLogo = _pendingLogo != null || (!_clearLogo && previewUrl != null);
     final dirty = _isDirty(
@@ -244,9 +244,9 @@ class _DocumentIdentitySettingsSectionState
               onUpload: _pickLogo,
               onClear: hasLogo && canEdit
                   ? () => setState(() {
-                        _clearLogo = true;
-                        _pendingLogo = null;
-                      })
+                      _clearLogo = true;
+                      _pendingLogo = null;
+                    })
                   : null,
             ),
           ),
@@ -378,21 +378,21 @@ class _LogoPreview extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : hasImage
-                  ? ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: 200,
-                        maxHeight: 56,
-                      ),
-                      child: bytes != null
-                          ? Image.memory(bytes!, fit: BoxFit.contain)
-                          : Image.network(url!, fit: BoxFit.contain),
-                    )
-                  : Text(
-                      'No logo yet — invoices will show your business name.',
-                      style: context.texts.bodySmall?.copyWith(
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 200,
+                    maxHeight: 56,
+                  ),
+                  child: bytes != null
+                      ? Image.memory(bytes!, fit: BoxFit.contain)
+                      : Image.network(url!, fit: BoxFit.contain),
+                )
+              : Text(
+                  'No logo yet — invoices will show your business name.',
+                  style: context.texts.bodySmall?.copyWith(
+                    color: AppColors.textTertiary,
+                  ),
+                ),
         ),
         const SizedBox(height: 10),
         Wrap(

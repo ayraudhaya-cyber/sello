@@ -131,7 +131,8 @@ class ProductRepository {
       id,
       storage_path,
       sort_order,
-      is_primary
+      is_primary,
+      updated_at
     ),
     inventory (
       branch_id,
@@ -217,10 +218,7 @@ class ProductRepository {
       ];
       final items = await _decorateProducts(raw);
 
-      return ProductPageResult(
-        items: items,
-        hasMore: items.length == pageSize,
-      );
+      return ProductPageResult(items: items, hasMore: items.length == pageSize);
     } on PostgrestException catch (error) {
       throw AuthFailure(
         error.message.trim().isEmpty
@@ -243,9 +241,7 @@ class ProductRepository {
       _withSignedImages(raw),
       attachUnitCosts(raw),
     ]);
-    final costById = {
-      for (final item in results[1]) item.id: item.costPrice,
-    };
+    final costById = {for (final item in results[1]) item.id: item.costPrice};
     return [
       for (final item in results[0])
         item.copyWith(costPrice: costById[item.id] ?? item.costPrice),

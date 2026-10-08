@@ -30,7 +30,8 @@ class HubDashboardSnapshot {
   int get lowStock => overview.inventory.lowStock;
   num get collections => overview.collectionsInPeriod;
 
-  bool get hasSales => overview.salesInPeriod > 0 || overview.ordersInPeriod > 0;
+  bool get hasSales =>
+      overview.salesInPeriod > 0 || overview.ordersInPeriod > 0;
   bool get hasInventory => overview.inventory.totalItems > 0;
   bool get hasActivity => activity.isNotEmpty;
   bool get hasTopCustomers => overview.topCustomers.isNotEmpty;
@@ -60,21 +61,34 @@ class HubDashboardSnapshot {
 
   List<double> sparkForMetric(String metric) {
     final points = switch (metric) {
-      'orders' => [
-          for (final p in overview.salesTrend) p.orders.toDouble(),
-        ],
+      'orders' => [for (final p in overview.salesTrend) p.orders.toDouble()],
       'collections' => [
-          if (collections > 0)
-            for (final p in overview.salesTrend) p.sales.toDouble(),
-        ],
-      _ => [
+        if (collections > 0)
           for (final p in overview.salesTrend) p.sales.toDouble(),
-        ],
+      ],
+      _ => [for (final p in overview.salesTrend) p.sales.toDouble()],
     };
     if (points.isEmpty || points.every((v) => v <= 0)) return const [];
-    final max = points.reduce((a, b) => a > b ? a : b);
+    final series = _downsample(points, maxPoints: 40);
+    final max = series.reduce((a, b) => a > b ? a : b);
     if (max <= 0) return const [];
-    return [for (final v in points) (v / max).clamp(0.05, 1.0)];
+    return [for (final v in series) (v / max).clamp(0.05, 1.0)];
+  }
+
+  /// Sums neighbouring days so a year of daily points stays readable in a
+  /// small sparkline.
+  static List<double> _downsample(
+    List<double> points, {
+    required int maxPoints,
+  }) {
+    if (points.length <= maxPoints) return points;
+    final size = (points.length / maxPoints).ceil();
+    return [
+      for (var i = 0; i < points.length; i += size)
+        points
+            .sublist(i, (i + size).clamp(0, points.length))
+            .fold<double>(0, (sum, v) => sum + v),
+    ];
   }
 
   String formatActivityTime(DateTime at) {
@@ -86,50 +100,59 @@ ReportDatePreset hubDashboardPresetForRange(String range) {
   return switch (range) {
     'today' => ReportDatePreset.today,
     'week' => ReportDatePreset.thisWeek,
-    'year' => ReportDatePreset.last30Days,
+    'year' => ReportDatePreset.thisYear,
     _ => ReportDatePreset.thisMonth,
+  };
+}
+
+/// KPI caption for the selected dashboard range.
+String hubDashboardRevenueLabel(String range) {
+  return switch (range) {
+    'today' => 'Revenue today',
+    'week' => 'Revenue this week',
+    'year' => 'Revenue this year',
+    _ => 'Revenue this month',
   };
 }
 
 final hubDashboardProvider = FutureProvider.autoDispose
     .family<HubDashboardSnapshot, String>((ref, range) async {
-  final session = ref.watch(currentSessionProvider);
-  if (session == null) {
-    throw StateError('Sign in required.');
-  }
+      final session = ref.watch(currentSessionProvider);
+      if (session == null) {
+        throw StateError('Sign in required.');
+      }
 
-  final settings = await ref.watch(selloCompanySettingsProvider.future);
-  final symbol = SelloFormatters.currencySymbol(settings.currency);
-  final preset = hubDashboardPresetForRange(range);
+      final settings = await ref.watch(selloCompanySettingsProvider.future);
+      final symbol = SelloFormatters.currencySymbol(settings.currency);
+      final preset = hubDashboardPresetForRange(range);
 
-  final overview = await ref.read(reportRepositoryProvider).fetchOverview(
-        companyId: session.company.id,
-        branchId: session.branch?.id,
-        preset: preset,
+      final overviewFuture = ref
+          .read(reportRepositoryProvider)
+          .fetchOverview(
+            companyId: session.company.id,
+            branchId: session.branch?.id,
+            preset: preset,
+          );
+      final activityFuture = ref
+          .read(notificationRepositoryProvider)
+          .fetchCompanyActivity(companyId: session.company.id, limit: 8);
+      final activeCustomersFuture = _countActiveCustomers(ref);
+
+      final overview = await overviewFuture;
+      final activity = await activityFuture;
+      final activeCustomers = await activeCustomersFuture;
+
+      return HubDashboardSnapshot(
+        overview: overview,
+        activity: activity,
+        activeCustomers: activeCustomers,
+        currencySymbol: symbol,
       );
-
-  final activity = await ref
-      .read(notificationRepositoryProvider)
-      .fetchCompanyActivity(
-        companyId: session.company.id,
-        limit: 8,
-      );
-
-  final activeCustomers = await _countActiveCustomers(ref);
-
-  return HubDashboardSnapshot(
-    overview: overview,
-    activity: activity,
-    activeCustomers: activeCustomers,
-    currencySymbol: symbol,
-  );
-});
+    });
 
 Future<int> _countActiveCustomers(Ref ref) async {
   try {
-    return await ref
-        .read(customerRepositoryProvider)
-        .countActiveCustomers();
+    return await ref.read(customerRepositoryProvider).countActiveCustomers();
   } catch (_) {
     return 0;
   }

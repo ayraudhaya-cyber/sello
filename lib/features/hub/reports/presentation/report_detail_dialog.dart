@@ -25,7 +25,8 @@ class ReportDetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final body = _bodyFor(definition.id);
-    final canDrill = onDrillDown != null &&
+    final canDrill =
+        onDrillDown != null &&
         (definition.drillRoute != null ||
             definition.category != ReportCategory.notifications);
 
@@ -70,9 +71,7 @@ class ReportDetailDialog extends StatelessWidget {
         cancelLabel: 'Close',
         onCancel: () => Navigator.of(context).pop(),
         primaryLabel: 'Export',
-        onPrimary: onExport == null
-            ? null
-            : () => _showExportSheet(context),
+        onPrimary: onExport == null ? null : () => _showExportSheet(context),
       ),
     );
   }
@@ -113,8 +112,7 @@ class ReportDetailDialog extends StatelessWidget {
   }
 
   Widget _bodyFor(String id) {
-    String money(num v) =>
-        SelloFormatters.currency(v, symbol: currencySymbol);
+    String money(num v) => SelloFormatters.currency(v, symbol: currencySymbol);
 
     switch (id) {
       case 'sales_top_reps':
@@ -247,24 +245,21 @@ class ReportDetailDialog extends StatelessWidget {
               items: [
                 (
                   'Collection due',
-                  money(overview.payments.outstandingReceivables)
+                  money(overview.payments.outstandingReceivables),
                 ),
                 ('Collected today', money(overview.payments.collectedToday)),
-                (
-                  'Collections in period',
-                  money(overview.collectionsInPeriod)
-                ),
+                ('Collections in period', money(overview.collectionsInPeriod)),
                 (
                   'Opening balance / Brought forward',
-                  money(overview.openingBalanceBroughtForward)
+                  money(overview.openingBalanceBroughtForward),
                 ),
                 (
                   'Cheques collected in period',
-                  money(overview.chequesCollectedInPeriod)
+                  money(overview.chequesCollectedInPeriod),
                 ),
                 (
                   'Cheques bounced in period',
-                  money(overview.chequesBouncedInPeriod)
+                  money(overview.chequesBouncedInPeriod),
                 ),
                 ('Wallet issued', money(overview.payments.walletIssued)),
               ],
@@ -349,14 +344,8 @@ class ReportDetailDialog extends StatelessWidget {
               'Collection rate',
               '${(overview.visitCollectionRate * 100).toStringAsFixed(0)}%',
             ),
-            (
-              'Collections on visits',
-              money(overview.visitCollectionsAmount),
-            ),
-            (
-              'Avg collection / visit',
-              money(overview.collectionsPerVisit),
-            ),
+            ('Collections on visits', money(overview.visitCollectionsAmount)),
+            ('Avg collection / visit', money(overview.collectionsPerVisit)),
           ],
         );
       case 'visits_orders_per_visit':
@@ -364,10 +353,7 @@ class ReportDetailDialog extends StatelessWidget {
           items: [
             ('Visits completed', '${overview.visitsCompleted}'),
             ('Orders linked to visits', '${overview.visitOrdersLinked}'),
-            (
-              'Orders per visit',
-              overview.ordersPerVisit.toStringAsFixed(2),
-            ),
+            ('Orders per visit', overview.ordersPerVisit.toStringAsFixed(2)),
           ],
         );
       case 'notifications_volume':

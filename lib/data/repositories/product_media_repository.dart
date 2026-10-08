@@ -14,9 +14,9 @@ class ProductMediaRepository {
     SupabaseClient? client,
     MediaStorageService? storage,
     MediaService? media,
-  })  : _client = client ?? SupabaseService.client,
-        _storage = storage ?? MediaStorageService(),
-        _media = media ?? MediaService();
+  }) : _client = client ?? SupabaseService.client,
+       _storage = storage ?? MediaStorageService(),
+       _media = media ?? MediaService();
 
   final SupabaseClient _client;
   final MediaStorageService _storage;
@@ -26,7 +26,9 @@ class ProductMediaRepository {
     try {
       final rows = await _client
           .from('product_images')
-          .select('id, product_id, storage_path, sort_order, is_primary')
+          .select(
+            'id, product_id, storage_path, sort_order, is_primary, updated_at',
+          )
           .eq('product_id', productId)
           .order('sort_order');
 
@@ -213,12 +215,15 @@ class ProductMediaRepository {
         }
 
         if (draft.remoteId != null) {
-          await _client.from('product_images').update({
-            'storage_path': storagePath,
-            'sort_order': i,
-            'is_primary': i == 0,
-            'updated_by': employeeId,
-          }).eq('id', draft.remoteId!);
+          await _client
+              .from('product_images')
+              .update({
+                'storage_path': storagePath,
+                'sort_order': i,
+                'is_primary': i == 0,
+                'updated_by': employeeId,
+              })
+              .eq('id', draft.remoteId!);
         } else {
           await _client.from('product_images').insert({
             'company_id': companyId,

@@ -1,4 +1,5 @@
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/help/presentation/sello_help_dialog.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
 import 'package:sello/services/updates/update_check_messages.dart';
 import 'package:sello/services/updates/update_providers.dart';
@@ -23,6 +24,21 @@ class AboutSettingsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SettingsGroupCard(
+          title: 'Help',
+          description:
+              'Short answers for collecting money, outstanding balances, and cheques.',
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SelloButton(
+              label: 'Open help',
+              icon: Icons.help_outline_rounded,
+              variant: SelloButtonVariant.secondary,
+              onPressed: () => showSelloHelp(context),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        SettingsGroupCard(
           title: 'About Sello',
           description:
               'Version details for this installation. Sello is updated '
@@ -32,7 +48,8 @@ class AboutSettingsSection extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
         SettingsGroupCard(
           title: 'Updates',
-          description: 'Compare this installation with the latest available build.',
+          description:
+              'Compare this installation with the latest available build.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -81,29 +98,20 @@ class AboutSettingsSection extends ConsumerWidget {
   }
 
   Future<void> _checkNow(BuildContext context, WidgetRef ref) async {
-    final result =
-        await ref.read(updateCheckControllerProvider.notifier).checkNow();
+    final result = await ref
+        .read(updateCheckControllerProvider.notifier)
+        .checkNow();
     if (!context.mounted) return;
     if (result.status == UpdateCheckStatus.upToDate) {
-      SelloSnackbars.success(
-        context,
-        UpdateCheckMessages.manualResult(result),
-      );
+      SelloSnackbars.success(context, UpdateCheckMessages.manualResult(result));
     } else if (result.status == UpdateCheckStatus.checkFailed) {
-      SelloSnackbars.info(
-        context,
-        UpdateCheckMessages.manualResult(result),
-      );
+      SelloSnackbars.info(context, UpdateCheckMessages.manualResult(result));
     }
   }
 }
 
 class _AboutMetric extends StatelessWidget {
-  const _AboutMetric({
-    required this.label,
-    required this.value,
-    this.helper,
-  });
+  const _AboutMetric({required this.label, required this.value, this.helper});
 
   final String label;
   final String value;

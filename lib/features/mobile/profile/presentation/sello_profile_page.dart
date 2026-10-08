@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/help/presentation/sello_help_dialog.dart';
+import 'package:sello/features/profile/presentation/my_profile_form.dart';
 import 'package:sello/features/mobile/profile/presentation/sello_pwa_install_card.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/services/updates/update_check_messages.dart';
@@ -52,6 +56,24 @@ class SelloProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.gap),
+          SelloCard(
+            enableHoverLift: false,
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('My details'),
+              subtitle: Text(
+                (session?.employee.phone ?? '').trim().isEmpty
+                    ? 'Add your mobile number'
+                    : 'Name and mobile number',
+              ),
+              children: const [MyProfileForm()],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.gap),
           const SelloPwaInstallCard(),
           SelloCard(
             enableHoverLift: false,
@@ -94,6 +116,30 @@ class SelloProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.gap),
+          SelloCard(
+            enableHoverLift: false,
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: const Text('My collections'),
+              subtitle: const Text('Payments you collected, by customer'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push(RoutePaths.selloCollections),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.gap),
+          SelloCard(
+            enableHoverLift: false,
+            padding: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.help_outline_rounded),
+              title: const Text('Help'),
+              subtitle: const Text('How to collect money, orders, and cheques'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => showSelloHelp(context),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.gap),
           const _SelloAboutCard(),
           const SizedBox(height: AppSpacing.lg),
           SelloButton(
@@ -109,8 +155,7 @@ class SelloProfilePage extends ConsumerWidget {
             icon: Icons.logout_rounded,
             variant: SelloButtonVariant.outline,
             expanded: true,
-            onPressed: () =>
-                ref.read(authSessionProvider.notifier).signOut(),
+            onPressed: () => ref.read(authSessionProvider.notifier).signOut(),
           ),
         ],
       ),

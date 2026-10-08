@@ -6,30 +6,38 @@ import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/sms_quota.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Hub header quota. Null when this company has no Text.lk token yet.
+/// Hub header quota. Hidden when this company has no Text.lk token yet.
 final smsQuotaProvider =
-    AsyncNotifierProvider<SmsQuotaController, SmsQuota?>(SmsQuotaController.new);
+    AsyncNotifierProvider<SmsQuotaController, SmsQuotaView>(
+      SmsQuotaController.new,
+    );
 
-class SmsQuotaController extends AsyncNotifier<SmsQuota?> {
+class SmsQuotaController extends AsyncNotifier<SmsQuotaView> {
   static const _refreshAfter = Duration(minutes: 5);
 
   @override
-  Future<SmsQuota?> build() {
+  Future<SmsQuotaView> build() {
     final timer = Timer(_refreshAfter, () => ref.invalidateSelf());
     ref.onDispose(timer.cancel);
     return _load();
   }
 
-  Future<SmsQuota?> _load() async {
-    if (!SupabaseService.isInitialized) return null;
+  Future<void> retry() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(_load);
+  }
+
+  Future<SmsQuotaView> _load() async {
+    if (!SupabaseService.isInitialized) return const SmsQuotaView.hidden();
     try {
-      final response = await SupabaseService.client.functions.invoke('sms-quota');
-      final data = _asMap(response.data);
-      return SmsQuota.tryParse(data);
+      final response = await SupabaseService.client.functions.invoke(
+        'sms-quota',
+      );
+      return SmsQuotaView.fromEdgeJson(_asMap(response.data));
     } on FunctionException {
-      return null;
+      return const SmsQuotaView.unavailable();
     } catch (_) {
-      return null;
+      return const SmsQuotaView.unavailable();
     }
   }
 

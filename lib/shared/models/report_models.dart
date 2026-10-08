@@ -12,6 +12,7 @@ enum ReportDatePreset {
   thisWeek,
   thisMonth,
   last30Days,
+  thisYear,
   custom,
 }
 
@@ -22,6 +23,7 @@ extension ReportDatePresetX on ReportDatePreset {
         ReportDatePreset.thisWeek => 'This week',
         ReportDatePreset.thisMonth => 'This month',
         ReportDatePreset.last30Days => 'Last 30 days',
+        ReportDatePreset.thisYear => 'This year',
         ReportDatePreset.custom => 'Custom range',
       };
 
@@ -59,6 +61,11 @@ extension ReportDatePresetX on ReportDatePreset {
       case ReportDatePreset.last30Days:
         return (
           from: startOfToday.subtract(const Duration(days: 29)).toUtc(),
+          to: endOfToday.toUtc(),
+        );
+      case ReportDatePreset.thisYear:
+        return (
+          from: DateTime(local.year, 1, 1).toUtc(),
           to: endOfToday.toUtc(),
         );
       case ReportDatePreset.custom:

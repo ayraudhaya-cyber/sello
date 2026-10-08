@@ -60,8 +60,7 @@ class SelloSwitch extends StatelessWidget {
             child: AnimatedAlign(
               duration: AppDurations.normal,
               curve: AppCurves.emphasized,
-              alignment:
-                  value ? Alignment.centerRight : Alignment.centerLeft,
+              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.all(padding),
                 child: AnimatedContainer(

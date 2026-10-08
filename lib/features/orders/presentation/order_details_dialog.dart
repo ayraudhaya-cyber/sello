@@ -53,6 +53,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
     this.onWhatsAppInvoice,
     this.onSmsInvoice,
     this.onCollectionSaved,
+    this.onChangeSalesRep,
     this.readOnly = false,
   });
 
@@ -73,6 +74,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
 
   /// Called after a collection is saved so lists can refresh.
   final VoidCallback? onCollectionSaved;
+  final VoidCallback? onChangeSalesRep;
   final bool readOnly;
 
   @override
@@ -162,6 +164,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
       amountPaid: _collections?.amountPaid ?? 0,
       amountPending: _collections?.amountPending ?? 0,
       priorEntries: _collections?.entries ?? const [],
+      orderPaymentMethod: order.paymentMethod,
     );
     if (!mounted) return;
     if (!saved) {
@@ -240,6 +243,15 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                   'Cancelled orders do not affect inventory. Historical totals stay available for reporting.',
             ),
             const SizedBox(height: _OrderGrid.sectionGap),
+          ] else if (!order.isDraft && totalRemaining > 0) ...[
+            const _NoticeBanner(
+              icon: Icons.local_shipping_outlined,
+              tone: AppColors.info,
+              background: AppColors.infoContainer,
+              message:
+                  'Goods still to deliver. This order is added to the customer’s Outstanding when you record delivery — not when the order was saved.',
+            ),
+            const SizedBox(height: _OrderGrid.sectionGap),
           ],
           _InfoGrid(
             customer: _InfoBlock(
@@ -291,6 +303,17 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                     value: order.paymentMethod!.label,
                   ),
               ],
+              trailing: widget.onChangeSalesRep == null
+                  ? null
+                  : Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelloButton(
+                        label: 'Change Sales Rep',
+                        variant: SelloButtonVariant.outline,
+                        size: SelloButtonSize.small,
+                        onPressed: widget.onChangeSalesRep,
+                      ),
+                    ),
             ),
             delivery: order.isDraft
                 ? null

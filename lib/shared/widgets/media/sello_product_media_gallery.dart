@@ -8,6 +8,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/models/product_image.dart';
+import 'package:sello/shared/widgets/media/sello_network_image.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 
@@ -64,11 +65,10 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
   bool _emitting = false;
 
   List<MediaGalleryDraft> get _active =>
-      _items.where((i) => !i.removed).toList()
-        ..sort((a, b) {
-          if (a.isPrimary != b.isPrimary) return a.isPrimary ? -1 : 1;
-          return a.sortOrder.compareTo(b.sortOrder);
-        });
+      _items.where((i) => !i.removed).toList()..sort((a, b) {
+        if (a.isPrimary != b.isPrimary) return a.isPrimary ? -1 : 1;
+        return a.sortOrder.compareTo(b.sortOrder);
+      });
 
   MediaGalleryDraft? get _selected {
     final active = _active;
@@ -131,10 +131,7 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
 
     try {
       final remaining = widget.maxImages - _active.length;
-      final files = await _media.pickPhotos(
-        context,
-        remainingSlots: remaining,
-      );
+      final files = await _media.pickPhotos(context, remainingSlots: remaining);
 
       // Unlock the form as soon as the OS picker closes.
       if (mounted) setState(() => _picking = false);
@@ -156,8 +153,7 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
 
       for (var i = 0; i < rawBytes.length; i++) {
         if (sortBase >= widget.maxImages) break;
-        final id =
-            'local_${DateTime.now().microsecondsSinceEpoch}_$i';
+        final id = 'local_${DateTime.now().microsecondsSinceEpoch}_$i';
         firstId ??= id;
         jobs.add((id: id, bytes: rawBytes[i]));
         working = [
@@ -194,9 +190,7 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
     }
   }
 
-  Future<void> _optimizeQueue(
-    List<({String id, Uint8List bytes})> jobs,
-  ) async {
+  Future<void> _optimizeQueue(List<({String id, Uint8List bytes})> jobs) async {
     for (final job in jobs) {
       if (!mounted) return;
       // Keep the event loop free so form fields stay interactive.
@@ -231,10 +225,7 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
       );
     } catch (error) {
       if (!mounted) return;
-      _patchItem(
-        clientId,
-        (d) => d.copyWith(processing: false),
-      );
+      _patchItem(clientId, (d) => d.copyWith(processing: false));
       SelloSnackbars.error(
         context,
         error.toString().replaceFirst('Exception: ', ''),
@@ -261,7 +252,10 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
       );
       if (source == null || !mounted) {
         if (mounted) {
-          SelloSnackbars.error(context, 'Unable to load that photo for cropping.');
+          SelloSnackbars.error(
+            context,
+            'Unable to load that photo for cropping.',
+          );
         }
         return;
       }
@@ -270,7 +264,8 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
       final cropped = await _media.maybeCrop(
         context,
         source,
-        alreadyOptimized: item.optimized ||
+        alreadyOptimized:
+            item.optimized ||
             (item.localBytes != null &&
                 item.localBytes!.lengthInBytes <= 1024 * 1024),
       );
@@ -354,10 +349,7 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
       for (var i = 0; i < active.length; i++)
         active[i].copyWith(sortOrder: i, isPrimary: i == 0),
     ];
-    return [
-      ...normalizedActive,
-      ...input.where((d) => d.removed),
-    ];
+    return [...normalizedActive, ...input.where((d) => d.removed)];
   }
 
   @override
@@ -369,13 +361,16 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
     final showcase = widget.showcase;
     final showThumbs = active.length > 1;
     final saveProgress = widget.progress;
-    final showSaveProgress = !readOnly &&
+    final showSaveProgress =
+        !readOnly &&
         saveProgress != null &&
         saveProgress.phase != MediaUploadPhase.idle &&
         saveProgress.phase != MediaUploadPhase.success;
     final selectedIndex = selected == null
         ? 0
-        : active.indexWhere((i) => i.clientId == selected.clientId).clamp(0, active.isEmpty ? 0 : active.length - 1);
+        : active
+              .indexWhere((i) => i.clientId == selected.clientId)
+              .clamp(0, active.isEmpty ? 0 : active.length - 1);
 
     return Container(
       decoration: BoxDecoration(
@@ -429,11 +424,9 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
             onToggleActions: readOnly || !isMobile
                 ? null
                 : () => setState(
-                      () => _previewActionsVisible = !_previewActionsVisible,
-                    ),
-            onEditCrop: readOnly ||
-                    selected == null ||
-                    selected.processing
+                    () => _previewActionsVisible = !_previewActionsVisible,
+                  ),
+            onEditCrop: readOnly || selected == null || selected.processing
                 ? null
                 : () => _editCrop(selected),
             onDelete: readOnly || selected == null
@@ -552,21 +545,14 @@ class _SquareThumbStrip extends StatelessWidget {
               children: [
                 for (var i = 0; i < active.length; i++) ...[
                   if (i > 0) const SizedBox(width: _gap),
-                  SizedBox(
-                    width: side,
-                    height: side,
-                    child: thumbAt(i),
-                  ),
+                  SizedBox(width: side, height: side, child: thumbAt(i)),
                 ],
                 if (showAdd) ...[
                   if (active.isNotEmpty) const SizedBox(width: _gap),
                   SizedBox(
                     width: side,
                     height: side,
-                    child: _AddThumbSlot(
-                      enabled: addEnabled,
-                      onTap: onAdd,
-                    ),
+                    child: _AddThumbSlot(enabled: addEnabled, onTap: onAdd),
                   ),
                 ],
               ],
@@ -597,7 +583,8 @@ class _SquareThumbStrip extends StatelessWidget {
             },
             itemCount: slotCount,
             onReorderItem: (oldIndex, newIndex) {
-              if (showAdd && (oldIndex >= active.length || newIndex >= active.length)) {
+              if (showAdd &&
+                  (oldIndex >= active.length || newIndex >= active.length)) {
                 return;
               }
               onReorder!(oldIndex, newIndex);
@@ -610,10 +597,7 @@ class _SquareThumbStrip extends StatelessWidget {
                   child: SizedBox(
                     width: side,
                     height: side,
-                    child: _AddThumbSlot(
-                      enabled: addEnabled,
-                      onTap: onAdd,
-                    ),
+                    child: _AddThumbSlot(enabled: addEnabled, onTap: onAdd),
                   ),
                 );
               }
@@ -667,7 +651,8 @@ class _GalleryPreviewState extends State<_GalleryPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final showActions = widget.item != null &&
+    final showActions =
+        widget.item != null &&
         (widget.actionsVisible || _hovered) &&
         (widget.onEditCrop != null || widget.onDelete != null);
 
@@ -709,6 +694,7 @@ class _GalleryPreviewState extends State<_GalleryPreview> {
                           _ImagePreview(
                             bytes: widget.item!.localBytes,
                             networkUrl: widget.item!.networkUrl,
+                            cacheKey: widget.item!.cacheKey,
                           ),
                           if (widget.item!.processing)
                             const Positioned(
@@ -735,8 +721,9 @@ class _GalleryPreviewState extends State<_GalleryPreview> {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.surface
-                                        .withValues(alpha: 0.94),
+                                    color: AppColors.surface.withValues(
+                                      alpha: 0.94,
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow: AppShadows.level1,
                                   ),
@@ -972,7 +959,8 @@ class _ThumbTileState extends State<_ThumbTile> {
   @override
   Widget build(BuildContext context) {
     final processing = widget.item.processing;
-    final showActions = !widget.readOnly &&
+    final showActions =
+        !widget.readOnly &&
         !processing &&
         (widget.showActionsAlways || _hovered);
 
@@ -995,8 +983,8 @@ class _ThumbTileState extends State<_ThumbTile> {
               color: widget.isSelected
                   ? context.brandAccent
                   : (_hovered
-                      ? context.brandAccent.withValues(alpha: 0.35)
-                      : AppColors.outlinePanel),
+                        ? context.brandAccent.withValues(alpha: 0.35)
+                        : AppColors.outlinePanel),
               width: widget.isSelected ? 2 : 1,
             ),
             boxShadow: widget.elevateOnHover && _hovered
@@ -1017,11 +1005,9 @@ class _ThumbTileState extends State<_ThumbTile> {
                 _ImagePreview(
                   bytes: widget.item.localBytes,
                   networkUrl: widget.item.networkUrl,
+                  cacheKey: widget.item.cacheKey,
                 ),
-                if (processing)
-                  const ColoredBox(
-                    color: Color(0x28000000),
-                  ),
+                if (processing) const ColoredBox(color: Color(0x28000000)),
                 if (processing)
                   const Positioned(
                     right: 4,
@@ -1029,11 +1015,7 @@ class _ThumbTileState extends State<_ThumbTile> {
                     child: _ProcessingBadge(compact: true),
                   ),
                 if (widget.isPrimary)
-                  const Positioned(
-                    left: 3,
-                    top: 3,
-                    child: _StarBadge(),
-                  ),
+                  const Positioned(left: 3, top: 3, child: _StarBadge()),
                 if (showActions) ...[
                   Positioned(
                     top: 2,
@@ -1107,10 +1089,7 @@ class _ThumbIconButton extends StatelessWidget {
 }
 
 class _AddThumbSlot extends StatelessWidget {
-  const _AddThumbSlot({
-    required this.enabled,
-    required this.onTap,
-  });
+  const _AddThumbSlot({required this.enabled, required this.onTap});
 
   final bool enabled;
   final VoidCallback onTap;
@@ -1144,10 +1123,11 @@ class _AddThumbSlot extends StatelessWidget {
 }
 
 class _ImagePreview extends StatelessWidget {
-  const _ImagePreview({this.bytes, this.networkUrl});
+  const _ImagePreview({this.bytes, this.networkUrl, this.cacheKey});
 
   final Uint8List? bytes;
   final String? networkUrl;
+  final String? cacheKey;
 
   @override
   Widget build(BuildContext context) {
@@ -1164,8 +1144,9 @@ class _ImagePreview extends StatelessWidget {
       );
     }
     if (networkUrl != null && networkUrl!.isNotEmpty) {
-      return Image.network(
-        networkUrl!,
+      return SelloNetworkImage(
+        url: networkUrl!,
+        cacheKey: cacheKey,
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

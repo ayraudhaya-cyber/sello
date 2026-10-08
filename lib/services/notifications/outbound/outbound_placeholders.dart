@@ -122,6 +122,8 @@ abstract final class OutboundPlaceholders {
       'collection_number': 'PAY-0001',
       'collection_amount': 'Rs 5,000.00',
       'amount': 'Rs 5,000.00',
+      'collection_status': 'submitted for review',
+      'approval_note': 'Balances update only after owner/manager approval.',
       'receipt_link': link,
       'document_link': link,
     };

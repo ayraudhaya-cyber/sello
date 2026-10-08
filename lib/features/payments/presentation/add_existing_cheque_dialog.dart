@@ -266,7 +266,7 @@ class _AddExistingChequeDialogState
     return SelloFormDialog(
       title: 'Add existing cheque',
       subtitle:
-          'Old cheque record only — does not change what the customer owes. Use Record cheque for a new cheque.',
+          'Old cheque from before Sello. Does not change Outstanding and does not collect money. Use Record cheque for a new cheque.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(

@@ -176,6 +176,7 @@ class _Hero extends StatelessWidget {
         SelloEntityThumb(
           name: item.name,
           imageUrl: item.imageUrl,
+          cacheKey: item.imageCacheKey,
           width: 64,
         ),
         const SizedBox(width: 16),

@@ -11,6 +11,7 @@ import 'package:sello/shared/utils/country_catalog.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/utils/product_catalog_display.dart';
 import 'package:sello/shared/widgets/media/sello_image_lightbox.dart';
+import 'package:sello/shared/widgets/media/sello_network_image.dart';
 import 'package:sello/shared/widgets/products/product_options_readonly_list.dart';
 import 'package:sello/shared/widgets/states/sello_empty_state.dart';
 
@@ -59,10 +60,8 @@ Future<List<SelloPhotoSource>> loadSelloProductPhotos(
   ProductRepository? repository,
 }) async {
   try {
-    final rows =
-        await (repository ?? ProductRepository()).media.fetchForProduct(
-              product.id,
-            );
+    final rows = await (repository ?? ProductRepository()).media
+        .fetchForProduct(product.id);
     final images = <SelloPhotoSource>[
       for (final row in rows)
         if (row.hasPreview) SelloPhotoSource.fromProductImage(row),
@@ -71,7 +70,12 @@ Future<List<SelloPhotoSource>> loadSelloProductPhotos(
   } catch (_) {}
 
   if (product.imageUrl != null && product.imageUrl!.isNotEmpty) {
-    return [SelloPhotoSource(networkUrl: product.imageUrl)];
+    return [
+      SelloPhotoSource(
+        networkUrl: product.imageUrl,
+        cacheKey: product.imageCacheKey,
+      ),
+    ];
   }
   return const [];
 }
@@ -254,10 +258,10 @@ class _SelloProductPresentSheetState
                     Text(
                       product.hasMultipleActiveVariants
                           ? '${product.activeOptionCount} active options · '
-                              '${SelloFormatters.quantity(product.currentStockQuantity)} '
-                              '$_unitLabel total'
+                                '${SelloFormatters.quantity(product.currentStockQuantity)} '
+                                '$_unitLabel total'
                           : '${SelloFormatters.quantity(product.currentStockQuantity)} '
-                              '$_unitLabel in stock',
+                                '$_unitLabel in stock',
                       style: context.texts.bodyMedium?.copyWith(
                         color: context.selloColors.textSecondary,
                       ),
@@ -273,7 +277,9 @@ class _SelloProductPresentSheetState
                     ..._buildCatalogSpecs(context),
                     if (product.description != null &&
                         product.description!.trim().isNotEmpty &&
-                        (ref.watch(productFieldConfigProvider).valueOrNull
+                        (ref
+                                .watch(productFieldConfigProvider)
+                                .valueOrNull
                                 ?.isEnabled('description') ??
                             true)) ...[
                       const SizedBox(height: AppSpacing.lg),
@@ -356,9 +362,7 @@ class _SelloProductPresentSheetState
       const SizedBox(height: AppSpacing.lg),
       Text(
         'Product Details',
-        style: context.texts.titleSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
+        style: context.texts.titleSmall?.copyWith(fontWeight: FontWeight.w700),
       ),
       ...rows,
     ];
@@ -448,10 +452,7 @@ class _PresentHeroState extends State<_PresentHero> {
   Widget build(BuildContext context) {
     final photos = widget.photos;
     final multi = photos.length > 1;
-    final index = widget.index.clamp(
-      0,
-      photos.isEmpty ? 0 : photos.length - 1,
-    );
+    final index = widget.index.clamp(0, photos.isEmpty ? 0 : photos.length - 1);
 
     return Column(
       children: [
@@ -470,130 +471,127 @@ class _PresentHeroState extends State<_PresentHero> {
                     ),
                   )
                 : photos.isEmpty
-                    ? _Placeholder(name: widget.product.name)
-                    : Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          // Horizontal carousel — claim swipes ahead of the
-                          // parent ListView so sales reps can flip photos.
-                          NotificationListener<ScrollNotification>(
-                            onNotification: (notification) {
-                              // Absorb vertical-competing notifications from
-                              // PageView so the sheet ListView doesn't steal.
-                              return notification.depth == 0 &&
-                                  notification is ScrollUpdateNotification &&
-                                  (notification.scrollDelta?.abs() ?? 0) > 0;
-                            },
-                            child: PageView.builder(
-                              controller: _pageController,
-                              itemCount: photos.length,
-                              physics: const BouncingScrollPhysics(
-                                parent: AlwaysScrollableScrollPhysics(),
-                              ),
-                              onPageChanged: widget.onIndexChanged,
-                              itemBuilder: (context, pageIndex) {
-                                return GestureDetector(
-                                  onTap: () =>
-                                      widget.onOpenViewer(pageIndex),
-                                  child: _HeroPhoto(
-                                    photo: photos[pageIndex],
-                                  ),
-                                );
-                              },
+                ? _Placeholder(name: widget.product.name)
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Horizontal carousel — claim swipes ahead of the
+                      // parent ListView so sales reps can flip photos.
+                      NotificationListener<ScrollNotification>(
+                        onNotification: (notification) {
+                          // Absorb vertical-competing notifications from
+                          // PageView so the sheet ListView doesn't steal.
+                          return notification.depth == 0 &&
+                              notification is ScrollUpdateNotification &&
+                              (notification.scrollDelta?.abs() ?? 0) > 0;
+                        },
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: photos.length,
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                          onPageChanged: widget.onIndexChanged,
+                          itemBuilder: (context, pageIndex) {
+                            return GestureDetector(
+                              onTap: () => widget.onOpenViewer(pageIndex),
+                              child: _HeroPhoto(photo: photos[pageIndex]),
+                            );
+                          },
+                        ),
+                      ),
+                      if (multi) ...[
+                        Positioned(
+                          left: 8,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _CarouselChevron(
+                              icon: Icons.chevron_left_rounded,
+                              enabled: index > 0,
+                              onTap: () => _goTo(index - 1),
                             ),
                           ),
-                          if (multi) ...[
-                            Positioned(
-                              left: 8,
-                              top: 0,
-                              bottom: 0,
-                              child: Center(
-                                child: _CarouselChevron(
-                                  icon: Icons.chevron_left_rounded,
-                                  enabled: index > 0,
-                                  onTap: () => _goTo(index - 1),
+                        ),
+                        Positioned(
+                          right: 8,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _CarouselChevron(
+                              icon: Icons.chevron_right_rounded,
+                              enabled: index < photos.length - 1,
+                              onTap: () => _goTo(index + 1),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 12,
+                          bottom: 12,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              child: Text(
+                                '${index + 1} / ${photos.length}',
+                                style: const TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                            Positioned(
-                              right: 8,
-                              top: 0,
-                              bottom: 0,
-                              child: Center(
-                                child: _CarouselChevron(
-                                  icon: Icons.chevron_right_rounded,
-                                  enabled: index < photos.length - 1,
-                                  onTap: () => _goTo(index + 1),
-                                ),
-                              ),
+                          ),
+                        ),
+                      ],
+                      Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: GestureDetector(
+                          onTap: () => widget.onOpenViewer(index),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(99),
                             ),
-                            Positioned(
-                              left: 12,
-                              bottom: 12,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(99),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.fullscreen_rounded,
+                                    color: Colors.white,
+                                    size: 16,
                                   ),
-                                  child: Text(
-                                    '${index + 1} / ${photos.length}',
-                                    style: const TextStyle(
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'View',
+                                    style: TextStyle(
                                       fontFamily: AppTypography.fontFamily,
                                       color: Colors.white,
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          ],
-                          Positioned(
-                            right: 12,
-                            bottom: 12,
-                            child: GestureDetector(
-                              onTap: () => widget.onOpenViewer(index),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.45),
-                                  borderRadius: BorderRadius.circular(99),
-                                ),
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.fullscreen_rounded,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'View',
-                                        style: TextStyle(
-                                          fontFamily: AppTypography.fontFamily,
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                ],
                               ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
+                    ],
+                  ),
           ),
         ),
         if (multi) ...[
@@ -710,8 +708,9 @@ class _HeroPhoto extends StatelessWidget {
                   MediaQuery.devicePixelRatioOf(context))
               .round()
               .clamp(480, 1600);
-      return Image.network(
-        photo.networkUrl!,
+      return SelloNetworkImage(
+        url: photo.networkUrl!,
+        cacheKey: photo.cacheKey,
         fit: BoxFit.cover,
         filterQuality: FilterQuality.medium,
         gaplessPlayback: true,

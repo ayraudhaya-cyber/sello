@@ -11,6 +11,7 @@ import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum ProductStatusFilter { all, active, inactive }
 
@@ -22,7 +23,7 @@ class HubProductsState {
     this.categoryId,
     this.statusFilter = ProductStatusFilter.active,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -44,6 +45,11 @@ class HubProductsState {
   final bool initialized;
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
+
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      categoryId != null ||
+      statusFilter != ProductStatusFilter.active;
 
   HubProductsState copyWith({
     List<ProductSummary>? items,
@@ -119,10 +125,13 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
     await Future.wait([_loadCategories(), loadProducts(resetPage: true)]);
   }
 
+  int _loadGeneration = 0;
+
   Future<void> loadProducts({
     bool resetPage = false,
     bool showLoading = true,
   }) async {
+    final generation = ++_loadGeneration;
     final page = resetPage ? 0 : state.page;
     state = state.copyWith(
       isLoading: showLoading ? true : state.isLoading,
@@ -144,6 +153,7 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         page: page,
         pageSize: state.pageSize,
       );
+      if (generation != _loadGeneration) return;
 
       state = state.copyWith(
         items: result.items,
@@ -153,9 +163,8 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
@@ -178,6 +187,16 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
       categoryId: value,
       page: 0,
       clearCategory: value == null,
+    );
+    await loadProducts(resetPage: true);
+  }
+
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: ProductStatusFilter.active,
+      clearCategory: true,
+      page: 0,
     );
     await loadProducts(resetPage: true);
   }

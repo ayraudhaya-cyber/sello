@@ -8,7 +8,14 @@ import 'package:sello/shared/models/scheduled_visit.dart';
 
 enum ScheduleViewMode { day, week, list, calendar }
 
-enum VisitStatusFilter { all, scheduled, completed, missed, cancelled, unplanned }
+enum VisitStatusFilter {
+  all,
+  scheduled,
+  completed,
+  missed,
+  cancelled,
+  unplanned,
+}
 
 class HubScheduleState {
   const HubScheduleState({
@@ -78,8 +85,8 @@ class HubScheduleState {
 
 final hubScheduleProvider =
     NotifierProvider<HubScheduleNotifier, HubScheduleState>(
-  HubScheduleNotifier.new,
-);
+      HubScheduleNotifier.new,
+    );
 
 class HubScheduleNotifier extends Notifier<HubScheduleState> {
   VisitRepository get _repo => ref.read(visitRepositoryProvider);
@@ -90,8 +97,9 @@ class HubScheduleNotifier extends Notifier<HubScheduleState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -105,22 +113,17 @@ class HubScheduleNotifier extends Notifier<HubScheduleState> {
   }
 
   Future<void> _initialize() async {
-    await Future.wait([
-      loadReps(),
-      loadVisits(),
-    ]);
+    await Future.wait([loadReps(), loadVisits()]);
   }
 
-  Future<void> refresh() => Future.wait([
-        loadReps(),
-        loadVisits(),
-      ]);
+  Future<void> refresh() => Future.wait([loadReps(), loadVisits()]);
 
   Future<void> loadReps() async {
     try {
       // Field-visit assignees only — IAM canPerformFieldVisits (not Hub roles).
-      final reps =
-          await ref.read(orderRepositoryProvider).fetchFieldVisitAssignees();
+      final reps = await ref
+          .read(orderRepositoryProvider)
+          .fetchFieldVisitAssignees();
       state = state.copyWith(reps: reps);
     } catch (_) {
       // Rep filter stays empty; visit load still works.

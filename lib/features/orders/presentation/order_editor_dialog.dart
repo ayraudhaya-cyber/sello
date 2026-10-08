@@ -123,6 +123,10 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   List<ProductCategory> _categories = const [];
   String? _categoryId;
   bool _catalogLoading = true;
+  bool _catalogLoadingMore = false;
+  bool _catalogHasMore = false;
+  int _catalogPage = 0;
+  int _catalogGeneration = 0;
   String? _catalogError;
 
   ProductCatalogLayoutMode _layoutMode = ProductCatalogLayoutMode.gridTwo;
@@ -466,9 +470,13 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     }
   }
 
+  static const _catalogPageSize = 40;
+
   Future<void> _loadCatalog() async {
+    final generation = ++_catalogGeneration;
     setState(() {
       _catalogLoading = true;
+      _catalogLoadingMore = false;
       _catalogError = null;
     });
     try {
@@ -476,27 +484,71 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             search: _productSearch.text,
             categoryId: _categoryId,
             isActive: true,
-            pageSize: 60,
+            page: 0,
+            pageSize: _catalogPageSize,
             branchId: _branchId,
           );
-      if (!mounted) return;
+      if (!mounted || generation != _catalogGeneration) return;
       setState(() {
         _catalog = result.items;
+        _catalogPage = 0;
+        _catalogHasMore = result.hasMore;
         _catalogLoading = false;
       });
     } on AppFailure catch (failure) {
-      if (!mounted) return;
+      if (!mounted || generation != _catalogGeneration) return;
       setState(() {
         _catalogError = failure.message;
         _catalogLoading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _catalogGeneration) return;
       setState(() {
         _catalogError = 'Unable to load products. Please try again.';
         _catalogLoading = false;
       });
     }
+  }
+
+  Future<void> _loadMoreCatalog() async {
+    if (!_catalogHasMore || _catalogLoading || _catalogLoadingMore) return;
+    final generation = _catalogGeneration;
+    final nextPage = _catalogPage + 1;
+    setState(() => _catalogLoadingMore = true);
+    try {
+      final result = await ref.read(productRepositoryProvider).fetchProducts(
+            search: _productSearch.text,
+            categoryId: _categoryId,
+            isActive: true,
+            page: nextPage,
+            pageSize: _catalogPageSize,
+            branchId: _branchId,
+          );
+      if (!mounted || generation != _catalogGeneration) return;
+      final seen = {for (final p in _catalog) p.id};
+      setState(() {
+        _catalog = [
+          ..._catalog,
+          for (final p in result.items)
+            if (!seen.contains(p.id)) p,
+        ];
+        _catalogPage = nextPage;
+        _catalogHasMore = result.hasMore;
+        _catalogLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _catalogGeneration) return;
+      setState(() => _catalogLoadingMore = false);
+    }
+  }
+
+  bool _onCatalogScroll(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification &&
+        notification.metrics.axis == Axis.vertical &&
+        notification.metrics.extentAfter < 400) {
+      _loadMoreCatalog();
+    }
+    return false;
   }
 
   void _onProductSearchChanged(String _) {
@@ -554,6 +606,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             productName: product.name,
             productSku: _skuForVariant(product, variant),
             imageUrl: product.imageUrl,
+            imageCacheKey: product.imageCacheKey,
             unitPrice: _priceForVariant(product, variant),
             quantity: 1,
             availableStock: available,
@@ -767,6 +820,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               productName: product.name,
               productSku: _skuForVariant(product, variant),
               imageUrl: product.imageUrl,
+            imageCacheKey: product.imageCacheKey,
               unitPrice: _priceForVariant(product, variant),
               quantity: qty,
               availableStock: available,
@@ -1240,9 +1294,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               onChanged: _setLayoutMode,
             ),
             const Spacer(),
-            if (catalogOpen && !_catalogLoading && _catalog.isNotEmpty)
+            if (catalogOpen && _catalog.isNotEmpty)
               Text(
-                '${_catalog.length} products',
+                '${_catalog.length}${_catalogHasMore ? '+' : ''} products',
                 style: const TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 12,
@@ -1252,10 +1306,13 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
+        SelloInlineRefreshBar(
+          active: catalogOpen && _catalogLoading && _catalog.isNotEmpty,
+        ),
         Expanded(
           child: !catalogOpen
               ? const _CatalogGate()
-              : _catalogLoading
+              : _catalogLoading && _catalog.isEmpty
                   ? const Center(
                       child: SizedBox(
                         width: 28,
@@ -1263,7 +1320,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
                         child: CircularProgressIndicator(strokeWidth: 2.4),
                       ),
                     )
-                  : _catalogError != null
+                  : _catalogError != null && _catalog.isEmpty
                       ? SelloStateView.error(
                           title: 'Unable to load products',
                           message: _catalogError,
@@ -1292,14 +1349,24 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   }
 
   Widget _buildProductCatalog(String symbol) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onCatalogScroll,
+      child: _buildProductCatalogList(symbol),
+    );
+  }
+
+  Widget _buildProductCatalogList(String symbol) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (_layoutMode == ProductCatalogLayoutMode.list) {
           return ListView.separated(
             padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-            itemCount: _catalog.length,
+            itemCount: _catalog.length + (_catalogLoadingMore ? 1 : 0),
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
+              if (index >= _catalog.length) {
+                return const SelloLoadMoreFooter(active: true);
+              }
               final product = _catalog[index];
               return _buildCatalogEntry(
                 product: product,
@@ -1317,9 +1384,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
         return ListView.separated(
           padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-          itemCount: rowCount,
+          itemCount: rowCount + (_catalogLoadingMore ? 1 : 0),
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, row) {
+            if (row >= rowCount) {
+              return const SelloLoadMoreFooter(active: true);
+            }
             final start = row * crossAxisCount;
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2082,6 +2152,7 @@ class _LineEditorTile extends StatelessWidget {
               SelloEntityThumb(
                 name: line.productName,
                 imageUrl: line.imageUrl,
+                cacheKey: line.imageCacheKey,
                 width: compact ? 40 : 44,
               ),
               SizedBox(width: compact ? 8 : 12),

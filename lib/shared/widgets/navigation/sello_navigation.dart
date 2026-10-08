@@ -28,6 +28,16 @@ class SelloNavDestination {
 
   /// StatefulShell branch index — required when nav is permission-filtered.
   final int? branchIndex;
+
+  SelloNavDestination withBadge(String? value) => SelloNavDestination(
+    label: label,
+    icon: icon,
+    selectedIcon: selectedIcon,
+    location: location,
+    glyph: glyph,
+    badge: value,
+    branchIndex: branchIndex,
+  );
 }
 
 class SelloNavSection {

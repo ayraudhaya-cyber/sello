@@ -4,10 +4,7 @@ import 'package:sello/shared/models/app_notification.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationPageResult {
-  const NotificationPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const NotificationPageResult({required this.items, required this.hasMore});
 
   final List<AppNotification> items;
   final bool hasMore;
@@ -16,7 +13,7 @@ class NotificationPageResult {
 /// Shared inbox + company activity + preferences repository (Hub and Sales).
 class NotificationRepository {
   NotificationRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseService.client;
+    : _client = client ?? SupabaseService.client;
 
   final SupabaseClient _client;
 
@@ -58,32 +55,31 @@ class NotificationRepository {
         query = query.eq('category', category.dbValue);
       }
 
-      final rows = (await query
-          .order('created_at', ascending: false)
-          .range(page * pageSize, (page * pageSize) + pageSize - 1)) as List;
+      final rows =
+          (await query
+                  .order('created_at', ascending: false)
+                  .range(page * pageSize, (page * pageSize) + pageSize - 1))
+              as List;
 
       var items = rows
           .map(
-            (row) => AppNotification.fromJson(
-              Map<String, dynamic>.from(row as Map),
-            ),
+            (row) =>
+                AppNotification.fromJson(Map<String, dynamic>.from(row as Map)),
           )
           .where((n) => !n.isSnoozed)
           .toList();
 
       final needle = search.trim().toLowerCase();
       if (needle.isNotEmpty) {
-        items = items
-            .where((n) {
-              final hay = [
-                n.title,
-                n.body,
-                n.category.label,
-                n.type,
-              ].whereType<String>().join(' ').toLowerCase();
-              return hay.contains(needle);
-            })
-            .toList();
+        items = items.where((n) {
+          final hay = [
+            n.title,
+            n.body,
+            n.category.label,
+            n.type,
+          ].whereType<String>().join(' ').toLowerCase();
+          return hay.contains(needle);
+        }).toList();
       }
 
       return NotificationPageResult(
@@ -139,17 +135,15 @@ class NotificationRepository {
 
       final needle = search.trim().toLowerCase();
       if (needle.isNotEmpty) {
-        items = items
-            .where((e) {
-              final hay = [
-                e.summary,
-                e.actorName,
-                e.category.label,
-                e.eventType,
-              ].whereType<String>().join(' ').toLowerCase();
-              return hay.contains(needle);
-            })
-            .toList();
+        items = items.where((e) {
+          final hay = [
+            e.summary,
+            e.actorName,
+            e.category.label,
+            e.eventType,
+          ].whereType<String>().join(' ').toLowerCase();
+          return hay.contains(needle);
+        }).toList();
       }
 
       return items;
@@ -169,9 +163,11 @@ class NotificationRepository {
     required String employeeId,
   }) async {
     try {
-      await _client.from('notifications').update({
-        'read_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', notificationId).eq('recipient_employee_id', employeeId);
+      await _client
+          .from('notifications')
+          .update({'read_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', notificationId)
+          .eq('recipient_employee_id', employeeId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty
@@ -187,9 +183,7 @@ class NotificationRepository {
     try {
       await _client
           .from('notifications')
-          .update({
-            'read_at': DateTime.now().toUtc().toIso8601String(),
-          })
+          .update({'read_at': DateTime.now().toUtc().toIso8601String()})
           .eq('recipient_employee_id', employeeId)
           .isFilter('deleted_at', null)
           .isFilter('read_at', null);
@@ -210,10 +204,14 @@ class NotificationRepository {
     required String employeeId,
   }) async {
     try {
-      await _client.from('notifications').update({
-        'archived_at': DateTime.now().toUtc().toIso8601String(),
-        'read_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', notificationId).eq('recipient_employee_id', employeeId);
+      await _client
+          .from('notifications')
+          .update({
+            'archived_at': DateTime.now().toUtc().toIso8601String(),
+            'read_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', notificationId)
+          .eq('recipient_employee_id', employeeId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty
@@ -231,9 +229,11 @@ class NotificationRepository {
     required String employeeId,
   }) async {
     try {
-      await _client.from('notifications').update({
-        'deleted_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', notificationId).eq('recipient_employee_id', employeeId);
+      await _client
+          .from('notifications')
+          .update({'deleted_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', notificationId)
+          .eq('recipient_employee_id', employeeId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty
@@ -252,10 +252,14 @@ class NotificationRepository {
     required DateTime until,
   }) async {
     try {
-      await _client.from('notifications').update({
-        'snoozed_until': until.toUtc().toIso8601String(),
-        'read_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', notificationId).eq('recipient_employee_id', employeeId);
+      await _client
+          .from('notifications')
+          .update({
+            'snoozed_until': until.toUtc().toIso8601String(),
+            'read_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', notificationId)
+          .eq('recipient_employee_id', employeeId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty

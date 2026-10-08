@@ -46,8 +46,9 @@ class HubReportsState {
     return HubReportsState(
       overview: overview ?? this.overview,
       query: query ?? this.query,
-      categoryFilter:
-          clearCategory ? null : (categoryFilter ?? this.categoryFilter),
+      categoryFilter: clearCategory
+          ? null
+          : (categoryFilter ?? this.categoryFilter),
       isLoading: isLoading ?? this.isLoading,
       isExporting: isExporting ?? this.isExporting,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
@@ -66,8 +67,9 @@ class HubReportsNotifier extends Notifier<HubReportsState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.branch?.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.branch?.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.branch?.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -87,7 +89,11 @@ class HubReportsNotifier extends Notifier<HubReportsState> {
       return;
     }
 
-    state = state.copyWith(isLoading: true, clearError: true, initialized: true);
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      initialized: true,
+    );
     try {
       final query = state.query.copyWith(
         branchId: session.branch?.id ?? state.query.branchId,
@@ -103,17 +109,15 @@ class HubReportsNotifier extends Notifier<HubReportsState> {
         clearError: true,
       );
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: failure.message,
-      );
+      state = state.copyWith(isLoading: false, errorMessage: failure.message);
     }
   }
 
   Future<void> setQuery(ReportQuery query) async {
     if (state.query == query) return;
     final prev = state.query;
-    final needsReload = prev.preset != query.preset ||
+    final needsReload =
+        prev.preset != query.preset ||
         prev.customFrom != query.customFrom ||
         prev.customTo != query.customTo ||
         prev.branchId != query.branchId ||
@@ -164,8 +168,8 @@ class HubReportsNotifier extends Notifier<HubReportsState> {
 
 final hubReportsProvider =
     NotifierProvider<HubReportsNotifier, HubReportsState>(
-  HubReportsNotifier.new,
-);
+      HubReportsNotifier.new,
+    );
 
 final analyticsServiceProvider = Provider<AnalyticsService>(
   (ref) => AnalyticsService(reports: ref.watch(reportRepositoryProvider)),

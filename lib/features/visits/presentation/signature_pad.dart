@@ -1,15 +1,13 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:sello/core/theme/theme.dart';
 
 /// Simple ink signature pad — future: name, timestamp, GPS co-evidence.
 class SelloSignaturePad extends StatefulWidget {
-  const SelloSignaturePad({
-    super.key,
-    required this.onSigned,
-  });
+  const SelloSignaturePad({super.key, required this.onSigned});
 
   final VoidCallback onSigned;
 
@@ -26,8 +24,9 @@ class SelloSignaturePadState extends State<SelloSignaturePad> {
   bool get hasInk => _points.any((p) => p != null);
 
   Future<ui.Image?> captureImage() async {
-    final boundary = _boundaryKey.currentContext?.findRenderObject()
-        as RenderRepaintBoundary?;
+    final boundary =
+        _boundaryKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
     if (boundary == null) return null;
     return boundary.toImage(pixelRatio: 2);
   }
@@ -42,15 +41,23 @@ class SelloSignaturePadState extends State<SelloSignaturePad> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.outlinePanel),
         ),
-        child: GestureDetector(
-          onPanStart: (details) {
-            setState(() => _points.add(details.localPosition));
-            widget.onSigned();
+        child: RawGestureDetector(
+          gestures: {
+            _EagerPanGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                  _EagerPanGestureRecognizer
+                >(_EagerPanGestureRecognizer.new, (recognizer) {
+                  recognizer
+                    ..onStart = (details) {
+                      setState(() => _points.add(details.localPosition));
+                      widget.onSigned();
+                    }
+                    ..onUpdate = (details) {
+                      setState(() => _points.add(details.localPosition));
+                    }
+                    ..onEnd = (_) => setState(() => _points.add(null));
+                }),
           },
-          onPanUpdate: (details) {
-            setState(() => _points.add(details.localPosition));
-          },
-          onPanEnd: (_) => setState(() => _points.add(null)),
           child: CustomPaint(
             painter: _SignaturePainter(_points),
             size: Size.infinite,
@@ -58,6 +65,16 @@ class SelloSignaturePadState extends State<SelloSignaturePad> {
         ),
       ),
     );
+  }
+}
+
+/// Claims the stroke on touch-down so a surrounding scroll view cannot steal
+/// vertical strokes from the signature.
+class _EagerPanGestureRecognizer extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
   }
 }
 

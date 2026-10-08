@@ -72,8 +72,7 @@ class SelloToolbarBody extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final narrow =
-            context.isTablet || constraints.maxWidth < stackBelow;
+        final narrow = context.isTablet || constraints.maxWidth < stackBelow;
 
         if (narrow || _filtersOnOwnRow) {
           return Column(

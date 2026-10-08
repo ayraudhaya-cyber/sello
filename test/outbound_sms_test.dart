@@ -583,6 +583,80 @@ void main() {
       },
     );
 
+    CollectionAcknowledgementPrepareResult recordedByOwner() {
+      final base = collection();
+      return CollectionAcknowledgementPrepareResult(
+        alreadyPrepared: false,
+        eventId: base.eventId,
+        token: base.token,
+        paymentNumber: base.paymentNumber,
+        amount: base.amount,
+        currency: base.currency,
+        methodLabel: base.methodLabel,
+        companyName: base.companyName,
+        customerName: base.customerName,
+        receivedAt: base.receivedAt,
+        customer: base.customer,
+        hubRecipients: base.hubRecipients,
+        recordedByTeam: true,
+      );
+    }
+
+    OutboundNotificationPolicies teamRecordsPolicy({required bool notify}) {
+      final defaults = OutboundNotificationPolicies.defaults;
+      return defaults.copyWithType(
+        OutboundNotificationType.collectionSubmitted,
+        defaults
+            .policyFor(OutboundNotificationType.collectionSubmitted)
+            .copyWith(notifyWhenTeamRecords: notify),
+      );
+    }
+
+    test('owner-recorded collection texts the team when the switch is on',
+        () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = CollectionAcknowledgementDispatcher(
+        prepare: (_) async => recordedByOwner(),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+        policies: teamRecordsPolicy(notify: true),
+      );
+      await dispatcher.dispatch('pay-1', pendingReview: false);
+      expect(
+        sms.requests.where((r) => r.recipientKind == OutboundRecipientKind.hub),
+        hasLength(1),
+      );
+    });
+
+    test('owner-recorded collection is silent when the switch is off',
+        () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = CollectionAcknowledgementDispatcher(
+        prepare: (_) async => recordedByOwner(),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+        policies: teamRecordsPolicy(notify: false),
+      );
+      await dispatcher.dispatch('pay-1', pendingReview: false);
+      expect(sms.requests, isEmpty);
+    });
+
+    test('rep-recorded collection still notifies when the switch is off',
+        () async {
+      final sms = _RecordingSmsSender();
+      final dispatcher = CollectionAcknowledgementDispatcher(
+        prepare: (_) async => collection(),
+        recordDispatch: _alwaysRecord,
+        smsSender: sms,
+        policies: teamRecordsPolicy(notify: false),
+      );
+      await dispatcher.dispatch('pay-1', pendingReview: false);
+      expect(
+        sms.requests.any((r) => r.recipientKind == OutboundRecipientKind.hub),
+        isTrue,
+      );
+    });
+
     test('collection SMS disabled → no Text.lk request', () async {
       final sms = _RecordingSmsSender();
       final dispatcher = CollectionAcknowledgementDispatcher(

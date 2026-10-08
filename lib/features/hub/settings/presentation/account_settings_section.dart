@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/features/profile/presentation/my_profile_form.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -16,11 +17,19 @@ class AccountSettingsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SettingsGroupCard(
+          title: 'Your profile',
+          description:
+              'Your name and mobile number. Your mobile is where Sello sends '
+              'SMS about collections and orders.',
+          child: MyProfileForm(),
+        ),
+        const SizedBox(height: AppSpacing.lg),
         SettingsGroupCard(
           title: 'Sign-in',
           description:
-              'Change the password for your own account. Email, name, and '
-              'role changes are managed by an Owner or Manager in Team.',
+              'Change the password for your own account. Email and role '
+              'changes are managed by an Owner or Manager in Team.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -49,10 +58,7 @@ class AccountSettingsSection extends ConsumerWidget {
 }
 
 class _AccountReadOnlyRow extends StatelessWidget {
-  const _AccountReadOnlyRow({
-    required this.label,
-    required this.value,
-  });
+  const _AccountReadOnlyRow({required this.label, required this.value});
 
   final String label;
   final String value;

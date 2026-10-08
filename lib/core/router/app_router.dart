@@ -23,6 +23,7 @@ import 'package:sello/features/hub/suppliers/presentation/hub_suppliers_page.dar
 import 'package:sello/features/mobile/authentication/presentation/login_page.dart';
 import 'package:sello/features/mobile/customers/presentation/sello_customers_page.dart';
 import 'package:sello/features/mobile/dashboard/presentation/sello_dashboard_page.dart';
+import 'package:sello/features/mobile/collections/presentation/sello_collections_page.dart';
 import 'package:sello/features/mobile/orders/presentation/sello_orders_page.dart';
 import 'package:sello/features/mobile/products/presentation/sello_products_page.dart';
 import 'package:sello/features/mobile/profile/presentation/sello_profile_page.dart';
@@ -91,6 +92,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             walkIn: q['walkin'] == '1' || q['walkin'] == 'true',
           );
         },
+      ),
+      GoRoute(
+        path: RoutePaths.selloCollections,
+        name: 'selloCollections',
+        builder: (context, state) => const SelloCollectionsPage(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

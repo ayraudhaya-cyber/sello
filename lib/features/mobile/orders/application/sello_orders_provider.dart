@@ -32,12 +32,14 @@ class SelloOrdersState {
   const SelloOrdersState({
     this.items = const [],
     this.search = '',
+
     /// [OrderStatus.draft] is the key for the "In progress" chip.
     this.statusFilter = OrderStatus.draft,
     this.page = 0,
     this.pageSize = 40,
     this.hasMore = false,
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.isSaving = false,
     this.errorMessage,
     this.initialized = false,
@@ -51,6 +53,7 @@ class SelloOrdersState {
   final int pageSize;
   final bool hasMore;
   final bool isLoading;
+  final bool isLoadingMore;
   final bool isSaving;
   final String? errorMessage;
   final bool initialized;
@@ -66,6 +69,7 @@ class SelloOrdersState {
     int? pageSize,
     bool? hasMore,
     bool? isLoading,
+    bool? isLoadingMore,
     bool? isSaving,
     String? errorMessage,
     bool clearError = false,
@@ -80,6 +84,7 @@ class SelloOrdersState {
       pageSize: pageSize ?? this.pageSize,
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isSaving: isSaving ?? this.isSaving,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       initialized: initialized ?? this.initialized,
@@ -97,8 +102,9 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(refresh);
     });
@@ -109,14 +115,19 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
 
   Future<void> refresh() => loadOrders(resetPage: true);
 
+  int _loadGeneration = 0;
+
   Future<void> loadOrders({
     bool resetPage = false,
     bool showLoading = true,
   }) async {
+    final generation = ++_loadGeneration;
     final session = ref.read(currentSessionProvider);
-    final page = resetPage ? 0 : state.page;
+    // Appended pages are replaced by a fresh first page on reload.
+    const page = 0;
     state = state.copyWith(
       isLoading: showLoading ? true : state.isLoading,
+      isLoadingMore: false,
       clearError: true,
       page: page,
       initialized: true,
@@ -133,6 +144,7 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
         page: page,
         pageSize: state.pageSize,
       );
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
         items: result.items,
         hasMore: result.hasMore,
@@ -141,13 +153,48 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
       );
+    }
+  }
+
+  /// Appends the next page (infinite scroll).
+  Future<void> loadMore() async {
+    if (!state.hasMore || state.isLoading || state.isLoadingMore) return;
+    final generation = _loadGeneration;
+    final session = ref.read(currentSessionProvider);
+    final nextPage = state.page + 1;
+    state = state.copyWith(isLoadingMore: true);
+    try {
+      final result = await _repo.fetchOrders(
+        search: state.search,
+        statuses: salesOrderListStatuses(
+          showAllStatuses: state.showAllStatuses,
+          statusFilter: state.statusFilter,
+        ),
+        employeeId: session?.employee.id,
+        page: nextPage,
+        pageSize: state.pageSize,
+      );
+      if (generation != _loadGeneration) return;
+      final seen = {for (final o in state.items) o.id};
+      state = state.copyWith(
+        items: [
+          ...state.items,
+          for (final o in result.items)
+            if (!seen.contains(o.id)) o,
+        ],
+        page: nextPage,
+        hasMore: result.hasMore,
+        isLoadingMore: false,
+      );
+    } on AppFailure {
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(isLoadingMore: false);
     }
   }
 
@@ -169,6 +216,7 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
     OrderUpsertInput input, {
     bool complete = false,
     bool place = false,
+
     /// Visit finish already navigates away — skip the orders-list round trip.
     bool reloadList = true,
   }) async {
@@ -288,5 +336,5 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
 
 final selloOrdersProvider =
     NotifierProvider<SelloOrdersNotifier, SelloOrdersState>(
-  SelloOrdersNotifier.new,
-);
+      SelloOrdersNotifier.new,
+    );

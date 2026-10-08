@@ -23,10 +23,8 @@ Future<bool?> showVisitBasketSheet({
         top: Radius.circular(AppRadius.bottomSheet),
       ),
     ),
-    builder: (context) => _VisitBasketSheet(
-      orderKey: orderKey,
-      currencySymbol: currencySymbol,
-    ),
+    builder: (context) =>
+        _VisitBasketSheet(orderKey: orderKey, currencySymbol: currencySymbol),
   );
 }
 
@@ -184,10 +182,7 @@ class _BasketLine extends StatelessWidget {
       line.unitPrice,
       symbol: currencySymbol,
     );
-    final meta = [
-      ?sku,
-      unitPrice,
-    ].join(' · ');
+    final meta = [?sku, unitPrice].join(' · ');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -216,10 +211,7 @@ class _BasketLine extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            SelloFormatters.currency(
-              line.lineTotal,
-              symbol: currencySymbol,
-            ),
+            SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
             style: const TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontWeight: FontWeight.w600,

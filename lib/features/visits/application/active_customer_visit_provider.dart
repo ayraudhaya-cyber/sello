@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
@@ -54,7 +56,10 @@ class ActiveCustomerVisitNotifier extends AsyncNotifier<CustomerVisit?> {
     }
 
     final clientId = OfflineClientIds.create();
-    final gps = await VisitGpsService.captureOnce();
+    // Only wait briefly; a slower fix is attached after the visit opens.
+    final gps = await VisitGpsService.captureOnce(
+      timeout: const Duration(milliseconds: 1500),
+    );
     final online =
         ref.read(connectivityServiceProvider).snapshot.transportOnline;
 
@@ -110,6 +115,18 @@ class ActiveCustomerVisitNotifier extends AsyncNotifier<CustomerVisit?> {
             input: input,
           );
       state = AsyncData(visit);
+      if (gps == null) {
+        final repo = ref.read(visitRepositoryProvider);
+        unawaited(() async {
+          final late = await VisitGpsService.captureOnce();
+          if (late == null) return;
+          await repo.attachStartGps(
+            companyId: session.company.id,
+            visitId: visit.id,
+            gps: late,
+          );
+        }());
+      }
       return visit;
     } on AppFailure {
       rethrow;

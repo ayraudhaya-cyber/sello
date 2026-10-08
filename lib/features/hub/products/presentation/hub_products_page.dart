@@ -238,6 +238,13 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
             onAdd: state.isSaving ? null : () => _openEditor(),
           ),
           const SizedBox(height: AppSpacing.mdPlus),
+          SelloClearFiltersBar(
+            visible: state.hasActiveFilters,
+            onClear: () {
+              _searchController.clear();
+              ref.read(hubProductsProvider.notifier).clearFilters();
+            },
+          ),
           if (state.statusFilter == ProductStatusFilter.inactive) ...[
             const _ArchivedProductsBanner(),
             const SizedBox(height: AppSpacing.md),
@@ -257,6 +264,11 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
               archivedCount: state.items.where((item) => !item.isActive).length,
             ),
             const SizedBox(height: AppSpacing.lg),
+            if (state.errorMessage != null && state.items.isNotEmpty)
+              SelloInlineErrorBar(
+                message: state.errorMessage,
+                onRetry: () => ref.read(hubProductsProvider.notifier).refresh(),
+              ),
             if (state.errorMessage != null && state.items.isEmpty)
               SizedBox(
                 height: 320,
@@ -361,6 +373,7 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
                               children: [
                                 SelloEntityThumb(
                                   imageUrl: product.imageUrl,
+                                  cacheKey: product.imageCacheKey,
                                   width: 44,
                                   name: product.name,
                                 ),
@@ -960,6 +973,7 @@ class _ProductListCard extends StatelessWidget {
             children: [
               SelloEntityThumb(
                 imageUrl: product.imageUrl,
+                cacheKey: product.imageCacheKey,
                 width: 52,
                 name: product.name,
               ),
@@ -2229,11 +2243,7 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
             if (!sideBySide) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  imagePanel,
-                  const SizedBox(height: 28),
-                  details,
-                ],
+                children: [imagePanel, const SizedBox(height: 28), details],
               );
             }
             return Row(

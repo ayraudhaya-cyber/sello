@@ -68,10 +68,7 @@ class AuthShellLayout extends StatelessWidget {
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxCardWidth),
-                  child: AuthFormCard(
-                    padding: cardPadding,
-                    child: child,
-                  ),
+                  child: AuthFormCard(padding: cardPadding, child: child),
                 ),
               ),
             );
@@ -98,10 +95,10 @@ class AuthMarketingPanel extends StatelessWidget {
         final imageMaxWidth = constraints.maxWidth * 0.88 * heroScale;
         var imageMaxHeight = constraints.maxHeight * 0.44 * heroScale;
         final leftInset = constraints.maxWidth * 0.12;
-        const textBlockHeight = 3 * 36 * 1.1 + 3 * AppSpacing.xs + AppSpacing.md;
-        final roomForImage = constraints.maxHeight -
-            AppSpacing.lg * 2 -
-            textBlockHeight;
+        const textBlockHeight =
+            3 * 36 * 1.1 + 3 * AppSpacing.xs + AppSpacing.md;
+        final roomForImage =
+            constraints.maxHeight - AppSpacing.lg * 2 - textBlockHeight;
         if (roomForImage > 80 && imageMaxHeight > roomForImage) {
           imageMaxHeight = roomForImage;
         }
@@ -164,11 +161,7 @@ class AuthMarketingPanel extends StatelessWidget {
 
 /// Floating white card for auth forms — not full-height or full-width.
 class AuthFormCard extends StatelessWidget {
-  const AuthFormCard({
-    super.key,
-    required this.child,
-    this.padding,
-  });
+  const AuthFormCard({super.key, required this.child, this.padding});
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -182,11 +175,9 @@ class AuthFormCard extends StatelessWidget {
         boxShadow: AppShadows.level3,
       ),
       child: Padding(
-        padding: padding ??
-            const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xl,
-              vertical: 56,
-            ),
+        padding:
+            padding ??
+            const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: 56),
         child: child,
       ),
     );
@@ -195,11 +186,7 @@ class AuthFormCard extends StatelessWidget {
 
 /// Regular-weight text link for auth footers — forgot password, create account, sign in.
 class AuthTextLink extends StatelessWidget {
-  const AuthTextLink({
-    super.key,
-    required this.label,
-    required this.onPressed,
-  });
+  const AuthTextLink({super.key, required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback? onPressed;

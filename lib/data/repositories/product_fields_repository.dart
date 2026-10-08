@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ProductFieldsRepository {
   ProductFieldsRepository({SupabaseClient? client})
-      : _client = client ?? SupabaseService.client;
+    : _client = client ?? SupabaseService.client;
 
   final SupabaseClient _client;
 
@@ -45,13 +45,16 @@ class ProductFieldsRepository {
           .eq('company_id', companyId)
           .order('sort_order');
 
-      final fields = (rows as List)
-          .whereType<Map>()
-          .map((row) => CompanyProductField.fromJoinedRow(
-                Map<String, dynamic>.from(row),
-              ))
-          .toList()
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      final fields =
+          (rows as List)
+              .whereType<Map>()
+              .map(
+                (row) => CompanyProductField.fromJoinedRow(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
+              .toList()
+            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
       return ProductFieldConfig(fields: fields);
     } on PostgrestException catch (error) {

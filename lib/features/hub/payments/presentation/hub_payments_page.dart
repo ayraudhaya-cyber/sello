@@ -7,6 +7,8 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/collections/application/sales_rep_options_provider.dart';
+import 'package:sello/features/collections/presentation/collections_export_dialog.dart';
 import 'package:sello/features/hub/payments/application/hub_cheques_provider.dart';
 import 'package:sello/features/hub/payments/application/hub_payments_provider.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
@@ -14,6 +16,9 @@ import 'package:sello/features/orders/presentation/order_confirmation_share_shee
 import 'package:sello/features/payments/application/cheque_lifecycle.dart';
 import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
 import 'package:sello/features/payments/presentation/cheque_details_dialog.dart';
+import 'package:sello/features/corrections/application/correction_rules.dart';
+import 'package:sello/features/corrections/presentation/correct_payment_dialog.dart';
+import 'package:sello/features/corrections/presentation/edit_cheque_details_dialog.dart';
 import 'package:sello/features/payments/presentation/payment_details_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
 import 'package:sello/features/payments/presentation/record_cheque_dialog.dart';
@@ -21,6 +26,7 @@ import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
+import 'package:sello/shared/models/employee_summary.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/models/role_permission_profile.dart';
@@ -48,6 +54,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
   String? _pendingChequeId;
   bool _handledDeepLink = false;
   final _selectedDepositIds = <String>{};
+  final _selectedApprovalIds = <String>{};
 
   @override
   void didChangeDependencies() {
@@ -98,6 +105,10 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     if (permissions?.canApprove(AppModule.payments) ?? false) return true;
     final role = ref.read(currentSessionProvider)?.appRole;
     return role == UserRole.owner || role == UserRole.manager;
+  }
+
+  bool _canCorrectFinancials() {
+    return ref.read(permissionServiceProvider)?.canCorrectFinancials ?? false;
   }
 
   bool _canCollectCheques() {
@@ -232,6 +243,27 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                 Navigator.of(context).maybePop();
               }
             : null,
+        onCorrect:
+            _canCorrectFinancials() &&
+                PaymentCorrectionRules.canCorrect(detail.summary.status)
+            ? () async {
+                final corrected = await showDialog<bool>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => CorrectPaymentDialog(
+                    detail: detail,
+                    currencySymbol: _currencySymbol(),
+                  ),
+                );
+                if (corrected == true && context.mounted) {
+                  Navigator.of(context).maybePop();
+                  ref.read(hubPaymentsProvider.notifier).refresh();
+                  if (mounted) {
+                    SelloSnackbars.success(context, 'Payment corrected.');
+                  }
+                }
+              }
+            : null,
       ),
     );
   }
@@ -332,6 +364,28 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                   SelloSnackbars.success(context, 'Cheque cancelled.');
                 }
                 return error;
+              }
+            : null,
+        onEditDetails:
+            ChequeCorrectionRules.canEditDetails(
+              status: cheque.status,
+              isHubFinancialRole: _canCorrectFinancials(),
+              isOwnCheque:
+                  cheque.employeeId ==
+                  (ref.read(currentSessionProvider)?.employee.id ?? ''),
+            )
+            ? () async {
+                final saved = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => EditChequeDetailsDialog(cheque: cheque),
+                );
+                if (saved == true && context.mounted) {
+                  Navigator.of(context).maybePop();
+                  ref.read(hubChequesProvider.notifier).refresh();
+                  if (mounted) {
+                    SelloSnackbars.success(context, 'Cheque details updated.');
+                  }
+                }
               }
             : null,
       ),
@@ -456,6 +510,100 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     }
   }
 
+  bool _canReviewCollections() =>
+      ref.read(permissionServiceProvider)?.canApprove(AppModule.payments) ??
+      false;
+
+  void _toggleApprovalSelection(PaymentSummary payment) {
+    if (!payment.status.isPendingReview) return;
+    setState(() {
+      if (!_selectedApprovalIds.add(payment.id)) {
+        _selectedApprovalIds.remove(payment.id);
+      }
+    });
+  }
+
+  Future<void> _approveInline(PaymentSummary payment) async {
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: 'Approve collection?',
+      message:
+          '${payment.customerName ?? 'Customer'} · '
+          '${SelloFormatters.currency(payment.amount, symbol: _currencySymbol())}'
+          '${payment.employeeName == null ? '' : ' · collected by ${payment.employeeName}'}.\n\n'
+          'The customer balance and order payments update now.',
+      confirmLabel: 'Approve',
+    );
+    if (confirmed != true || !mounted) return;
+    final error = await ref
+        .read(hubPaymentsProvider.notifier)
+        .approveCollection(payment.id);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+      return;
+    }
+    setState(() => _selectedApprovalIds.remove(payment.id));
+    SelloSnackbars.success(context, 'Collection approved.');
+  }
+
+  Future<void> _rejectInline(PaymentSummary payment) async {
+    final result = await showRejectCollectionDialog(context);
+    if (result == null || !mounted) return;
+    final error = await ref
+        .read(hubPaymentsProvider.notifier)
+        .rejectCollection(payment.id, reason: result.reason);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+      return;
+    }
+    setState(() => _selectedApprovalIds.remove(payment.id));
+    SelloSnackbars.success(context, 'Collection rejected.');
+  }
+
+  Future<void> _approveSelected() async {
+    final selected = ref
+        .read(hubPaymentsProvider)
+        .items
+        .where(
+          (p) =>
+              _selectedApprovalIds.contains(p.id) && p.status.isPendingReview,
+        )
+        .toList(growable: false);
+    if (selected.isEmpty) return;
+    final total = selected.fold<num>(0, (sum, p) => sum + p.amount);
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: selected.length == 1
+          ? 'Approve 1 collection?'
+          : 'Approve ${selected.length} collections?',
+      message:
+          'Total ${SelloFormatters.currency(total, symbol: _currencySymbol())}. '
+          'Customer balances and order payments update now.',
+      confirmLabel: 'Approve all',
+    );
+    if (confirmed != true || !mounted) return;
+    final result = await ref
+        .read(hubPaymentsProvider.notifier)
+        .approveCollections([for (final p in selected) p.id]);
+    if (!mounted) return;
+    setState(_selectedApprovalIds.clear);
+    if (result.error != null) {
+      SelloSnackbars.error(
+        context,
+        '${result.approved} approved. Stopped: ${result.error}',
+      );
+      return;
+    }
+    SelloSnackbars.success(
+      context,
+      result.approved == 1
+          ? 'Collection approved.'
+          : '${result.approved} collections approved.',
+    );
+  }
+
   void _toggleDepositSelection(ChequeSummary cheque) {
     if (!chequeEligibleForBatchDeposit(cheque) || !_canManageClearance()) {
       return;
@@ -527,8 +675,8 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     return AppPageScaffold(
       title: 'Payments',
       subtitle: _tab == _PaymentsWorkspaceTab.payments
-          ? 'Your financial workspace — collect against orders, wallets, and credit.'
-          : 'Cheque instruments — collection, deposit, clearance, and bounce.',
+          ? 'Collect money against orders and opening balances.'
+          : 'Cheques from Sales Reps appear here automatically. Use Add existing cheque only for old cheques from before Sello.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(
@@ -552,6 +700,15 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
     HubPaymentsState state,
     String currencySymbol,
   ) {
+    final canReview = _canReviewCollections();
+    final showApprovalSelect =
+        canReview && state.items.any((p) => p.status.isPendingReview);
+    final selectedPending = state.items
+        .where(
+          (p) =>
+              _selectedApprovalIds.contains(p.id) && p.status.isPendingReview,
+        )
+        .toList(growable: false);
     return [
       _PaymentsToolbar(
         searchController: _searchController,
@@ -573,18 +730,27 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             ref.read(hubPaymentsProvider.notifier).setMethodFilter(value);
           }
         },
+        salesReps: ref.watch(salesRepOptionsProvider).value ?? const [],
+        onSalesRepChanged: (value) =>
+            ref.read(hubPaymentsProvider.notifier).setEmployeeFilter(value),
+        onExport: () => showDialog<void>(
+          context: context,
+          builder: (_) =>
+              CollectionsExportDialog(initialEmployeeId: state.employeeId),
+        ),
         onRefresh: state.isLoading
             ? null
             : () => ref.read(hubPaymentsProvider.notifier).refresh(),
         onReceive: state.isSaving ? null : _receivePayment,
-        onRecordCheque: state.isSaving
-            ? null
-            : () {
-                setState(() => _tab = _PaymentsWorkspaceTab.cheques);
-                _recordCheque();
-              },
       ),
       const SizedBox(height: AppSpacing.mdPlus),
+      SelloClearFiltersBar(
+        visible: state.hasActiveFilters,
+        onClear: () {
+          _searchController.clear();
+          ref.read(hubPaymentsProvider.notifier).clearFilters();
+        },
+      ),
       if (state.pendingReviewCount > 0) ...[
         _PendingReviewBanner(
           count: state.pendingReviewCount,
@@ -593,6 +759,25 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                 .read(hubPaymentsProvider.notifier)
                 .setStatusFilter(PaymentStatusFilter.pending);
           },
+        ),
+        const SizedBox(height: AppSpacing.md),
+      ],
+      if (selectedPending.isNotEmpty) ...[
+        _ApprovalSelectionBar(
+          count: selectedPending.length,
+          total: SelloFormatters.currency(
+            selectedPending.fold<num>(0, (sum, p) => sum + p.amount),
+            symbol: currencySymbol,
+          ),
+          onClear: () => setState(_selectedApprovalIds.clear),
+          onApprove: state.isSaving ? null : _approveSelected,
+        ),
+        const SizedBox(height: AppSpacing.md),
+      ],
+      if (state.errorMessage != null && state.items.isNotEmpty) ...[
+        SelloInlineErrorBar(
+          message: state.errorMessage,
+          onRetry: () => ref.read(hubPaymentsProvider.notifier).refresh(),
         ),
         const SizedBox(height: AppSpacing.md),
       ],
@@ -639,6 +824,18 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                       children: [
                         Row(
                           children: [
+                            if (showApprovalSelect &&
+                                payment.status.isPendingReview) ...[
+                              Checkbox(
+                                value: _selectedApprovalIds.contains(
+                                  payment.id,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                onChanged: (_) =>
+                                    _toggleApprovalSelection(payment),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Expanded(
                               child: Text(
                                 payment.paymentNumber,
@@ -649,12 +846,15 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                                 ),
                               ),
                             ),
-                            _statusBadge(payment.status),
+                            _statusBadge(payment),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          payment.customerName ?? 'Customer',
+                          payment.employeeName == null
+                              ? (payment.customerName ?? 'Customer')
+                              : '${payment.customerName ?? 'Customer'} · '
+                                    '${payment.employeeName}',
                           style: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
                             color: AppColors.textSecondary,
@@ -671,6 +871,34 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
+                        if (canReview && payment.status.isPendingReview) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SelloButton(
+                                  label: 'Reject',
+                                  variant: SelloButtonVariant.outline,
+                                  expanded: true,
+                                  onPressed: state.isSaving
+                                      ? null
+                                      : () => _rejectInline(payment),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: SelloButton(
+                                  label: 'Approve',
+                                  icon: Icons.check_rounded,
+                                  expanded: true,
+                                  onPressed: state.isSaving
+                                      ? null
+                                      : () => _approveInline(payment),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -696,14 +924,16 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         else
           SelloFadeIn(
             child: SelloDataTable(
+              flexColumnIndex: showApprovalSelect ? 2 : 1,
               columns: [
+                if (showApprovalSelect) selloSelectDataColumn(),
                 selloDataColumn('Payment #'),
                 selloDataColumn('Customer'),
-                selloDataColumn('Related Order'),
+                selloDataColumn('Paid for'),
                 selloDataColumn('Method'),
                 selloDataColumn('Amount', numeric: true),
                 selloDataColumn('Status'),
-                selloDataColumn('Received By'),
+                selloDataColumn('Collected by'),
                 selloDataColumn('Date'),
                 selloDataColumn('Actions'),
               ],
@@ -712,6 +942,19 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                   DataRow(
                     onSelectChanged: (_) => _openDetails(payment),
                     cells: [
+                      if (showApprovalSelect)
+                        DataCell(
+                          payment.status.isPendingReview
+                              ? Checkbox(
+                                  value: _selectedApprovalIds.contains(
+                                    payment.id,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  onChanged: (_) =>
+                                      _toggleApprovalSelection(payment),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
                       DataCell(
                         SelloTableText(
                           payment.paymentNumber,
@@ -739,8 +982,12 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                       ),
                       DataCell(
                         SelloTableText(
-                          payment.relatedOrderNumber ?? '—',
-                          tone: payment.relatedOrderNumber == null
+                          payment.allocationSummary.isNotEmpty
+                              ? payment.allocationSummary
+                              : (payment.relatedOrderNumber ?? '—'),
+                          tone:
+                              payment.allocationSummary.isEmpty &&
+                                  payment.relatedOrderNumber == null
                               ? SelloTableTone.muted
                               : SelloTableTone.normal,
                         ),
@@ -756,7 +1003,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                           numeric: true,
                         ),
                       ),
-                      DataCell(_statusBadge(payment.status)),
+                      DataCell(_statusBadge(payment)),
                       DataCell(SelloTableText(payment.employeeName ?? '—')),
                       DataCell(
                         SelloTableText(
@@ -765,11 +1012,36 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                         ),
                       ),
                       DataCell(
-                        SelloButton(
-                          label: 'View',
-                          size: SelloButtonSize.small,
-                          variant: SelloButtonVariant.ghost,
-                          onPressed: () => _openDetails(payment),
+                        SelloRowIconGroup(
+                          children: [
+                            if (canReview &&
+                                payment.status.isPendingReview) ...[
+                              SelloRowIconButton(
+                                tooltip: 'Approve collection',
+                                icon: Icons.check_circle_outline_rounded,
+                                onPressed: () => _approveInline(payment),
+                              ),
+                              SelloRowIconButton(
+                                tooltip: 'Reject collection',
+                                icon: Icons.highlight_off_rounded,
+                                onPressed: () => _rejectInline(payment),
+                              ),
+                            ],
+                            SelloRowIconButton(
+                              tooltip: 'View payment',
+                              icon: Icons.visibility_outlined,
+                              onPressed: () => _openDetails(payment),
+                            ),
+                            if (_canCorrectFinancials() &&
+                                PaymentCorrectionRules.canCorrect(
+                                  payment.status,
+                                ))
+                              SelloRowIconButton(
+                                tooltip: 'Correct payment',
+                                icon: Icons.edit_outlined,
+                                onPressed: () => _openDetails(payment),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -840,6 +1112,14 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             : _depositSelected,
       ),
       const SizedBox(height: AppSpacing.mdPlus),
+      SelloClearFiltersBar(
+        visible: state.hasActiveFilters,
+        onClear: () {
+          _chequeSearchController.clear();
+          _bankFilterController.clear();
+          ref.read(hubChequesProvider.notifier).clearFilters();
+        },
+      ),
       if (state.isLoading && state.items.isEmpty) ...[
         if (context.isMobile)
           const SelloListSkeleton()
@@ -848,6 +1128,11 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
       ] else ...[
         _ChequesSummaryRow(stats: state.stats),
         const SizedBox(height: AppSpacing.lg),
+        if (state.errorMessage != null && state.items.isNotEmpty)
+          SelloInlineErrorBar(
+            message: state.errorMessage,
+            onRetry: () => ref.read(hubChequesProvider.notifier).refresh(),
+          ),
         if (state.errorMessage != null && state.items.isEmpty)
           SizedBox(
             height: 320,
@@ -863,8 +1148,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             child: SelloEmptyState(
               title: 'No cheques yet',
               message:
-                  'Add a cheque you already have, or one the customer promised. '
-                  'What they owe updates when you receive it (or after approval).',
+                  'Cheques your team records appear here. Add a promised cheque, '
+                  'or an old cheque from before Sello. What they owe updates when '
+                  'you receive it (or after approval).',
               icon: Icons.receipt_long_rounded,
               actionLabel: 'Record cheque',
               onAction: _recordCheque,
@@ -1042,25 +1328,41 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                         ),
                       ),
                       DataCell(
-                        _nextChequeAction(cheque) == null
-                            ? SelloButton(
-                                label: 'View',
-                                size: SelloButtonSize.small,
-                                variant: SelloButtonVariant.ghost,
+                        SelloRowIconGroup(
+                          children: [
+                            SelloRowIconButton(
+                              tooltip: 'View cheque',
+                              icon: Icons.visibility_outlined,
+                              onPressed: () => _openChequeDetails(cheque),
+                            ),
+                            if (ChequeCorrectionRules.canEditDetails(
+                              status: cheque.status,
+                              isHubFinancialRole: _canCorrectFinancials(),
+                              isOwnCheque:
+                                  cheque.employeeId ==
+                                  (ref
+                                          .read(currentSessionProvider)
+                                          ?.employee
+                                          .id ??
+                                      ''),
+                            ))
+                              SelloRowIconButton(
+                                tooltip: 'Edit details',
+                                icon: Icons.edit_outlined,
                                 onPressed: () => _openChequeDetails(cheque),
-                              )
-                            : SelloButton(
-                                label: chequeForwardActionLabel(
-                                  _nextChequeAction(cheque)!,
-                                ),
+                              ),
+                            if (_nextChequeAction(cheque) != null)
+                              SelloRowIconButton(
                                 tooltip: chequeForwardActionHint(
                                   _nextChequeAction(cheque)!,
                                 ),
-                                size: SelloButtonSize.small,
+                                icon: Icons.arrow_forward_rounded,
                                 onPressed: state.isSaving
-                                    ? null
+                                    ? () {}
                                     : () => _runListForward(cheque),
                               ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1086,15 +1388,15 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
   }
 }
 
-Widget _statusBadge(PaymentRecordStatus status) {
+Widget _statusBadge(PaymentSummary payment) {
   return SelloStatusBadge(
-    label: status.label,
-    tone: switch (status) {
+    label: payment.displayStatusLabel,
+    tone: switch (payment.status) {
       PaymentRecordStatus.completed => SelloStatusTone.success,
       PaymentRecordStatus.pending => SelloStatusTone.warning,
       PaymentRecordStatus.refunded => SelloStatusTone.info,
-      PaymentRecordStatus.cancelled ||
-      PaymentRecordStatus.rejected => SelloStatusTone.danger,
+      PaymentRecordStatus.cancelled || PaymentRecordStatus.rejected =>
+        payment.isCorrected ? SelloStatusTone.info : SelloStatusTone.danger,
     },
   );
 }
@@ -1167,9 +1469,11 @@ class _PaymentsToolbar extends StatelessWidget {
     required this.onSearchChanged,
     required this.onStatusChanged,
     required this.onMethodChanged,
+    required this.salesReps,
+    required this.onSalesRepChanged,
+    required this.onExport,
     required this.onRefresh,
     required this.onReceive,
-    this.onRecordCheque,
   });
 
   final TextEditingController searchController;
@@ -1177,12 +1481,31 @@ class _PaymentsToolbar extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<PaymentStatusFilter?> onStatusChanged;
   final ValueChanged<PaymentMethodFilter?> onMethodChanged;
+  final List<EmployeeSummary> salesReps;
+  final ValueChanged<String?> onSalesRepChanged;
+  final VoidCallback? onExport;
   final VoidCallback? onRefresh;
   final VoidCallback? onReceive;
-  final VoidCallback? onRecordCheque;
 
   @override
   Widget build(BuildContext context) {
+    final knownRep = salesReps.any((rep) => rep.id == state.employeeId);
+    final salesRep = SizedBox(
+      width: context.isMobile ? double.infinity : 176,
+      child: SelloDropdown<String>(
+        value: knownRep ? state.employeeId! : '',
+        compact: true,
+        hint: 'Sales rep',
+        onChanged: (value) =>
+            onSalesRepChanged(value == null || value.isEmpty ? null : value),
+        items: [
+          const DropdownMenuItem(value: '', child: Text('All sales reps')),
+          for (final rep in salesReps)
+            DropdownMenuItem(value: rep.id, child: Text(rep.fullName)),
+        ],
+      ),
+    );
+
     final status = SizedBox(
       width: context.isMobile ? double.infinity : 148,
       child: SelloDropdown<PaymentStatusFilter>(
@@ -1270,11 +1593,11 @@ class _PaymentsToolbar extends StatelessWidget {
       onPressed: onReceive,
     );
 
-    final cheque = SelloButton(
-      label: 'Record cheque',
-      icon: Icons.receipt_long_outlined,
+    final export = SelloButton(
+      label: 'Export',
+      icon: Icons.download_rounded,
       variant: SelloButtonVariant.outline,
-      onPressed: onRecordCheque,
+      onPressed: onExport,
     );
 
     final search = SelloSearchBar(
@@ -1293,8 +1616,8 @@ class _PaymentsToolbar extends StatelessWidget {
       ),
       child: SelloToolbarBody(
         search: search,
-        filters: [status, method],
-        actions: [refresh, if (onRecordCheque != null) cheque, receive],
+        filters: [status, method, salesRep],
+        actions: [export, refresh, receive],
       ),
     );
   }
@@ -1455,7 +1778,7 @@ class _PaymentsSummaryRow extends StatelessWidget {
             stats.outstandingReceivables,
             symbol: currencySymbol,
           ),
-          hint: 'Customer receivables',
+          hint: 'All customers still owing',
           icon: Icons.account_balance_wallet_outlined,
           tone: AppColors.finance,
         ),
@@ -1465,17 +1788,17 @@ class _PaymentsSummaryRow extends StatelessWidget {
             stats.walletIssued,
             symbol: currencySymbol,
           ),
-          hint: 'Store credit on accounts',
+          hint: 'Credit sitting on customer wallets',
           icon: Icons.savings_outlined,
           tone: context.brandAccent,
         ),
         SelloStatCard(
-          label: 'Pending credit',
+          label: 'Credit owing',
           value: SelloFormatters.currency(
             stats.pendingCredit,
             symbol: currencySymbol,
           ),
-          hint: 'Credit customers owing',
+          hint: 'Only customers allowed to buy on credit',
           icon: Icons.credit_score_outlined,
           tone: AppColors.warning,
         ),
@@ -1658,6 +1981,56 @@ class _PendingReviewBanner extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ApprovalSelectionBar extends StatelessWidget {
+  const _ApprovalSelectionBar({
+    required this.count,
+    required this.total,
+    required this.onClear,
+    required this.onApprove,
+  });
+
+  final int count;
+  final String total;
+  final VoidCallback onClear;
+  final VoidCallback? onApprove;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count == 1 ? '1 selected' : '$count selected';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.brandAccent.withValues(alpha: 0.06),
+        borderRadius: AppRadius.panelAll,
+        border: Border.all(color: context.brandAccent.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$label · $total',
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onClear, child: const Text('Clear')),
+          const SizedBox(width: 6),
+          SelloButton(
+            label: context.isMobile ? 'Approve' : 'Approve selected',
+            icon: Icons.done_all_rounded,
+            size: SelloButtonSize.small,
+            onPressed: onApprove,
+          ),
+        ],
       ),
     );
   }

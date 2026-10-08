@@ -23,8 +23,8 @@ class HubDashboardEmptyState extends StatelessWidget {
     required this.tone,
     required this.soft,
     this.padding = const EdgeInsets.symmetric(vertical: 10),
-  })  : compact = true,
-        message = null;
+  }) : compact = true,
+       message = null;
 
   final IconData icon;
   final String title;
@@ -41,7 +41,13 @@ class HubDashboardEmptyState extends StatelessWidget {
         padding: padding,
         child: Row(
           children: [
-            _IconWell(icon: icon, tone: tone, soft: soft, size: 32, iconSize: 16),
+            _IconWell(
+              icon: icon,
+              tone: tone,
+              soft: soft,
+              size: 32,
+              iconSize: 16,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -68,7 +74,13 @@ class HubDashboardEmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _IconWell(icon: icon, tone: tone, soft: soft, size: 40, iconSize: 20),
+              _IconWell(
+                icon: icon,
+                tone: tone,
+                soft: soft,
+                size: 40,
+                iconSize: 20,
+              ),
               const SizedBox(height: 14),
               Text(
                 title,

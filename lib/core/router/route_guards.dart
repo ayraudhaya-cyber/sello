@@ -114,6 +114,7 @@ abstract final class RouteTitles {
     RoutePaths.selloInventory: 'Inventory',
     RoutePaths.selloOrders: 'Orders',
     RoutePaths.selloVisit: 'Visit',
+    RoutePaths.selloCollections: 'My collections',
     RoutePaths.selloProfile: 'Profile',
     RoutePaths.hubDashboard: 'Dashboard',
     RoutePaths.hubReports: 'Reports',

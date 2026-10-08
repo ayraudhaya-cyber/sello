@@ -423,7 +423,10 @@ void main() {
       expect(outcome!.customerActions, isNotEmpty);
       expect(outcome.hubActions, isNotEmpty);
       expect(outcome.messageBody, contains('pending owner/manager review'));
-      expect(outcome.hubActions.first.launchUri, contains('Pending%20Review'));
+      expect(
+        outcome.hubActions.first.launchUri,
+        contains('submitted%20for%20review'),
+      );
       expect(outcome.documentUrl, contains('/d/'));
       expect(outcome.messageBody.toLowerCase(), isNot(contains('approved')));
     });

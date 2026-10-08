@@ -22,6 +22,7 @@ class HubSettingsState {
   });
 
   final CompanySettings? settings;
+
   /// Local edits awaiting save. Mirrors [settings] when clean.
   final CompanySettings? draft;
   final bool isLoading;
@@ -73,8 +74,9 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
       final prevKey = previous == null
           ? null
           : '${previous.company.id}:${previous.employee.id}';
-      final nextKey =
-          next == null ? null : '${next.company.id}:${next.employee.id}';
+      final nextKey = next == null
+          ? null
+          : '${next.company.id}:${next.employee.id}';
       if (prevKey == nextKey) return;
       Future.microtask(load);
     });
@@ -150,10 +152,7 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
       );
       return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isSaving: false,
-        errorMessage: failure.message,
-      );
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
   }
@@ -183,8 +182,9 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
     }
 
     final navHex = navBackgroundColor?.trim() ?? '';
-    final normalizedNav =
-        navHex.isEmpty ? null : ClientBranding.normalizeHex(navHex);
+    final normalizedNav = navHex.isEmpty
+        ? null
+        : ClientBranding.normalizeHex(navHex);
     if (navHex.isNotEmpty && normalizedNav == null) {
       return 'Enter a colour as #RRGGBB.';
     }
@@ -369,8 +369,8 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
 
 final hubSettingsProvider =
     NotifierProvider<HubSettingsNotifier, HubSettingsState>(
-  HubSettingsNotifier.new,
-);
+      HubSettingsNotifier.new,
+    );
 
 /// Convenience read of persisted settings (falls back to defaults).
 final companySettingsProvider = Provider<CompanySettings>((ref) {

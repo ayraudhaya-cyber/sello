@@ -17,7 +17,8 @@ class SelloToastHost extends StatefulWidget {
   final Widget child;
 
   static SelloToastController of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<_SelloToastScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_SelloToastScope>();
     assert(scope != null, 'SelloToastHost is missing above this context.');
     return scope!.controller;
   }
@@ -63,10 +64,7 @@ class SelloToastController {
 }
 
 class _SelloToastScope extends InheritedWidget {
-  const _SelloToastScope({
-    required this.controller,
-    required super.child,
-  });
+  const _SelloToastScope({required this.controller, required super.child});
 
   final SelloToastController controller;
 
@@ -174,8 +172,7 @@ class _SelloToastHostState extends State<SelloToastHost> {
           widget.child,
           if (_toasts.isNotEmpty)
             Align(
-              alignment:
-                  isMobile ? Alignment.bottomCenter : Alignment.topRight,
+              alignment: isMobile ? Alignment.bottomCenter : Alignment.topRight,
               child: SafeArea(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -246,23 +243,25 @@ class _SelloToastCardState extends State<_SelloToastCard>
     curve: AppCurves.standard,
     reverseCurve: Curves.easeInCubic,
   );
-  late final Animation<double> _scale = Tween<double>(begin: 0.98, end: 1).animate(
-    CurvedAnimation(
-      parent: _motionController,
-      curve: AppCurves.standard,
-      reverseCurve: Curves.easeInCubic,
-    ),
-  );
-  late final Animation<Offset> _slide = Tween<Offset>(
-    begin: widget.fromTop ? const Offset(0, -0.12) : const Offset(0, 0.12),
-    end: Offset.zero,
-  ).animate(
-    CurvedAnimation(
-      parent: _motionController,
-      curve: AppCurves.standard,
-      reverseCurve: Curves.easeInCubic,
-    ),
-  );
+  late final Animation<double> _scale = Tween<double>(begin: 0.98, end: 1)
+      .animate(
+        CurvedAnimation(
+          parent: _motionController,
+          curve: AppCurves.standard,
+          reverseCurve: Curves.easeInCubic,
+        ),
+      );
+  late final Animation<Offset> _slide =
+      Tween<Offset>(
+        begin: widget.fromTop ? const Offset(0, -0.12) : const Offset(0, 0.12),
+        end: Offset.zero,
+      ).animate(
+        CurvedAnimation(
+          parent: _motionController,
+          curve: AppCurves.standard,
+          reverseCurve: Curves.easeInCubic,
+        ),
+      );
 
   bool _closing = false;
 
@@ -272,12 +271,11 @@ class _SelloToastCardState extends State<_SelloToastCard>
   void initState() {
     super.initState();
     if (_hasAutoDismiss) {
-      _progressController = AnimationController(
-        vsync: this,
-        duration: widget.data.duration,
-      )..addStatusListener((status) {
-          if (status == AnimationStatus.completed) _close();
-        });
+      _progressController =
+          AnimationController(vsync: this, duration: widget.data.duration)
+            ..addStatusListener((status) {
+              if (status == AnimationStatus.completed) _close();
+            });
       _progressController!.forward();
     } else {
       _progressController = null;
@@ -411,8 +409,10 @@ class _SelloToastCardState extends State<_SelloToastCard>
                             return Align(
                               alignment: Alignment.centerLeft,
                               child: FractionallySizedBox(
-                                widthFactor:
-                                    (1 - progress.value).clamp(0.0, 1.0),
+                                widthFactor: (1 - progress.value).clamp(
+                                  0.0,
+                                  1.0,
+                                ),
                                 child: child,
                               ),
                             );
@@ -439,25 +439,25 @@ class _SelloToastCardState extends State<_SelloToastCard>
   _ToastPalette _paletteFor(SelloToastKind kind) {
     return switch (kind) {
       SelloToastKind.success => const _ToastPalette(
-          icon: Icons.check_rounded,
-          fg: AppColors.success,
-          soft: AppColors.successContainer,
-        ),
+        icon: Icons.check_rounded,
+        fg: AppColors.success,
+        soft: AppColors.successContainer,
+      ),
       SelloToastKind.warning => const _ToastPalette(
-          icon: Icons.priority_high_rounded,
-          fg: AppColors.warning,
-          soft: AppColors.warningContainer,
-        ),
+        icon: Icons.priority_high_rounded,
+        fg: AppColors.warning,
+        soft: AppColors.warningContainer,
+      ),
       SelloToastKind.error => const _ToastPalette(
-          icon: Icons.error_outline_rounded,
-          fg: AppColors.error,
-          soft: AppColors.errorContainer,
-        ),
+        icon: Icons.error_outline_rounded,
+        fg: AppColors.error,
+        soft: AppColors.errorContainer,
+      ),
       SelloToastKind.info => const _ToastPalette(
-          icon: Icons.info_outline_rounded,
-          fg: AppColors.info,
-          soft: AppColors.infoContainer,
-        ),
+        icon: Icons.info_outline_rounded,
+        fg: AppColors.info,
+        soft: AppColors.infoContainer,
+      ),
     };
   }
 }
@@ -472,10 +472,7 @@ class _ToastIcon extends StatelessWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(
-        color: palette.soft,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: palette.soft, shape: BoxShape.circle),
       alignment: Alignment.center,
       child: Icon(palette.icon, size: 18, color: palette.fg),
     );
@@ -512,10 +509,7 @@ class _ToastCloseButton extends StatelessWidget {
 }
 
 class _MessageBlock extends StatelessWidget {
-  const _MessageBlock({
-    required this.message,
-    this.title,
-  });
+  const _MessageBlock({required this.message, this.title});
 
   final String? title;
   final String message;

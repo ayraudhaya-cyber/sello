@@ -146,6 +146,6 @@ void main() {
     expect(hubDashboardPresetForRange('today'), ReportDatePreset.today);
     expect(hubDashboardPresetForRange('week'), ReportDatePreset.thisWeek);
     expect(hubDashboardPresetForRange('month'), ReportDatePreset.thisMonth);
-    expect(hubDashboardPresetForRange('year'), ReportDatePreset.last30Days);
+    expect(hubDashboardPresetForRange('year'), ReportDatePreset.thisYear);
   });
 }

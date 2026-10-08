@@ -50,6 +50,10 @@ class PermissionService {
         code == 'administrator';
   }
 
+  /// Same Hub set as [canRecordOpeningBalanceAdjustment] — reverse-and-replace
+  /// payments, reassign order ownership, and cheque/opening-balance corrections.
+  bool get canCorrectFinancials => canRecordOpeningBalanceAdjustment;
+
   /// Owner / administrator can edit company settings. Managers are view-only.
   bool get canEditCompanySettings => canEdit(AppModule.settings);
 
@@ -121,6 +125,10 @@ class PermissionService {
     }
     // Sales visit workspace is part of the field day — always allowed in Sello.
     if (path.startsWith(RoutePaths.selloVisit)) {
+      return null;
+    }
+    // A rep's own collections list is always reachable inside Sello.
+    if (path.startsWith(RoutePaths.selloCollections)) {
       return null;
     }
     if (path.startsWith(RoutePaths.hubEmployees) ||

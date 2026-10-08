@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/features/payments/application/receivable_fifo.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
@@ -32,6 +34,16 @@ class PaymentRepository {
   final CollectionAcknowledgementDispatcher? _collectionAcknowledgements;
   final PaymentReceivedDispatcher? _paymentReceived;
 
+  final _changes = StreamController<void>.broadcast();
+
+  /// Fires after this device writes to the ledger (receive, approve, reject,
+  /// refund, correct) so dependent summaries can refresh.
+  Stream<void> get changes => _changes.stream;
+
+  void _notifyChanged() {
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
   static const _listSelect = '''
     id,
     company_id,
@@ -49,6 +61,9 @@ class PaymentRepository {
     reviewed_by,
     reviewed_at,
     rejection_reason,
+    corrects_payment_id,
+    corrected_by_payment_id,
+    correction_reason,
     customers!customer_id (
       id,
       name,
@@ -96,6 +111,9 @@ class PaymentRepository {
     reviewed_by,
     reviewed_at,
     rejection_reason,
+    corrects_payment_id,
+    corrected_by_payment_id,
+    correction_reason,
     customers!customer_id (
       id,
       name,
@@ -130,24 +148,108 @@ class PaymentRepository {
     )
   ''';
 
+  static const _correctionColumns = [
+    'corrects_payment_id',
+    'corrected_by_payment_id',
+    'correction_reason',
+  ];
+
+  /// The select without the safe-corrections columns (migration 093), so
+  /// Payments keeps loading on a database that has not been upgraded yet.
+  static String _withoutCorrectionColumns(String select) {
+    var out = select;
+    for (final column in _correctionColumns) {
+      out = out.replaceAll(RegExp('\\s*$column,'), '');
+    }
+    return out;
+  }
+
+  static bool _isMissingCorrectionColumn(PostgrestException error) {
+    final text = '${error.message} ${error.details ?? ''}'.toLowerCase();
+    final missing =
+        error.code == '42703' ||
+        text.contains('does not exist') ||
+        text.contains('could not find');
+    return missing && _correctionColumns.any(text.contains);
+  }
+
   Future<PaymentPageResult> fetchPayments({
     String search = '',
     PaymentRecordStatus? status,
     PaymentMethod? method,
+    String? employeeId,
+    List<PaymentRecordStatus>? statuses,
+    DateTime? receivedFrom,
+    DateTime? receivedBefore,
     int page = 0,
     int pageSize = 20,
+  }) async {
+    Future<PaymentPageResult> run(String select) => _fetchPaymentsPage(
+      select: select,
+      search: search,
+      status: status,
+      method: method,
+      employeeId: employeeId,
+      statuses: statuses,
+      receivedFrom: receivedFrom,
+      receivedBefore: receivedBefore,
+      page: page,
+      pageSize: pageSize,
+    );
+    try {
+      return await run(_listSelect);
+    } on ProvisioningFailure catch (failure) {
+      // `_fetchPaymentsPage` wraps Postgrest errors; retry for old databases.
+      final text = failure.message.toLowerCase();
+      final missing =
+          (text.contains('does not exist') ||
+              text.contains('could not find')) &&
+          _correctionColumns.any(text.contains);
+      if (!missing) rethrow;
+      return run(_withoutCorrectionColumns(_listSelect));
+    }
+  }
+
+  Future<PaymentPageResult> _fetchPaymentsPage({
+    required String select,
+    required String search,
+    PaymentRecordStatus? status,
+    PaymentMethod? method,
+    String? employeeId,
+    List<PaymentRecordStatus>? statuses,
+    DateTime? receivedFrom,
+    DateTime? receivedBefore,
+    required int page,
+    required int pageSize,
   }) async {
     try {
       var query = _client
           .from('payments')
-          .select(_listSelect)
+          .select(select)
           .isFilter('deleted_at', null);
 
       if (status != null) {
         query = query.eq('status', status.dbValue);
+      } else if (statuses != null && statuses.isNotEmpty) {
+        query = query.inFilter('status', [for (final s in statuses) s.dbValue]);
       }
       if (method != null) {
         query = query.eq('method', method.dbValue);
+      }
+      if (employeeId != null && employeeId.isNotEmpty) {
+        query = query.eq('employee_id', employeeId);
+      }
+      if (receivedFrom != null) {
+        query = query.gte(
+          'received_at',
+          receivedFrom.toUtc().toIso8601String(),
+        );
+      }
+      if (receivedBefore != null) {
+        query = query.lt(
+          'received_at',
+          receivedBefore.toUtc().toIso8601String(),
+        );
       }
 
       final needle = search.trim();
@@ -221,11 +323,51 @@ class PaymentRepository {
     }
   }
 
+  /// Every collected (completed) and awaiting-approval (pending) payment in
+  /// the date range, newest first. Used by the Payments export and the Sales
+  /// Rep "My collections" list. Rejected, refunded and cancelled rows (which
+  /// include the originals replaced by a correction) are left out.
+  Future<List<PaymentSummary>> fetchCollections({
+    String? employeeId,
+    required DateTime from,
+    required DateTime before,
+    PaymentMethod? method,
+    bool includeRejected = false,
+    int maxRows = 5000,
+  }) async {
+    const chunk = 500;
+    final rows = <PaymentSummary>[];
+    var page = 0;
+    while (rows.length < maxRows) {
+      final result = await fetchPayments(
+        employeeId: employeeId,
+        method: method,
+        statuses: [
+          PaymentRecordStatus.completed,
+          PaymentRecordStatus.pending,
+          if (includeRejected) PaymentRecordStatus.rejected,
+        ],
+        receivedFrom: from,
+        receivedBefore: before,
+        page: page,
+        pageSize: chunk,
+      );
+      rows.addAll(result.items);
+      if (!result.hasMore) break;
+      page += 1;
+    }
+    return rows;
+  }
+
   Future<PaymentDashboardStats> fetchDashboardStats() async {
     try {
-      final now = DateTime.now().toUtc();
-      final startOfDay = DateTime.utc(now.year, now.month, now.day);
-      final startIso = startOfDay.toIso8601String();
+      // Business day starts at local midnight (e.g. Sri Lanka, UTC+5:30).
+      final now = DateTime.now();
+      final startIso = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).toUtc().toIso8601String();
 
       final totals = await Future.wait([
         _sumPaymentsCollectedSince(startIso),
@@ -342,12 +484,20 @@ class PaymentRepository {
 
   Future<PaymentDetail?> fetchById(String paymentId) async {
     try {
-      final row = await _client
+      Future<Map<String, dynamic>?> load(String select) => _client
           .from('payments')
-          .select(_detailSelect)
+          .select(select)
           .eq('id', paymentId)
           .isFilter('deleted_at', null)
           .maybeSingle();
+
+      Map<String, dynamic>? row;
+      try {
+        row = await load(_detailSelect);
+      } on PostgrestException catch (error) {
+        if (!_isMissingCorrectionColumn(error)) rethrow;
+        row = await load(_withoutCorrectionColumns(_detailSelect));
+      }
       if (row == null) return null;
 
       final summary = PaymentSummary.fromJson(Map<String, dynamic>.from(row));
@@ -391,20 +541,45 @@ class PaymentRepository {
 
   Future<List<ReceivableOrder>> fetchReceivableOrders(String customerId) async {
     try {
-      final rows = await _client
-          .from('orders')
-          .select('id, order_number, total, ordered_at, payment_status, status')
-          .eq('customer_id', customerId)
-          .inFilter('status', ['placed', 'partially_delivered', 'completed'])
-          .isFilter('deleted_at', null)
-          .inFilter('payment_status', ['unpaid', 'partial'])
-          .order('ordered_at');
+      final base = await Future.wait([
+        _client
+            .from('orders')
+            .select(
+              'id, order_number, total, ordered_at, payment_status, status',
+            )
+            .eq('customer_id', customerId)
+            .inFilter('status', ['placed', 'partially_delivered', 'completed'])
+            .isFilter('deleted_at', null)
+            .inFilter('payment_status', ['unpaid', 'partial'])
+            .order('ordered_at'),
+        _client
+            .from('customer_receivable_adjustments')
+            .select(
+              'id, adjustment_number, amount, recognized_at, reference_number',
+            )
+            .eq('customer_id', customerId)
+            .eq('kind', 'opening_balance')
+            .order('recognized_at'),
+      ]);
+      final rows = base[0] as List;
+      final adjustmentRows = base[1] as List;
+
+      final paidTotals = await Future.wait([
+        _allocatedTotals('order_id', [
+          for (final row in rows) (row as Map)['id'] as String,
+        ]),
+        _allocatedTotals('receivable_adjustment_id', [
+          for (final row in adjustmentRows) (row as Map)['id'] as String,
+        ]),
+      ]);
+      final paidByOrder = paidTotals[0];
+      final paidByAdjustment = paidTotals[1];
 
       final orders = <ReceivableOrder>[];
-      for (final row in rows as List) {
+      for (final row in rows) {
         final map = Map<String, dynamic>.from(row as Map);
         final orderId = map['id'] as String;
-        final paid = await _allocatedForOrder(orderId);
+        final paid = paidByOrder[orderId] ?? 0;
         final total = _asNum(map['total']);
         if (paid + 0.001 >= total) continue;
         orders.add(
@@ -420,19 +595,10 @@ class PaymentRepository {
         );
       }
 
-      final adjustmentRows = await _client
-          .from('customer_receivable_adjustments')
-          .select(
-            'id, adjustment_number, amount, recognized_at, reference_number',
-          )
-          .eq('customer_id', customerId)
-          .eq('kind', 'opening_balance')
-          .order('recognized_at');
-
-      for (final row in adjustmentRows as List) {
+      for (final row in adjustmentRows) {
         final map = Map<String, dynamic>.from(row as Map);
         final id = map['id'] as String;
-        final paid = await _allocatedForAdjustment(id);
+        final paid = paidByAdjustment[id] ?? 0;
         final total = _asNum(map['amount']);
         if (paid + 0.001 >= total) continue;
         orders.add(
@@ -537,13 +703,11 @@ class PaymentRepository {
           // Outbound share intents must not block the collection write.
         }
       } else if (status == PaymentRecordStatus.completed) {
-        try {
-          await _paymentReceived?.dispatch(paymentId);
-        } catch (_) {
-          // Applied SMS must not block the collection write.
-        }
+        // SMS runs in the background so the save returns immediately.
+        unawaited(_dispatchCompletedNotices(paymentId));
       }
 
+      _notifyChanged();
       return ReceivePaymentResult(
         paymentId: paymentId,
         status: status,
@@ -579,9 +743,8 @@ class PaymentRepository {
           );
         }
       } catch (_) {}
-      try {
-        await _paymentReceived?.dispatch(paymentId);
-      } catch (_) {}
+      unawaited(_dispatchPaymentReceived(paymentId));
+      _notifyChanged();
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapPaymentError(error.message));
     } catch (error) {
@@ -612,6 +775,7 @@ class PaymentRepository {
           );
         }
       } catch (_) {}
+      _notifyChanged();
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapPaymentError(error.message));
     } catch (error) {
@@ -620,14 +784,34 @@ class PaymentRepository {
     }
   }
 
+  Future<void> _dispatchCompletedNotices(String paymentId) async {
+    try {
+      // Tell the Owner / Manager (SMS only) what was just collected.
+      await _collectionAcknowledgements?.dispatch(
+        paymentId,
+        pendingReview: false,
+      );
+    } catch (_) {
+      // Team SMS must not block the collection write.
+    }
+    await _dispatchPaymentReceived(paymentId);
+  }
+
+  Future<void> _dispatchPaymentReceived(String paymentId) async {
+    try {
+      await _paymentReceived?.dispatch(paymentId);
+    } catch (_) {
+      // Applied SMS must not block the collection write.
+    }
+  }
+
   Future<int> countPendingReview() async {
     try {
-      final rows = await _client
+      return await _client
           .from('payments')
-          .select('id')
+          .count()
           .isFilter('deleted_at', null)
           .eq('status', PaymentRecordStatus.pending.dbValue);
-      return (rows as List).length;
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
     } catch (error) {
@@ -643,6 +827,7 @@ class PaymentRepository {
         'mark_payment_refunded',
         params: {'p_payment_id': paymentId},
       );
+      _notifyChanged();
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapPaymentError(error.message));
     } catch (error) {
@@ -733,40 +918,91 @@ class PaymentRepository {
     }
   }
 
-  Future<num> _allocatedForOrder(String orderId) async {
-    final rows = await _client
-        .from('payment_allocations')
-        .select('amount, payments!inner(status, deleted_at)')
-        .eq('order_id', orderId)
-        .eq('payments.status', 'completed')
-        .isFilter('payments.deleted_at', null);
-
-    num total = 0;
-    for (final row in rows as List) {
-      total += _asNum((row as Map)['amount']);
+  /// Completed allocation totals keyed by [column] value, in one request
+  /// (chunked so very long id lists stay within URL limits).
+  Future<Map<String, num>> _allocatedTotals(
+    String column,
+    List<String> ids,
+  ) async {
+    final totals = <String, num>{};
+    if (ids.isEmpty) return totals;
+    const chunk = 150;
+    final batches = [
+      for (var i = 0; i < ids.length; i += chunk)
+        ids.sublist(i, i + chunk > ids.length ? ids.length : i + chunk),
+    ];
+    final results = await Future.wait([
+      for (final batch in batches)
+        _client
+            .from('payment_allocations')
+            .select('$column, amount, payments!inner(status, deleted_at)')
+            .inFilter(column, batch)
+            .eq('payments.status', 'completed')
+            .isFilter('payments.deleted_at', null),
+    ]);
+    for (final rows in results) {
+      for (final row in rows as List) {
+        final map = row as Map;
+        final key = map[column] as String?;
+        if (key == null) continue;
+        totals[key] = (totals[key] ?? 0) + _asNum(map['amount']);
+      }
     }
-    return total;
-  }
-
-  Future<num> _allocatedForAdjustment(String adjustmentId) async {
-    final rows = await _client
-        .from('payment_allocations')
-        .select('amount, payments!inner(status, deleted_at)')
-        .eq('receivable_adjustment_id', adjustmentId)
-        .eq('payments.status', 'completed')
-        .isFilter('payments.deleted_at', null);
-
-    num total = 0;
-    for (final row in rows as List) {
-      total += _asNum((row as Map)['amount']);
-    }
-    return total;
+    return totals;
   }
 
   static num _asNum(dynamic value) {
     if (value is num) return value;
     if (value is String) return num.tryParse(value) ?? 0;
     return 0;
+  }
+
+  Future<String> correctPayment({
+    required String paymentId,
+    required num amount,
+    required PaymentMethod method,
+    List<PaymentAllocationInput> allocations = const [],
+    String? reference,
+    String? notes,
+    required String reason,
+    String? customerId,
+  }) async {
+    if (!method.isSettlementMethod) {
+      throw const ValidationFailure('Choose a valid collection method.');
+    }
+    if (amount <= 0) {
+      throw const ValidationFailure(
+        'Enter a payment amount greater than zero.',
+      );
+    }
+    if (reason.trim().isEmpty) {
+      throw const ValidationFailure(
+        'Enter a short reason for this payment correction.',
+      );
+    }
+
+    try {
+      final result = await _client.rpc(
+        'correct_completed_payment',
+        params: {
+          'p_payment_id': paymentId,
+          'p_amount': amount,
+          'p_method': method.dbValue,
+          'p_allocations': [for (final alloc in allocations) alloc.toJson()],
+          'p_reference': reference,
+          'p_notes': notes,
+          'p_reason': reason.trim(),
+          'p_customer_id': customerId,
+        },
+      );
+      _notifyChanged();
+      return result is String ? result : result.toString();
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapPaymentError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
   }
 
   static String _mapPaymentError(String message) {
@@ -779,6 +1015,15 @@ class PaymentRepository {
     }
     if (lower.contains('amount must')) {
       return message;
+    }
+    if (lower.contains('only owner or manager')) {
+      return 'Only Owner or Manager can correct a payment.';
+    }
+    if (lower.contains('already been corrected')) {
+      return 'This payment has already been corrected.';
+    }
+    if (lower.contains('short reason')) {
+      return 'Enter a short reason for this payment correction.';
     }
     return message;
   }

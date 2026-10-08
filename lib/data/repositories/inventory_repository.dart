@@ -4,15 +4,13 @@ import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/inventory_item.dart';
+import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class InventoryPageResult {
-  const InventoryPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const InventoryPageResult({required this.items, required this.hasMore});
 
   final List<InventoryItem> items;
   final bool hasMore;
@@ -24,9 +22,9 @@ class InventoryRepository {
     SupabaseClient? client,
     MediaStorageService? imageStorage,
     BusinessEventBus? events,
-  })  : _client = client ?? SupabaseService.client,
-        _imageStorage = imageStorage ?? MediaStorageService(),
-        _events = events ?? BusinessEventBus();
+  }) : _client = client ?? SupabaseService.client,
+       _imageStorage = imageStorage ?? MediaStorageService(),
+       _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final MediaStorageService _imageStorage;
@@ -71,7 +69,8 @@ class InventoryRepository {
         id,
         storage_path,
         sort_order,
-        is_primary
+        is_primary,
+        updated_at
       )
     )
   ''';
@@ -150,15 +149,11 @@ class InventoryRepository {
         );
       }
 
-      // Over-fetch when low-stock needs client-side reorder comparison.
-      final fetchSize = status == StockStatusFilter.lowStock ||
-              status == StockStatusFilter.inStock
-          ? pageSize * 8
-          : pageSize + 1;
-
+      // Load the matching catalog, then page by parent product so grouped
+      // option rows do not make page length jump around.
       final response = await query
           .order('updated_at', ascending: false)
-          .range(0, (page + 1) * fetchSize - 1);
+          .range(0, 4999);
 
       final byId = <String, InventoryItem>{};
       for (final row in response as List) {
@@ -183,12 +178,11 @@ class InventoryRepository {
             variantQuery = variantQuery.eq('branch_id', branchId);
           }
           if (categoryId != null && categoryId.isNotEmpty) {
-            variantQuery =
-                variantQuery.eq('products.category_id', categoryId);
+            variantQuery = variantQuery.eq('products.category_id', categoryId);
           }
           final variantRows = await variantQuery
               .order('updated_at', ascending: false)
-              .range(0, (page + 1) * fetchSize - 1);
+              .range(0, 4999);
           for (final row in variantRows as List) {
             final item = InventoryItem.fromQueryRow(
               Map<String, dynamic>.from(row as Map),
@@ -220,13 +214,18 @@ class InventoryRepository {
         };
       }).toList();
 
-      final pageItems = items.skip(page * pageSize).take(pageSize).toList();
-      final withThumbs =
-          signImages ? await _signThumbs(pageItems) : pageItems;
+      final paged = paginateGroupedInventory(
+        items: items,
+        page: page,
+        pageSize: pageSize,
+      );
+      final withThumbs = signImages
+          ? await _signThumbs(paged.items)
+          : paged.items;
 
       return InventoryPageResult(
         items: attachCosts ? await _attachCosts(withThumbs) : withThumbs,
-        hasMore: items.length > (page + 1) * pageSize,
+        hasMore: paged.hasMore,
       );
     } on PostgrestException catch (error) {
       // reserved_quantity may be missing before migration 020.
@@ -281,15 +280,18 @@ class InventoryRepository {
     required int page,
     required int pageSize,
   }) async {
-    var query = _client.from('inventory').select('''
+    var query = _client
+        .from('inventory')
+        .select('''
       id, company_id, branch_id, product_id, quantity, reorder_level,
       last_movement_at, updated_at,
       products!inner (
         id, name, sku, unit_label, is_active, category_id, deleted_at,
         categories (id, name),
-        product_images (id, storage_path, sort_order, is_primary)
+        product_images (id, storage_path, sort_order, is_primary, updated_at)
       )
-    ''').isFilter('products.deleted_at', null);
+    ''')
+        .isFilter('products.deleted_at', null);
 
     if (branchId != null && branchId.isNotEmpty) {
       query = query.eq('branch_id', branchId);
@@ -317,17 +319,23 @@ class InventoryRepository {
         StockStatusFilter.lowStock => item.isActive && item.isLowStock,
         StockStatusFilter.inStock =>
           item.isActive && item.stockStatus == StockStatus.healthy,
-        StockStatusFilter.recentlyUpdated => item.isActive &&
-            item.updatedAt != null &&
-            item.updatedAt!
-                .isAfter(DateTime.now().toUtc().subtract(const Duration(days: 7))),
+        StockStatusFilter.recentlyUpdated =>
+          item.isActive &&
+              item.updatedAt != null &&
+              item.updatedAt!.isAfter(
+                DateTime.now().toUtc().subtract(const Duration(days: 7)),
+              ),
       };
     }).toList();
 
-    final pageItems = items.skip(page * pageSize).take(pageSize).toList();
+    final paged = paginateGroupedInventory(
+      items: items,
+      page: page,
+      pageSize: pageSize,
+    );
     return InventoryPageResult(
-      items: await _attachCosts(await _signThumbs(pageItems)),
-      hasMore: items.length > (page + 1) * pageSize,
+      items: await _attachCosts(await _signThumbs(paged.items)),
+      hasMore: paged.hasMore,
     );
   }
 
@@ -337,10 +345,9 @@ class InventoryRepository {
   Future<List<InventoryItem>> _attachCosts(List<InventoryItem> items) async {
     if (items.isEmpty) return items;
 
-    final costs = await fetchProductUnitCosts(
-      _client,
-      [for (final item in items) item.productId],
-    );
+    final costs = await fetchProductUnitCosts(_client, [
+      for (final item in items) item.productId,
+    ]);
     if (costs.isEmpty) return items;
 
     return [
@@ -373,8 +380,51 @@ class InventoryRepository {
   Future<InventoryDashboardStats> fetchDashboardStats({
     String? branchId,
   }) async {
+    final fast = await _fetchDashboardStatsRpc(branchId);
+    if (fast != null) return fast;
+    return _fetchDashboardStatsScan(branchId: branchId);
+  }
+
+  /// One round trip via `inventory_dashboard_counts` (migration 096).
+  /// Returns null when the function is not deployed yet.
+  Future<InventoryDashboardStats?> _fetchDashboardStatsRpc(
+    String? branchId,
+  ) async {
+    final branch = branchId != null && branchId.isNotEmpty ? branchId : null;
     try {
-      var query = _client.from('inventory').select('''
+      final results = await Future.wait<dynamic>([
+        _client.rpc(
+          'inventory_dashboard_counts',
+          params: {'p_branch_id': branch},
+        ),
+        _fetchStockValue(branchId),
+        _fetchStockSellingValue(branchId),
+      ]);
+      final counts = results[0];
+      if (counts is! Map) return null;
+      int read(String key) => _asNum(counts[key]).toInt();
+      return InventoryDashboardStats(
+        totalItems: read('total_items'),
+        lowStock: read('low_stock'),
+        outOfStock: read('out_of_stock'),
+        negativeStock: read('negative_stock'),
+        recentlyUpdated: read('recently_updated'),
+        stockValue: results[1] as num,
+        stockSellingValue: results[2] as num,
+        recentMovements: read('recent_movements'),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<InventoryDashboardStats> _fetchDashboardStatsScan({
+    String? branchId,
+  }) async {
+    try {
+      var query = _client
+          .from('inventory')
+          .select('''
         quantity,
         reserved_quantity,
         reorder_level,
@@ -383,7 +433,8 @@ class InventoryRepository {
           is_active,
           deleted_at
         )
-      ''').isFilter('products.deleted_at', null);
+      ''')
+          .isFilter('products.deleted_at', null);
 
       if (branchId != null && branchId.isNotEmpty) {
         query = query.eq('branch_id', branchId);
@@ -435,8 +486,9 @@ class InventoryRepository {
         if (branchId != null && branchId.isNotEmpty) {
           movementQuery = movementQuery.eq('branch_id', branchId);
         }
-        final movementRows = await movementQuery;
-        recentMovements = (movementRows as List).length;
+        recentMovements = await movementQuery
+            .count(CountOption.exact)
+            .then((response) => response.count);
       } catch (_) {
         // Best-effort.
       }
@@ -448,6 +500,7 @@ class InventoryRepository {
         negativeStock: negative,
         recentlyUpdated: recent,
         stockValue: await _fetchStockValue(branchId),
+        stockSellingValue: await _fetchStockSellingValue(branchId),
         recentMovements: recentMovements,
       );
     } on PostgrestException catch (error) {
@@ -464,16 +517,20 @@ class InventoryRepository {
   Future<InventoryDashboardStats> _fetchDashboardStatsLegacy({
     String? branchId,
   }) async {
-    var query = _client.from('inventory').select('''
+    var query = _client
+        .from('inventory')
+        .select('''
       quantity, reorder_level, updated_at,
       products!inner (is_active, deleted_at)
-    ''').isFilter('products.deleted_at', null);
+    ''')
+        .isFilter('products.deleted_at', null);
     if (branchId != null && branchId.isNotEmpty) {
       query = query.eq('branch_id', branchId);
     }
     final rows = await query;
-    final recentCutoff =
-        DateTime.now().toUtc().subtract(const Duration(days: 7));
+    final recentCutoff = DateTime.now().toUtc().subtract(
+      const Duration(days: 7),
+    );
     var total = 0;
     var low = 0;
     var out = 0;
@@ -485,8 +542,9 @@ class InventoryRepository {
       if (product is Map && product['is_active'] == false) continue;
       total++;
       final qty = _asNum(map['quantity']);
-      final reorder =
-          map['reorder_level'] == null ? null : _asNum(map['reorder_level']);
+      final reorder = map['reorder_level'] == null
+          ? null
+          : _asNum(map['reorder_level']);
       if (qty < 0) {
         negative++;
         out++;
@@ -505,7 +563,24 @@ class InventoryRepository {
       negativeStock: negative,
       recentlyUpdated: recent,
       stockValue: await _fetchStockValue(branchId),
+      stockSellingValue: await _fetchStockSellingValue(branchId),
     );
+  }
+
+  Future<num> _fetchStockSellingValue(String? branchId) async {
+    try {
+      final value = await _client.rpc(
+        'inventory_stock_selling_value',
+        params: {
+          'p_branch_id': branchId != null && branchId.isNotEmpty
+              ? branchId
+              : null,
+        },
+      );
+      return _asNum(value);
+    } catch (_) {
+      return 0;
+    }
   }
 
   /// Branch valuation from `inventory_stock_value`.
@@ -518,8 +593,9 @@ class InventoryRepository {
       final value = await _client.rpc(
         'inventory_stock_value',
         params: {
-          'p_branch_id':
-              branchId != null && branchId.isNotEmpty ? branchId : null,
+          'p_branch_id': branchId != null && branchId.isNotEmpty
+              ? branchId
+              : null,
         },
       );
       return _asNum(value);
@@ -572,13 +648,12 @@ class InventoryRepository {
         query = query.eq('branch_id', branchId);
       }
 
-      final rows =
-          await query.order('created_at', ascending: false).limit(limit);
+      final rows = await query
+          .order('created_at', ascending: false)
+          .limit(limit);
 
       return (rows as List)
-          .map(
-            (row) => StockMovement.fromJson(Map<String, dynamic>.from(row)),
-          )
+          .map((row) => StockMovement.fromJson(Map<String, dynamic>.from(row)))
           .toList();
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
@@ -616,13 +691,12 @@ class InventoryRepository {
         query = query.eq('branch_id', branchId);
       }
 
-      final rows =
-          await query.order('created_at', ascending: false).limit(limit);
+      final rows = await query
+          .order('created_at', ascending: false)
+          .limit(limit);
 
       return (rows as List)
-          .map(
-            (row) => StockMovement.fromJson(Map<String, dynamic>.from(row)),
-          )
+          .map((row) => StockMovement.fromJson(Map<String, dynamic>.from(row)))
           .toList();
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
@@ -718,7 +792,8 @@ class InventoryRepository {
       num available = 0;
       for (final raw in rows as List) {
         final row = Map<String, dynamic>.from(raw as Map);
-        final value = _asNum(row['quantity']) - _asNum(row['reserved_quantity']);
+        final value =
+            _asNum(row['quantity']) - _asNum(row['reserved_quantity']);
         available += value < 0 ? 0 : value;
       }
       return available;
@@ -731,7 +806,9 @@ class InventoryRepository {
             .eq('branch_id', branchId);
         num available = 0;
         for (final raw in rows as List) {
-          available += _asNum(Map<String, dynamic>.from(raw as Map)['quantity']);
+          available += _asNum(
+            Map<String, dynamic>.from(raw as Map)['quantity'],
+          );
         }
         return available;
       }

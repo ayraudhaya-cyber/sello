@@ -2,10 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/payment_repository.dart';
+import 'package:sello/features/hub/payments/application/pending_collections_count_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum PaymentStatusFilter {
   all,
@@ -39,8 +41,9 @@ class HubPaymentsState {
     this.search = '',
     this.statusFilter = PaymentStatusFilter.all,
     this.methodFilter = PaymentMethodFilter.all,
+    this.employeeId,
     this.page = 0,
-    this.pageSize = 20,
+    this.pageSize = kHubTablePageSize,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -54,6 +57,9 @@ class HubPaymentsState {
   final String search;
   final PaymentStatusFilter statusFilter;
   final PaymentMethodFilter methodFilter;
+
+  /// Sales rep (or any employee) who recorded the collection.
+  final String? employeeId;
   final int page;
   final int pageSize;
   final bool hasMore;
@@ -64,6 +70,12 @@ class HubPaymentsState {
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
 
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      statusFilter != PaymentStatusFilter.all ||
+      methodFilter != PaymentMethodFilter.all ||
+      employeeId != null;
+
   HubPaymentsState copyWith({
     List<PaymentSummary>? items,
     PaymentDashboardStats? stats,
@@ -71,6 +83,8 @@ class HubPaymentsState {
     String? search,
     PaymentStatusFilter? statusFilter,
     PaymentMethodFilter? methodFilter,
+    String? employeeId,
+    bool clearEmployee = false,
     int? page,
     int? pageSize,
     bool? hasMore,
@@ -87,6 +101,7 @@ class HubPaymentsState {
       search: search ?? this.search,
       statusFilter: statusFilter ?? this.statusFilter,
       methodFilter: methodFilter ?? this.methodFilter,
+      employeeId: clearEmployee ? null : employeeId ?? this.employeeId,
       page: page ?? this.page,
       pageSize: pageSize ?? this.pageSize,
       hasMore: hasMore ?? this.hasMore,
@@ -125,6 +140,7 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
     bool showLoading = true,
   }) async {
     final page = resetPage ? 0 : state.page;
+    final generation = ++_loadGeneration;
     state = state.copyWith(
       isLoading: showLoading ? true : state.isLoading,
       clearError: true,
@@ -133,6 +149,8 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
     );
 
     try {
+      final statsFuture = _repo.fetchDashboardStats();
+      final pendingFuture = _repo.countPendingReview();
       final result = await _repo.fetchPayments(
         search: state.search,
         status: switch (state.statusFilter) {
@@ -153,11 +171,16 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
             PaymentMethod.creditSettlement,
           PaymentMethodFilter.cheque => PaymentMethod.cheque,
         },
+        employeeId: state.employeeId,
         page: page,
         pageSize: state.pageSize,
       );
-      final stats = await _repo.fetchDashboardStats();
-      final pendingReviewCount = await _repo.countPendingReview();
+      final stats = await statsFuture;
+      final pendingReviewCount = await pendingFuture;
+      if (generation != _loadGeneration) return;
+      ref
+          .read(pendingCollectionsCountProvider.notifier)
+          .set(pendingReviewCount);
 
       state = state.copyWith(
         items: result.items,
@@ -169,15 +192,16 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
         initialized: true,
       );
     } on AppFailure catch (failure) {
+      if (generation != _loadGeneration) return;
       state = state.copyWith(
-        items: const [],
-        hasMore: false,
         isLoading: false,
         errorMessage: failure.message,
         initialized: true,
       );
     }
   }
+
+  int _loadGeneration = 0;
 
   Future<void> setSearch(String value) async {
     state = state.copyWith(search: value, page: 0);
@@ -191,6 +215,26 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
 
   Future<void> setMethodFilter(PaymentMethodFilter value) async {
     state = state.copyWith(methodFilter: value, page: 0);
+    await loadPayments(resetPage: true);
+  }
+
+  Future<void> setEmployeeFilter(String? employeeId) async {
+    state = state.copyWith(
+      employeeId: employeeId,
+      clearEmployee: employeeId == null,
+      page: 0,
+    );
+    await loadPayments(resetPage: true);
+  }
+
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: PaymentStatusFilter.all,
+      methodFilter: PaymentMethodFilter.all,
+      clearEmployee: true,
+      page: 0,
+    );
     await loadPayments(resetPage: true);
   }
 
@@ -225,6 +269,29 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
+  }
+
+  /// Approves several pending collections one by one (each applies balances
+  /// exactly once on the server), then reloads once. Stops at the first
+  /// failure and reports how many went through.
+  Future<({int approved, String? error})> approveCollections(
+    List<String> paymentIds,
+  ) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    var approved = 0;
+    String? error;
+    for (final id in paymentIds) {
+      try {
+        await _repo.approveCollection(id);
+        approved++;
+      } on AppFailure catch (failure) {
+        error = failure.message;
+        break;
+      }
+    }
+    await loadPayments(showLoading: false);
+    state = state.copyWith(isSaving: false);
+    return (approved: approved, error: error);
   }
 
   Future<String?> rejectCollection(String paymentId, {String? reason}) async {

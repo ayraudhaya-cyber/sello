@@ -41,12 +41,12 @@ class ReportRepository {
     OrderRepository? orders,
     SupplierRepository? suppliers,
     VisitRepository? visits,
-  })  : _client = client ?? SupabaseService.client,
-        _inventory = inventory ?? InventoryRepository(),
-        _payments = payments ?? PaymentRepository(),
-        _orders = orders ?? OrderRepository(),
-        _suppliers = suppliers ?? SupplierRepository(),
-        _visits = visits ?? VisitRepository();
+  }) : _client = client ?? SupabaseService.client,
+       _inventory = inventory ?? InventoryRepository(),
+       _payments = payments ?? PaymentRepository(),
+       _orders = orders ?? OrderRepository(),
+       _suppliers = suppliers ?? SupplierRepository(),
+       _visits = visits ?? VisitRepository();
 
   final SupabaseClient _client;
   final InventoryRepository _inventory;
@@ -61,26 +61,25 @@ class ReportRepository {
     ReportDatePreset preset = ReportDatePreset.thisMonth,
     ReportQuery? query,
   }) async {
-    final resolved = query ??
-        ReportQuery(
-          preset: preset,
-          branchId: branchId,
-        );
+    final resolved = query ?? ReportQuery(preset: preset, branchId: branchId);
     final bounds = resolved.bounds();
     final todayBounds = ReportDatePreset.today.bounds();
     final effectiveBranch = resolved.branchId ?? branchId;
 
     try {
-      final reuseToday = resolved.preset == ReportDatePreset.today &&
+      final reuseToday =
+          resolved.preset == ReportDatePreset.today &&
           resolved.employeeId == null &&
           resolved.customerId == null;
 
-      final inventoryFuture =
-          _inventory.fetchDashboardStats(branchId: effectiveBranch);
+      final inventoryFuture = _inventory.fetchDashboardStats(
+        branchId: effectiveBranch,
+      );
       final paymentsFuture = _payments.fetchDashboardStats();
       final orderCountsFuture = _orders.fetchCounts();
-      final suppliersFuture =
-          _suppliers.fetchDashboardStats(companyId: companyId);
+      final suppliersFuture = _suppliers.fetchDashboardStats(
+        companyId: companyId,
+      );
       final periodOrdersFuture = _fetchCompletedOrders(
         from: bounds.from,
         to: bounds.to,
@@ -105,13 +104,14 @@ class ReportRepository {
         (value) => value,
         onError: (_) => 0,
       );
-      final chequeFuture = _fetchChequePeriodTotals(
-        from: bounds.from,
-        to: bounds.to,
-      ).then<({num collected, num bounced})>(
-        (value) => value,
-        onError: (_) => (collected: 0, bounced: 0),
-      );
+      final chequeFuture =
+          _fetchChequePeriodTotals(
+            from: bounds.from,
+            to: bounds.to,
+          ).then<({num collected, num bounced})>(
+            (value) => value,
+            onError: (_) => (collected: 0, bounced: 0),
+          );
       final topProductsFuture = _fetchTopProducts(
         from: bounds.from,
         to: bounds.to,
@@ -129,8 +129,9 @@ class ReportRepository {
         from: bounds.from,
         to: bounds.to,
       );
-      final productsBySupplierFuture =
-          _fetchProductsBySupplier(companyId: companyId);
+      final productsBySupplierFuture = _fetchProductsBySupplier(
+        companyId: companyId,
+      );
       final visitMetricsFuture = _safeVisitMetrics(
         companyId: companyId,
         from: bounds.from,
@@ -154,7 +155,10 @@ class ReportRepository {
       final paymentMethods = await paymentMethodsFuture;
       final productsBySupplier = await productsBySupplierFuture;
 
-      final salesInPeriod = periodOrders.fold<num>(0, (sum, o) => sum + o.total);
+      final salesInPeriod = periodOrders.fold<num>(
+        0,
+        (sum, o) => sum + o.total,
+      );
       final salesToday = todayOrders.fold<num>(0, (sum, o) => sum + o.total);
       final orderCount = periodOrders.length;
       final aov = orderCount == 0 ? 0 : salesInPeriod / orderCount;
@@ -190,7 +194,7 @@ class ReportRepository {
               subtitle: row.completed == 0
                   ? 'No visits'
                   : '${row.withOrders} with orders '
-                      '(${((row.withOrders / row.completed) * 100).round()}%)',
+                        '(${((row.withOrders / row.completed) * 100).round()}%)',
               referenceType: 'employee',
             ),
         ];
@@ -316,8 +320,8 @@ class ReportRepository {
               orderedAt: orderedAt,
               asOfDate: asOfDate,
             ),
-            documentType: _asString(map['document_type']) ??
-                kCollectionsDocumentType,
+            documentType:
+                _asString(map['document_type']) ?? kCollectionsDocumentType,
             referenceNumber: _asString(map['reference_number']),
           ),
         );
@@ -343,17 +347,19 @@ class ReportRepository {
   }
 
   Future<
-      ({
-        int completed,
-        int missed,
-        int scheduled,
-        int withOrders,
-        int withPayments,
-        int ordersLinked,
-        num collectionsAmount,
-        List<({String employeeId, String name, int completed, int withOrders})>
-            byRepresentative,
-      })?> _safeVisitMetrics({
+    ({
+      int completed,
+      int missed,
+      int scheduled,
+      int withOrders,
+      int withPayments,
+      int ordersLinked,
+      num collectionsAmount,
+      List<({String employeeId, String name, int completed, int withOrders})>
+      byRepresentative,
+    })?
+  >
+  _safeVisitMetrics({
     required String companyId,
     required DateTime from,
     required DateTime to,
@@ -406,8 +412,21 @@ class ReportRepository {
       query = query.eq('customer_id', customerId);
     }
 
-    final rows = await query.order('ordered_at', ascending: true).limit(2000);
-    return (rows as List).map((row) {
+    // Page through every completed order in the period. The API returns at
+    // most 1000 rows per request, so a single capped read undercounts sales.
+    const pageSize = 1000;
+    const maxRows = 100000;
+    final rows = <dynamic>[];
+    for (var offset = 0; offset < maxRows; offset += pageSize) {
+      final page = await query
+          .order('ordered_at', ascending: true)
+          .order('id', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      final list = page as List;
+      rows.addAll(list);
+      if (list.length < pageSize) break;
+    }
+    return rows.map((row) {
       final map = Map<String, dynamic>.from(row as Map);
       final customer = map['customers'];
       final employee = map['employees'];
@@ -418,8 +437,7 @@ class ReportRepository {
         customerId: map['customer_id'] as String?,
         customerName: customer is Map ? _asString(customer['name']) : null,
         employeeId: map['employee_id'] as String?,
-        employeeName:
-            employee is Map ? _asString(employee['full_name']) : null,
+        employeeName: employee is Map ? _asString(employee['full_name']) : null,
         paymentStatus: PaymentStatus.fromDb(map['payment_status'] as String?),
         paymentMethod: map['payment_method'] as String?,
       );
@@ -553,7 +571,9 @@ class ReportRepository {
     String? branchId,
     int limit = 8,
   }) async {
-    var query = _client.from('order_items').select('''
+    var query = _client
+        .from('order_items')
+        .select('''
       product_id,
       product_name,
       sku,
@@ -561,13 +581,11 @@ class ReportRepository {
       line_total,
       products (id, name, sku, category_id, categories (name)),
       orders!inner (status, ordered_at, deleted_at, branch_id)
-    ''').eq('orders.status', OrderStatus.completed.dbValue).isFilter(
-          'orders.deleted_at',
-          null,
-        ).gte('orders.ordered_at', from.toIso8601String()).lte(
-          'orders.ordered_at',
-          to.toIso8601String(),
-        );
+    ''')
+        .eq('orders.status', OrderStatus.completed.dbValue)
+        .isFilter('orders.deleted_at', null)
+        .gte('orders.ordered_at', from.toIso8601String())
+        .lte('orders.ordered_at', to.toIso8601String());
 
     if (branchId != null && branchId.isNotEmpty) {
       query = query.eq('orders.branch_id', branchId);
@@ -579,7 +597,8 @@ class ReportRepository {
     for (final row in rows as List) {
       final map = Map<String, dynamic>.from(row as Map);
       final product = map['products'];
-      final productId = map['product_id'] as String? ??
+      final productId =
+          map['product_id'] as String? ??
           (product is Map ? product['id'] as String? : null);
       if (productId == null) continue;
       // Parent grain; prefer order-line snapshots for stable historical names.
@@ -618,18 +637,18 @@ class ReportRepository {
     String? branchId,
     int limit = 6,
   }) async {
-    var query = _client.from('order_items').select('''
+    var query = _client
+        .from('order_items')
+        .select('''
       line_total,
       quantity,
       products (category_id, categories (id, name)),
       orders!inner (status, ordered_at, deleted_at, branch_id)
-    ''').eq('orders.status', OrderStatus.completed.dbValue).isFilter(
-          'orders.deleted_at',
-          null,
-        ).gte('orders.ordered_at', from.toIso8601String()).lte(
-          'orders.ordered_at',
-          to.toIso8601String(),
-        );
+    ''')
+        .eq('orders.status', OrderStatus.completed.dbValue)
+        .isFilter('orders.deleted_at', null)
+        .gte('orders.ordered_at', from.toIso8601String())
+        .lte('orders.ordered_at', to.toIso8601String());
 
     if (branchId != null && branchId.isNotEmpty) {
       query = query.eq('orders.branch_id', branchId);
@@ -686,7 +705,8 @@ class ReportRepository {
       if (id == null) continue;
       final agg = totals.putIfAbsent(
         id,
-        () => _NamedAgg(id: id, name: name ?? (byCustomer ? 'Customer' : 'Rep')),
+        () =>
+            _NamedAgg(id: id, name: name ?? (byCustomer ? 'Customer' : 'Rep')),
       );
       agg.value += order.total;
       agg.count += 1;
@@ -790,15 +810,11 @@ class ReportRepository {
   }
 
   /// Public for Intelligence / Action Center — same query as report overview.
-  Future<List<ReportNamedValue>> fetchOutstandingCustomers({
-    int limit = 8,
-  }) =>
+  Future<List<ReportNamedValue>> fetchOutstandingCustomers({int limit = 8}) =>
       _fetchOutstandingCustomers(limit: limit);
 
   /// Public for Intelligence — inactive / quiet customers (60d+).
-  Future<List<ReportNamedValue>> fetchInactiveCustomers({
-    int limit = 8,
-  }) =>
+  Future<List<ReportNamedValue>> fetchInactiveCustomers({int limit = 8}) =>
       _fetchInactiveCustomers(limit: limit);
 
   Future<List<ReportNamedValue>> _fetchOutstandingCustomers({
@@ -826,8 +842,10 @@ class ReportRepository {
   }
 
   Future<List<ReportNamedValue>> _fetchRecentCustomers({int limit = 8}) async {
-    final cutoff =
-        DateTime.now().toUtc().subtract(const Duration(days: 30)).toIso8601String();
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 30))
+        .toIso8601String();
     final rows = await _client
         .from('customers')
         .select('id, name, created_at, phone')
@@ -851,8 +869,10 @@ class ReportRepository {
   Future<List<ReportNamedValue>> _fetchInactiveCustomers({
     int limit = 8,
   }) async {
-    final cutoff =
-        DateTime.now().toUtc().subtract(const Duration(days: 60)).toIso8601String();
+    final cutoff = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 60))
+        .toIso8601String();
     final rows = await _client
         .from('customers')
         .select('id, name, last_purchase_at, phone, is_active')
@@ -882,7 +902,9 @@ class ReportRepository {
   }) async {
     final rows = await _client
         .from('products')
-        .select('id, preferred_supplier_id, suppliers!preferred_supplier_id (id, name)')
+        .select(
+          'id, preferred_supplier_id, suppliers!preferred_supplier_id (id, name)',
+        )
         .eq('company_id', companyId)
         .isFilter('deleted_at', null)
         .not('preferred_supplier_id', 'is', null);
@@ -944,11 +966,7 @@ class _OrderAgg {
 }
 
 class _NamedAgg {
-  _NamedAgg({
-    required this.id,
-    required this.name,
-    this.subtitle,
-  });
+  _NamedAgg({required this.id, required this.name, this.subtitle});
 
   final String id;
   final String name;

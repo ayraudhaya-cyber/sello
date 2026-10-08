@@ -79,11 +79,11 @@ class OwnerSetupNotifier extends Notifier<OwnerSetupState> {
   OwnerSetupState build() => const OwnerSetupState();
 
   OwnerSetupService get _service => OwnerSetupService(
-        companies: ref.read(companyRepositoryProvider),
-        branches: ref.read(branchRepositoryProvider),
-        settings: ref.read(companySettingsRepositoryProvider),
-        employees: ref.read(employeeRepositoryProvider),
-      );
+    companies: ref.read(companyRepositoryProvider),
+    branches: ref.read(branchRepositoryProvider),
+    settings: ref.read(companySettingsRepositoryProvider),
+    employees: ref.read(employeeRepositoryProvider),
+  );
 
   Future<void> loadBrandingEntitlement() async {
     final session = ref.read(currentSessionProvider);
@@ -172,10 +172,7 @@ class OwnerSetupNotifier extends Notifier<OwnerSetupState> {
     state = state.copyWith(step: OwnerSetupStep.ready, clearError: true);
   }
 
-  Future<bool> verifySms({
-    required String senderId,
-    required String phone,
-  }) {
+  Future<bool> verifySms({required String senderId, required String phone}) {
     return _run(() async {
       final sender = SmsSenderId.tryParse(senderId);
       if (sender == null) {
@@ -188,19 +185,16 @@ class OwnerSetupNotifier extends Notifier<OwnerSetupState> {
         editable: state.smsSenderIdEditable,
         candidate: sender,
       )) {
-        throw const AuthorizationFailure(
-          'This Sender ID is managed by Sello.',
-        );
+        throw const AuthorizationFailure('This Sender ID is managed by Sello.');
       }
       final recipient = MessagingPhone.international(phone);
       if (recipient == null) {
         throw const ValidationFailure('Enter a valid phone number.');
       }
 
-      final result = await ref.read(outboundSmsSenderProvider).verifySender(
-            recipient: recipient,
-            senderId: sender,
-          );
+      final result = await ref
+          .read(outboundSmsSenderProvider)
+          .verifySender(recipient: recipient, senderId: sender);
       if (!result.senderActivated) {
         throw UnexpectedFailure(OutboundSmsVerify.feedback(result));
       }
@@ -245,5 +239,5 @@ class OwnerSetupNotifier extends Notifier<OwnerSetupState> {
 
 final ownerSetupProvider =
     NotifierProvider<OwnerSetupNotifier, OwnerSetupState>(
-  OwnerSetupNotifier.new,
-);
+      OwnerSetupNotifier.new,
+    );

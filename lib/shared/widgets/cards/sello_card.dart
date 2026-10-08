@@ -94,7 +94,8 @@ class _SelloCardState extends State<SelloCard> {
     // children paint outside the rounded surface.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fill = constraints.hasBoundedHeight &&
+        final fill =
+            constraints.hasBoundedHeight &&
             constraints.maxHeight < double.infinity;
         final minH = constraints.minHeight;
         final stretchToMin = !fill && minH.isFinite && minH > 0;
@@ -176,6 +177,7 @@ class SelloStatCard extends StatelessWidget {
   final IconData? icon;
   final String? trendLabel;
   final bool? trendPositive;
+
   /// Supporting line under the value (e.g. "Active catalog").
   final String? hint;
   final VoidCallback? onTap;
@@ -204,18 +206,18 @@ class SelloStatCard extends StatelessWidget {
       emphasized
           ? 0.12
           : quiet
-              ? 0.05
-              : 0.08,
+          ? 0.05
+          : 0.08,
     )!;
     final up = trendPositive == true;
     final down = trendPositive == false;
     final trendColor = quiet
         ? AppColors.textTertiary
         : up
-            ? AppColors.success
-            : down
-                ? AppColors.attention
-                : AppColors.textTertiary;
+        ? AppColors.success
+        : down
+        ? AppColors.attention
+        : AppColors.textTertiary;
     final padding = compact
         ? EdgeInsets.fromLTRB(12, quiet ? 10 : 12, 12, quiet ? 8 : 10)
         : const EdgeInsets.fromLTRB(20, 20, 20, 14);
@@ -313,8 +315,8 @@ class SelloStatCard extends StatelessWidget {
                 style: emphasized
                     ? AppTypography.metric.copyWith(fontSize: 26)
                     : quiet
-                        ? AppTypography.metric.copyWith(fontSize: 22)
-                        : AppTypography.metric,
+                    ? AppTypography.metric.copyWith(fontSize: 22)
+                    : AppTypography.metric,
               ),
             ),
           ),
@@ -366,8 +368,7 @@ class SelloStatCard extends StatelessWidget {
     );
   }
 
-  bool get _showSparkline =>
-      sparkPoints != null && sparkPoints!.isNotEmpty;
+  bool get _showSparkline => sparkPoints != null && sparkPoints!.isNotEmpty;
 }
 
 class _KpiSparkPainter extends CustomPainter {
@@ -405,10 +406,7 @@ class _KpiSparkPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.22),
-            color.withValues(alpha: 0.0),
-          ],
+          colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.0)],
         ).createShader(Offset.zero & size),
     );
     canvas.drawPath(
@@ -562,10 +560,7 @@ class SelloDashboardCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (action != null) ...[
-                const SizedBox(width: 8),
-                action!,
-              ],
+              if (action != null) ...[const SizedBox(width: 8), action!],
             ],
           ),
           if (subtitle != null) ...[
@@ -589,11 +584,7 @@ class SelloDashboardCard extends StatelessWidget {
 
 /// Compact “View all →” text link — HTML `.link-btn`.
 class SelloViewAllLink extends StatefulWidget {
-  const SelloViewAllLink({
-    super.key,
-    this.label = 'View all',
-    this.onTap,
-  });
+  const SelloViewAllLink({super.key, this.label = 'View all', this.onTap});
 
   final String label;
   final VoidCallback? onTap;

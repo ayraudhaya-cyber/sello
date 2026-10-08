@@ -42,10 +42,7 @@ class _SelloListRowState extends State<SelloListRow> {
               color: _hovered ? AppColors.veil : Colors.transparent,
               borderRadius: AppRadius.controlAll,
             ),
-            child: Padding(
-              padding: widget.padding,
-              child: widget.child,
-            ),
+            child: Padding(padding: widget.padding, child: widget.child),
           ),
           if (widget.showDivider)
             const Divider(
@@ -58,6 +55,10 @@ class _SelloListRowState extends State<SelloListRow> {
     );
 
     if (widget.onTap == null) return row;
-    return GestureDetector(onTap: widget.onTap, behavior: HitTestBehavior.opaque, child: row);
+    return GestureDetector(
+      onTap: widget.onTap,
+      behavior: HitTestBehavior.opaque,
+      child: row,
+    );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:sello/shared/models/product_variant.dart';
+import 'package:sello/shared/utils/product_image_cache_key.dart';
 import 'package:sello/shared/utils/country_catalog.dart';
 
 num _numValue(dynamic value) {
@@ -47,6 +48,7 @@ class ProductSummary extends Equatable {
     this.preferredSupplierName,
     this.attributes = const {},
     this.imageStoragePath,
+    this.imageUpdatedAt,
     this.imageUrl,
     this.variants = const [],
     this.createdAt,
@@ -63,6 +65,7 @@ class ProductSummary extends Equatable {
   final String? brand;
   final String? unitLabel;
   final String? description;
+
   /// Zero unless the caller may view cost — it is resolved through
   /// `product_unit_costs()`, not selected from the catalog row.
   final num costPrice;
@@ -74,13 +77,20 @@ class ProductSummary extends Equatable {
   final num? availableStockQuantity;
 
   final num? reorderLevel;
+
   /// Primary sourcing partner — V1 single preferred; multi via product_suppliers later.
   final String? preferredSupplierId;
   final String? preferredSupplierName;
   final bool isActive;
   final Map<String, String> attributes;
   final String? imageStoragePath;
+
+  /// When the primary photo file was last replaced. Part of the disk-cache key.
+  final DateTime? imageUpdatedAt;
   final String? imageUrl;
+
+  String? get imageCacheKey =>
+      ProductImageCacheKey.of(imageStoragePath, imageUpdatedAt);
 
   /// Sellable units under this product, default first. Empty only when the
   /// caller's select did not embed `product_variants`.
@@ -112,9 +122,9 @@ class ProductSummary extends Equatable {
   }
 
   List<ProductVariant> get activeVariants => [
-        for (final variant in variants)
-          if (variant.isActive) variant,
-      ];
+    for (final variant in variants)
+      if (variant.isActive) variant,
+  ];
 
   /// More than one active sellable option — Hub editor / inventory expand.
   bool get hasMultipleActiveVariants => activeVariants.length > 1;
@@ -185,6 +195,7 @@ class ProductSummary extends Equatable {
       isActive: isActive,
       attributes: attributes,
       imageStoragePath: imageStoragePath,
+      imageUpdatedAt: imageUpdatedAt,
       imageUrl: imageUrl ?? this.imageUrl,
       variants: variants ?? this.variants,
       createdAt: createdAt,
@@ -227,9 +238,7 @@ class ProductSummary extends Equatable {
     for (final item in inventory) {
       if (item is! Map) continue;
       final itemBranch = item['branch_id'] as String?;
-      if (branchId != null &&
-          itemBranch != null &&
-          itemBranch != branchId) {
+      if (branchId != null && itemBranch != null && itemBranch != branchId) {
         continue;
       }
       hasInventoryRow = true;
@@ -242,7 +251,8 @@ class ProductSummary extends Equatable {
       if (variantId != null) {
         stockByVariant[variantId] = (stockByVariant[variantId] ?? 0) + qty;
         availableByVariant[variantId] =
-            (availableByVariant[variantId] ?? 0) + (available < 0 ? 0 : available);
+            (availableByVariant[variantId] ?? 0) +
+            (available < 0 ? 0 : available);
       }
       final value = item['reorder_level'];
       if (value != null) {
@@ -251,7 +261,9 @@ class ProductSummary extends Equatable {
     }
 
     final variants = [
-      for (final variant in ProductVariant.listFromEmbed(json['product_variants']))
+      for (final variant in ProductVariant.listFromEmbed(
+        json['product_variants'],
+      ))
         variant.copyWith(
           stockQuantity: stockByVariant[variant.id],
           availableStockQuantity: availableByVariant[variant.id],
@@ -290,8 +302,9 @@ class ProductSummary extends Equatable {
       id: json['id'] as String,
       companyId: json['company_id'] as String,
       categoryId: json['category_id'] as String?,
-      categoryName:
-          category is Map<String, dynamic> ? category['name'] as String? : null,
+      categoryName: category is Map<String, dynamic>
+          ? category['name'] as String?
+          : null,
       sku: json['sku'] as String,
       barcode: json['barcode'] as String?,
       name: json['name'] as String,
@@ -308,6 +321,7 @@ class ProductSummary extends Equatable {
       isActive: json['is_active'] as bool? ?? true,
       attributes: _attributesMap(json['attributes']),
       imageStoragePath: primaryImage?['storage_path'] as String?,
+      imageUpdatedAt: _dateValue(primaryImage?['updated_at']),
       variants: variants,
       createdAt: _dateValue(json['created_at']),
       updatedAt: _dateValue(json['updated_at']),
@@ -316,29 +330,30 @@ class ProductSummary extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        companyId,
-        categoryId,
-        categoryName,
-        sku,
-        barcode,
-        name,
-        brand,
-        unitLabel,
-        description,
-        costPrice,
-        sellingPrice,
-        currentStockQuantity,
-        availableStockQuantity,
-        reorderLevel,
-        preferredSupplierId,
-        preferredSupplierName,
-        isActive,
-        attributes,
-        imageStoragePath,
-        imageUrl,
-        variants,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    companyId,
+    categoryId,
+    categoryName,
+    sku,
+    barcode,
+    name,
+    brand,
+    unitLabel,
+    description,
+    costPrice,
+    sellingPrice,
+    currentStockQuantity,
+    availableStockQuantity,
+    reorderLevel,
+    preferredSupplierId,
+    preferredSupplierName,
+    isActive,
+    attributes,
+    imageStoragePath,
+    imageUpdatedAt,
+    imageUrl,
+    variants,
+    createdAt,
+    updatedAt,
+  ];
 }

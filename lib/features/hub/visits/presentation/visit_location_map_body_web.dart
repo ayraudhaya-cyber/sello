@@ -37,9 +37,6 @@ class _VisitLocationMapBodyState extends State<VisitLocationMapBody> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 260,
-      child: HtmlElementView(viewType: _viewType),
-    );
+    return SizedBox(height: 260, child: HtmlElementView(viewType: _viewType));
   }
 }

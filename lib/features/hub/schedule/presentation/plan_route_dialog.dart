@@ -256,7 +256,8 @@ class _PlanRouteDialogState extends ConsumerState<PlanRouteDialog> {
           const _PlanSectionLabel('Who'),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _employeeId != null &&
+            value:
+                _employeeId != null &&
                     widget.reps.any((r) => r.id == _employeeId)
                 ? _employeeId
                 : null,
@@ -268,8 +269,8 @@ class _PlanRouteDialogState extends ConsumerState<PlanRouteDialog> {
               helperText: _repFromRecent && recentRepName != null
                   ? 'Recently used — $recentRepName'
                   : widget.reps.isEmpty
-                      ? 'No field-visit eligible team members yet'
-                      : null,
+                  ? 'No field-visit eligible team members yet'
+                  : null,
             ),
             items: [
               for (final rep in widget.reps)
@@ -344,8 +345,8 @@ class _PlanRouteDialogState extends ConsumerState<PlanRouteDialog> {
                 child: Text(
                   stopCount == 0
                       ? (hasArea
-                          ? 'No specific customers'
-                          : 'Customers optional')
+                            ? 'No specific customers'
+                            : 'Customers optional')
                       : '$stopCount ${stopCount == 1 ? 'customer' : 'customers'}',
                   style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
@@ -512,11 +513,7 @@ class _TimeField extends StatelessWidget {
 
 /// Lightweight single-stop edit (existing scheduled visit).
 class EditVisitDialog extends ConsumerStatefulWidget {
-  const EditVisitDialog({
-    super.key,
-    required this.visit,
-    required this.reps,
-  });
+  const EditVisitDialog({super.key, required this.visit, required this.reps});
 
   final ScheduledVisit visit;
   final List<SalesRepOption> reps;
@@ -613,7 +610,8 @@ class _EditVisitDialogState extends ConsumerState<EditVisitDialog> {
             const SizedBox(height: 12),
           ],
           DropdownButtonFormField<String>(
-            value: _employeeId != null &&
+            value:
+                _employeeId != null &&
                     widget.reps.any((r) => r.id == _employeeId)
                 ? _employeeId
                 : null,
@@ -693,7 +691,8 @@ class _MultiCustomerPickerDialogState
     for (final c in widget.initiallySelected) {
       _selected[c.id] = c;
     }
-    _areaOnly = widget.areaFilter != null && widget.areaFilter!.trim().isNotEmpty;
+    _areaOnly =
+        widget.areaFilter != null && widget.areaFilter!.trim().isNotEmpty;
     Future.microtask(() => _load());
   }
 
@@ -707,11 +706,9 @@ class _MultiCustomerPickerDialogState
   Future<void> _load([String search = '']) async {
     setState(() => _loading = true);
     try {
-      final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-            search: search,
-            isActive: true,
-            pageSize: 80,
-          );
+      final result = await ref
+          .read(customerRepositoryProvider)
+          .fetchCustomers(search: search, isActive: true, pageSize: 80);
       var items = result.items;
       final area = widget.areaFilter?.trim();
       if (_areaOnly && area != null && area.isNotEmpty) {
@@ -783,27 +780,27 @@ class _MultiCustomerPickerDialogState
             child: _loading
                 ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : _items.isEmpty
-                    ? const Center(child: Text('No customers found'))
-                    : ListView.separated(
-                        itemCount: _items.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final customer = _items[index];
-                          final checked = _selected.containsKey(customer.id);
-                          return CheckboxListTile(
-                            value: checked,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            title: Text(customer.name),
-                            subtitle: Text(
-                              [
-                                if (customer.phone != null) customer.phone!,
-                                if (customer.city != null) customer.city!,
-                              ].join(' · '),
-                            ),
-                            onChanged: (_) => _toggle(customer),
-                          );
-                        },
-                      ),
+                ? const Center(child: Text('No customers found'))
+                : ListView.separated(
+                    itemCount: _items.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final customer = _items[index];
+                      final checked = _selected.containsKey(customer.id);
+                      return CheckboxListTile(
+                        value: checked,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(customer.name),
+                        subtitle: Text(
+                          [
+                            if (customer.phone != null) customer.phone!,
+                            if (customer.city != null) customer.city!,
+                          ].join(' · '),
+                        ),
+                        onChanged: (_) => _toggle(customer),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -813,10 +810,8 @@ class _MultiCustomerPickerDialogState
         primaryLabel: _selected.isEmpty
             ? 'Done'
             : 'Add ${_selected.length} ${_selected.length == 1 ? 'customer' : 'customers'}',
-        onPrimary: () => Navigator.pop(
-          context,
-          _selected.values.toList(growable: false),
-        ),
+        onPrimary: () =>
+            Navigator.pop(context, _selected.values.toList(growable: false)),
       ),
     );
   }

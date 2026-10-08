@@ -399,8 +399,9 @@ class _SelloSuggestionPanelState<T> extends State<_SelloSuggestionPanel<T>> {
   Widget build(BuildContext context) {
     final list = widget.options;
     if (list.isEmpty) return const SizedBox.shrink();
-    final highlighted = AutocompleteHighlightedOption.of(context)
-        .clamp(0, list.length - 1);
+    final highlighted = AutocompleteHighlightedOption.of(
+      context,
+    ).clamp(0, list.length - 1);
     _scrollTo(highlighted);
 
     return Align(
@@ -437,9 +438,7 @@ class _SelloSuggestionPanelState<T> extends State<_SelloSuggestionPanel<T>> {
                 return InkWell(
                   onTap: () => widget.onSelected(option),
                   child: ColoredBox(
-                    color: isHighlighted
-                        ? AppColors.veil
-                        : Colors.transparent,
+                    color: isHighlighted ? AppColors.veil : Colors.transparent,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: _rowHeight),
                       child: Padding(

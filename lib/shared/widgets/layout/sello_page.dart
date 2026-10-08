@@ -15,6 +15,8 @@ class SelloSectionHeader extends StatelessWidget {
     this.eyebrow,
     this.subtitle,
     this.action,
+    this.inlineAction = false,
+    this.leading,
   });
 
   final String title;
@@ -22,23 +24,27 @@ class SelloSectionHeader extends StatelessWidget {
   final String? subtitle;
   final Widget? action;
 
+  /// Placed before the title (e.g. a back button on pushed pages).
+  final Widget? leading;
+
+  /// Keep [action] on the title row even on narrow screens. Use with compact
+  /// actions (icon buttons, one small button) so the header saves height.
+  final bool inlineAction;
+
   @override
   Widget build(BuildContext context) {
     final titleStyle = context.isMobile
         ? context.texts.headlineMedium
         : context.texts.headlineLarge;
 
-    final heading = Column(
+    final titleColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (eyebrow != null) ...[
           Text(eyebrow!.toUpperCase(), style: AppTypography.eyebrow),
           const SizedBox(height: AppSpacing.xs),
         ],
-        Text(
-          title,
-          style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
-        ),
+        Text(title, style: titleStyle?.copyWith(fontWeight: FontWeight.w700)),
         if (subtitle != null) ...[
           const SizedBox(height: AppSpacing.xxs),
           ConstrainedBox(
@@ -53,12 +59,35 @@ class SelloSectionHeader extends StatelessWidget {
         ],
       ],
     );
+    final heading = leading == null
+        ? titleColumn
+        : Row(
+            children: [
+              leading!,
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(child: titleColumn),
+            ],
+          );
 
     if (action == null) return heading;
 
+    if (inlineAction) {
+      return Row(
+        crossAxisAlignment: subtitle == null
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          Expanded(child: heading),
+          const SizedBox(width: AppSpacing.sm),
+          action!,
+        ],
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stack = !constraints.maxWidth.isFinite ||
+        final stack =
+            !constraints.maxWidth.isFinite ||
             constraints.maxWidth < ResponsiveLayout.formFieldMinWidth * 2;
         if (stack) {
           return Column(
@@ -83,6 +112,68 @@ class SelloSectionHeader extends StatelessWidget {
   }
 }
 
+/// Secondary page-header action (refresh, shortcuts). Icon-only with a
+/// tooltip on phones so it fits beside the title; labelled on wider screens.
+class SelloHeaderAction extends StatelessWidget {
+  const SelloHeaderAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final color = enabled ? AppColors.textSecondary : AppColors.textDisabled;
+    final iconOnly = context.isMobile;
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.controlAll,
+          side: const BorderSide(color: AppColors.outlineStrong),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: SizedBox(
+            height: iconOnly ? 44 : 40,
+            width: iconOnly ? 44 : null,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: iconOnly ? 0 : 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 20, color: color),
+                  if (!iconOnly) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Constrains page content and applies responsive padding.
 class SelloPageContainer extends StatelessWidget {
   const SelloPageContainer({
@@ -91,12 +182,20 @@ class SelloPageContainer extends StatelessWidget {
     this.maxWidth,
     this.padding,
     this.scrollable = true,
+    this.onRefresh,
+    this.onNearEnd,
   });
 
   final Widget child;
   final double? maxWidth;
   final EdgeInsetsGeometry? padding;
   final bool scrollable;
+
+  /// Enables pull-to-refresh when [scrollable].
+  final Future<void> Function()? onRefresh;
+
+  /// Called when the user scrolls close to the bottom (load more).
+  final VoidCallback? onNearEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +211,8 @@ class SelloPageContainer extends StatelessWidget {
         child: Padding(
           // Extra bottom padding keeps the last card clear of the viewport
           // edge when a page scrolls.
-          padding: padding ??
+          padding:
+              padding ??
               EdgeInsets.fromLTRB(
                 gutter,
                 vertical,
@@ -126,10 +226,36 @@ class SelloPageContainer extends StatelessWidget {
 
     if (!scrollable) return content;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+    Widget scroll = SingleChildScrollView(
+      physics: onRefresh == null
+          ? const BouncingScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
       child: content,
     );
+
+    final nearEnd = onNearEnd;
+    if (nearEnd != null) {
+      scroll = NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          final metrics = notification.metrics;
+          if (notification is ScrollUpdateNotification &&
+              metrics.axis == Axis.vertical &&
+              metrics.extentAfter < 480) {
+            nearEnd();
+          }
+          return false;
+        },
+        child: scroll,
+      );
+    }
+
+    final refresh = onRefresh;
+    if (refresh != null) {
+      scroll = RefreshIndicator(onRefresh: refresh, child: scroll);
+    }
+    return scroll;
   }
 }
 
@@ -151,9 +277,8 @@ class SelloAppBar extends StatelessWidget implements PreferredSizeWidget {
   final PreferredSizeWidget? bottom;
 
   @override
-  Size get preferredSize => Size.fromHeight(
-        kToolbarHeight + (bottom?.preferredSize.height ?? 0),
-      );
+  Size get preferredSize =>
+      Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {

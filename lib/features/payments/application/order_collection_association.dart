@@ -258,6 +258,21 @@ abstract final class OrderCollectionAssociation {
     );
   }
 
+  /// Convenience only: pre-select the method the order was placed with so the
+  /// person collecting does not have to pick it again. They can change it, and
+  /// nothing is recorded until they save. Wallet / credit are not ways of
+  /// receiving money, so they fall back to the default.
+  static PaymentMethod suggestedMethodFromOrder(PaymentMethod? orderMethod) {
+    return switch (orderMethod) {
+      PaymentMethod.cash ||
+      PaymentMethod.card ||
+      PaymentMethod.bankTransfer ||
+      PaymentMethod.cheque =>
+        orderMethod!,
+      _ => defaultNewCollectionMethod,
+    };
+  }
+
   /// Checkout / order chips are never treated as money.
   static PaymentMethod methodForNewCollection({
     PaymentMethod? orderPaymentMethod,

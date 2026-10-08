@@ -34,8 +34,13 @@ class _DocumentIdentitySettingsSectionState
 
   ProcessedMedia? _pendingLogo;
   bool _clearLogo = false;
+  ProcessedMedia? _pendingSignature;
+  bool _clearSignature = false;
   bool _picking = false;
+  bool _pickingSignature = false;
   bool? _showNameWithLogo;
+  DocumentPrintTemplate? _template;
+  bool? _logoBlack;
   var _hydrated = false;
   String? _hydratedSettingsId;
 
@@ -74,10 +79,15 @@ class _DocumentIdentitySettingsSectionState
     required String? savedEmail,
     required String? savedTerms,
     required String? savedTagline,
+    required DocumentPrintTemplate savedTemplate,
+    required bool savedLogoBlack,
   }) {
     if (_pendingLogo != null || _clearLogo) return true;
+    if (_pendingSignature != null || _clearSignature) return true;
     final show = _showNameWithLogo ?? savedShowName;
     if (show != savedShowName) return true;
+    if ((_template ?? savedTemplate) != savedTemplate) return true;
+    if ((_logoBlack ?? savedLogoBlack) != savedLogoBlack) return true;
     if (_addressController.text.trim() != (savedAddress ?? '').trim()) {
       return true;
     }
@@ -122,7 +132,43 @@ class _DocumentIdentitySettingsSectionState
     }
   }
 
-  Future<void> _save({required bool savedShowName}) async {
+  Future<void> _pickSignature() async {
+    setState(() => _pickingSignature = true);
+    try {
+      final file = await _media.pickWithBestExperience(context);
+      if (file == null || !mounted) return;
+      final raw = await file.readAsBytes();
+      if (!mounted) return;
+      final prepared = await _media.prepareForUpload(
+        context,
+        raw,
+        offerCrop: false,
+        preferPng: true,
+      );
+      if (prepared == null || !mounted) return;
+      setState(() {
+        _pendingSignature = prepared;
+        _clearSignature = false;
+      });
+    } on AppFailure catch (failure) {
+      if (!mounted) return;
+      SelloSnackbars.error(context, failure.message);
+    } catch (_) {
+      if (!mounted) return;
+      SelloSnackbars.error(
+        context,
+        'Unable to use that image. Try PNG or JPG.',
+      );
+    } finally {
+      if (mounted) setState(() => _pickingSignature = false);
+    }
+  }
+
+  Future<void> _save({
+    required bool savedShowName,
+    required DocumentPrintTemplate savedTemplate,
+    required bool savedLogoBlack,
+  }) async {
     final error = await ref
         .read(hubSettingsProvider.notifier)
         .saveDocumentIdentity(
@@ -134,6 +180,10 @@ class _DocumentIdentitySettingsSectionState
           documentEmail: _emailController.text,
           documentTerms: _termsController.text,
           documentTagline: _taglineController.text,
+          signature: _pendingSignature,
+          clearSignature: _clearSignature,
+          documentPrintTemplate: _template ?? savedTemplate,
+          documentLogoPrintBlack: _logoBlack ?? savedLogoBlack,
         );
     if (!mounted) return;
     if (error != null) {
@@ -143,7 +193,11 @@ class _DocumentIdentitySettingsSectionState
     setState(() {
       _pendingLogo = null;
       _clearLogo = false;
+      _pendingSignature = null;
+      _clearSignature = false;
       _showNameWithLogo = null;
+      _template = null;
+      _logoBlack = null;
       _hydrated = false;
     });
     SelloSnackbars.success(context, 'Document identity saved.');
@@ -159,7 +213,11 @@ class _DocumentIdentitySettingsSectionState
     setState(() {
       _pendingLogo = null;
       _clearLogo = false;
+      _pendingSignature = null;
+      _clearSignature = false;
       _showNameWithLogo = null;
+      _template = null;
+      _logoBlack = null;
       _addressController.text = savedAddress ?? '';
       _phoneController.text = savedPhone ?? '';
       _emailController.text = savedEmail ?? '';
@@ -180,6 +238,9 @@ class _DocumentIdentitySettingsSectionState
     final savedEmail = saved?.documentEmail;
     final savedTerms = saved?.documentTerms;
     final savedTagline = saved?.documentTagline;
+    final savedTemplate =
+        saved?.documentPrintTemplate ?? DocumentPrintTemplate.standard;
+    final savedLogoBlack = saved?.documentLogoPrintBlack ?? false;
 
     if (saved != null) {
       _hydrateFromSaved(
@@ -198,7 +259,18 @@ class _DocumentIdentitySettingsSectionState
               ? DocumentIssuerIdentity.resolveLogoUrl(saved?.documentLogoUrl)
               : null);
     final showName = _showNameWithLogo ?? savedShow;
+    final template = _template ?? savedTemplate;
+    final logoBlack = _logoBlack ?? savedLogoBlack;
+    final signatureUrl = _clearSignature
+        ? null
+        : (_pendingSignature == null
+              ? DocumentIssuerIdentity.resolveLogoUrl(
+                  saved?.documentAuthorizedSignatureUrl,
+                )
+              : null);
     final hasLogo = _pendingLogo != null || (!_clearLogo && previewUrl != null);
+    final hasSignature =
+        _pendingSignature != null || (!_clearSignature && signatureUrl != null);
     final dirty = _isDirty(
       savedShowName: savedShow,
       savedAddress: savedAddress,
@@ -206,6 +278,8 @@ class _DocumentIdentitySettingsSectionState
       savedEmail: savedEmail,
       savedTerms: savedTerms,
       savedTagline: savedTagline,
+      savedTemplate: savedTemplate,
+      savedLogoBlack: savedLogoBlack,
     );
     final saving = state.isSavingBranding;
 
@@ -217,7 +291,11 @@ class _DocumentIdentitySettingsSectionState
           ? SettingsActionBar(
               enabled: dirty,
               saving: saving,
-              onSave: () => _save(savedShowName: savedShow),
+              onSave: () => _save(
+                savedShowName: savedShow,
+                savedTemplate: savedTemplate,
+                savedLogoBlack: savedLogoBlack,
+              ),
               onDiscard: () => _discard(
                 savedAddress: savedAddress,
                 savedPhone: savedPhone,
@@ -260,6 +338,64 @@ class _DocumentIdentitySettingsSectionState
               onChanged: (value) {
                 if (!canEdit || saving) return;
                 setState(() => _showNameWithLogo = value);
+              },
+            ),
+          ],
+          const SizedBox(height: 20),
+          SettingsCompactField(
+            label: 'Authorized signature',
+            helper:
+                'Printed on every compact invoice above Authorized by. '
+                'A PNG with a clear background shows only the signature.',
+            child: _LogoPreview(
+              bytes: _clearSignature ? null : _pendingSignature?.bytes,
+              url: signatureUrl,
+              loading: _pickingSignature,
+              saving: saving,
+              enabled: canEdit,
+              onUpload: _pickSignature,
+              onClear: hasSignature && canEdit
+                  ? () => setState(() {
+                      _clearSignature = true;
+                      _pendingSignature = null;
+                    })
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SettingsCompactField(
+            label: 'Print layout',
+            helper:
+                'Standard is the current invoice. Compact packs items closer together and prints in solid black, which suits dot-matrix printers.',
+            child: SelloDropdown<DocumentPrintTemplate>(
+              value: template,
+              enabled: canEdit && !saving,
+              items: const [
+                DropdownMenuItem(
+                  value: DocumentPrintTemplate.standard,
+                  child: Text('Standard'),
+                ),
+                DropdownMenuItem(
+                  value: DocumentPrintTemplate.compact,
+                  child: Text('Compact'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null || !canEdit || saving) return;
+                setState(() => _template = value);
+              },
+            ),
+          ),
+          if (template == DocumentPrintTemplate.compact) ...[
+            const SizedBox(height: 8),
+            SelloStatusToggle(
+              value: logoBlack,
+              label: 'Make the logo black',
+              helper:
+                  'Prints the logo ink in solid black. Clear areas of a PNG stay clear, and the uploaded file is left as it is.',
+              onChanged: (value) {
+                if (!canEdit || saving) return;
+                setState(() => _logoBlack = value);
               },
             ),
           ],

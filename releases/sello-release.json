@@ -6,8 +6,8 @@
       "latest": {
         "version": "1.0.13",
         "build": 14,
-        "released_at": "2026-10-08",
-        "notes": "Pull down to refresh Home, Customers, Products, and Orders, and keep scrolling to load more\nHome and My collections update as soon as a payment is recorded\nPaid today selects the order you just placed at that customer\nProduct photos you have already opened stay on the phone\nA visit stays on this phone when you are offline. Orders and payments need a connection"
+        "released_at": "2026-10-09",
+        "notes": "Pull down to refresh Home, Customers, Products, and Orders, and keep scrolling to load more\nHome and My collections update as soon as a payment is recorded\nPaid today selects the order you just placed at that customer\nProduct photos you have already opened stay on the phone\nA visit stays on this phone when you are offline. Orders and payments need a connection\nInvoice and receipt links in messages are shorter\nPrinted invoices use the compact layout when your business turns it on"
       },
       "minimum": {
         "version": "1.0.0",
@@ -37,8 +37,8 @@
       "latest": {
         "version": "1.0.13",
         "build": 14,
-        "released_at": "2026-10-08",
-        "notes": "Approve or reject a collection from the Payments list, or approve several at once\nFilter customers who owe money, sort the list, and start an order or record a payment from their details\nExport the current Orders or Customers list to Excel\nCorrect a payment, an opening balance, or cheque details, and reassign an order to another sales rep\nThe dashboard Year range is this calendar year. Outstanding and Low stock open the matching list\nOn a computer, Alt+O starts an order, Alt+M records a payment, Alt+C adds a customer, and Alt+P adds a product"
+        "released_at": "2026-10-09",
+        "notes": "Approve or reject a collection from the Payments list, or approve several at once\nFilter customers who owe money, sort the list, and start an order or record a payment from their details\nExport the current Orders or Customers list to Excel\nCorrect a payment, an opening balance, or cheque details, and reassign an order to another sales rep\nThe dashboard Year range is this calendar year. Outstanding and Low stock open the matching list\nOn a computer, Alt+O starts an order, Alt+M records a payment, Alt+C adds a customer, and Alt+P adds a product\nChoose a compact invoice that fits more items on a page, in solid black for dot-matrix printers\nPrint the logo in black, and put an authorized signature on every compact invoice\nInvoice and receipt links in messages are shorter"
       },
       "minimum": {
         "version": "1.0.0",

@@ -1,5 +1,27 @@
 import 'package:equatable/equatable.dart';
 
+/// Printed customer-document layout. Standard is the current spacious invoice.
+enum DocumentPrintTemplate {
+  standard,
+  compact;
+
+  static DocumentPrintTemplate fromDb(String? value) {
+    return value == 'compact'
+        ? DocumentPrintTemplate.compact
+        : DocumentPrintTemplate.standard;
+  }
+
+  String get dbValue => switch (this) {
+    DocumentPrintTemplate.standard => 'standard',
+    DocumentPrintTemplate.compact => 'compact',
+  };
+
+  String get label => switch (this) {
+    DocumentPrintTemplate.standard => 'Standard',
+    DocumentPrintTemplate.compact => 'Compact',
+  };
+}
+
 /// Resolves tenant issuer identity for customer-facing invoices / receipts.
 ///
 /// Never uses the Sello mark. Business name ([companyName] from `companies.name`)
@@ -15,6 +37,9 @@ class DocumentIssuerIdentity extends Equatable {
     this.email,
     this.terms,
     this.tagline,
+    this.template = DocumentPrintTemplate.standard,
+    this.logoPrintBlack = false,
+    this.authorizedSignatureUrl,
   });
 
   final bool showLogo;
@@ -36,6 +61,18 @@ class DocumentIssuerIdentity extends Equatable {
 
   /// Optional closing line from company_settings.document_tagline.
   final String? tagline;
+
+  /// Print layout. Compact is a dense solid-black sheet for dot-matrix printers.
+  final DocumentPrintTemplate template;
+
+  /// Compact print only: render logo ink as solid black. PNG alpha stays clear.
+  final bool logoPrintBlack;
+
+  /// Optional signature printed above Authorized by on compact invoices.
+  final String? authorizedSignatureUrl;
+
+  bool get printLogoBlack =>
+      template == DocumentPrintTemplate.compact && logoPrintBlack;
 
   bool get hasContactBlock =>
       (address != null && address!.isNotEmpty) ||
@@ -59,6 +96,9 @@ class DocumentIssuerIdentity extends Equatable {
     String? email,
     String? terms,
     String? tagline,
+    DocumentPrintTemplate template = DocumentPrintTemplate.standard,
+    bool logoPrintBlack = false,
+    String? authorizedSignatureUrl,
   }) {
     final name = companyName.trim().isEmpty ? 'Business' : companyName.trim();
     final logo = resolveLogoUrl(documentLogoUrl);
@@ -67,6 +107,7 @@ class DocumentIssuerIdentity extends Equatable {
     final resolvedEmail = _trimOrNull(email);
     final resolvedTerms = _trimOrNull(terms);
     final resolvedTagline = _trimOrNull(tagline);
+    final signature = resolveLogoUrl(authorizedSignatureUrl);
     if (logo != null) {
       return DocumentIssuerIdentity(
         showLogo: true,
@@ -78,6 +119,9 @@ class DocumentIssuerIdentity extends Equatable {
         email: resolvedEmail,
         terms: resolvedTerms,
         tagline: resolvedTagline,
+        template: template,
+        logoPrintBlack: logoPrintBlack,
+        authorizedSignatureUrl: signature,
       );
     }
     return DocumentIssuerIdentity(
@@ -90,6 +134,9 @@ class DocumentIssuerIdentity extends Equatable {
       email: resolvedEmail,
       terms: resolvedTerms,
       tagline: resolvedTagline,
+      template: template,
+      logoPrintBlack: logoPrintBlack,
+      authorizedSignatureUrl: signature,
     );
   }
 
@@ -110,14 +157,17 @@ class DocumentIssuerIdentity extends Equatable {
 
   @override
   List<Object?> get props => [
-        showLogo,
-        showBusinessName,
-        logoUrl,
-        businessName,
-        address,
-        phone,
-        email,
-        terms,
-        tagline,
-      ];
+    showLogo,
+    showBusinessName,
+    logoUrl,
+    businessName,
+    address,
+    phone,
+    email,
+    terms,
+    tagline,
+    template,
+    logoPrintBlack,
+    authorizedSignatureUrl,
+  ];
 }

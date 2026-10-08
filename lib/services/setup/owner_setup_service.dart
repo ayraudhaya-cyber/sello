@@ -73,6 +73,9 @@ class OwnerSetupService {
         documentEmail: current.documentEmail,
         documentTerms: current.documentTerms,
         documentTagline: current.documentTagline,
+        documentPrintTemplate: current.documentPrintTemplate,
+        documentLogoPrintBlack: current.documentLogoPrintBlack,
+        documentAuthorizedSignatureUrl: current.documentAuthorizedSignatureUrl,
       );
     }
   }

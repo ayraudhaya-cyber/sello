@@ -104,6 +104,10 @@ class OrderDocument extends Equatable {
     this.primaryColor,
     this.customBrandingEnabled = false,
     this.showBusinessNameWithLogo = false,
+    this.documentPrintTemplate = DocumentPrintTemplate.standard,
+    this.documentLogoPrintBlack = false,
+    this.documentAuthorizedSignatureUrl,
+    this.salesRepPhone,
     this.customerPhone,
     this.customerAddress,
     this.salesRepName,
@@ -148,6 +152,10 @@ class OrderDocument extends Equatable {
 
   /// When a logo exists, also show [companyName]. Ignored when no logo.
   final bool showBusinessNameWithLogo;
+  final DocumentPrintTemplate documentPrintTemplate;
+  final bool documentLogoPrintBlack;
+  final String? documentAuthorizedSignatureUrl;
+  final String? salesRepPhone;
   final String customerName;
   final String? customerPhone;
   final String? customerAddress;
@@ -228,6 +236,9 @@ class OrderDocument extends Equatable {
     email: documentEmail,
     terms: documentTerms,
     tagline: documentTagline,
+    template: documentPrintTemplate,
+    logoPrintBlack: documentLogoPrintBlack,
+    authorizedSignatureUrl: documentAuthorizedSignatureUrl,
   );
 
   String get currencySymbol => SelloFormatters.currencySymbol(currencyCode);
@@ -293,10 +304,18 @@ class OrderDocument extends Equatable {
       customBrandingEnabled: json['custom_branding_enabled'] == true,
       showBusinessNameWithLogo:
           json['document_show_business_name_with_logo'] == true,
+      documentPrintTemplate: DocumentPrintTemplate.fromDb(
+        _stringValue(json['document_print_template']),
+      ),
+      documentLogoPrintBlack: json['document_logo_print_black'] == true,
+      documentAuthorizedSignatureUrl: _stringValue(
+        json['document_authorized_signature_url'],
+      ),
       customerName: _stringValue(json['customer_name']) ?? 'Customer',
       customerPhone: _stringValue(json['customer_phone']),
       customerAddress: _stringValue(json['customer_address']),
       salesRepName: _stringValue(json['sales_rep_name']),
+      salesRepPhone: _stringValue(json['sales_rep_phone']),
       outstandingBalance: json['outstanding_balance'] == null
           ? null
           : _numValue(json['outstanding_balance']),

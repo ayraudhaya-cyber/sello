@@ -20,10 +20,14 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
     ..writeln(
       '<title>${_esc('${doc.kindLabel} ${doc.kindNumber}'.trim())}</title>',
     )
-    ..writeln('<style>$_printCss</style>')
+    ..writeln(
+      '<style>$_printCss${identity.template == DocumentPrintTemplate.compact ? _compactPrintCss : ''}</style>',
+    )
     ..writeln('</head>')
     ..writeln('<body>')
-    ..writeln('<div class="sheet">');
+    ..writeln(
+      '<div class="${identity.template == DocumentPrintTemplate.compact ? 'sheet compact' : 'sheet'}">',
+    );
 
   _writeHeader(buffer, identity, doc);
   _writeBillTo(buffer, doc, date);
@@ -32,23 +36,49 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
   if (doc.purpose.isPaymentDocument) {
     _writePaymentBody(buffer, doc);
   } else {
-    _writeOrderBody(buffer, doc);
+    _writeOrderBody(
+      buffer,
+      doc,
+      compact: identity.template == DocumentPrintTemplate.compact,
+    );
   }
   buffer.writeln('</div>');
 
+  final compact = identity.template == DocumentPrintTemplate.compact;
+  if (compact) buffer.writeln('<footer class="closing">');
   buffer.writeln('<div class="thanks">Thank you for your business!</div>');
   if (identity.hasTerms) {
     buffer.writeln('<div class="terms">${_esc(identity.terms!)}</div>');
   }
+  if (compact) _writeSignoff(buffer, identity);
   if (identity.hasTagline) {
     buffer.writeln('<div class="tagline">${_esc(identity.tagline!)}</div>');
   }
+  if (compact) buffer.writeln('</footer>');
 
   buffer
     ..writeln('</div>')
     ..writeln('<script>')
     ..writeln(r'''
-function selloPrint(){ window.focus(); window.print(); }
+function selloFitCompact(){
+  var sheet = document.querySelector(".sheet.compact");
+  if (!sheet) return;
+  var pad = sheet.querySelector("tr.pad");
+  if (!pad) return;
+  sheet.style.minHeight = "0px";
+  pad.style.height = "0px";
+  var pagePx = (297 - 12) * 96 / 25.4;
+  var natural = sheet.getBoundingClientRect().height;
+  var pages = Math.max(1, Math.ceil((natural - 1) / pagePx));
+  var extra = pages * pagePx - natural - 8;
+  if (extra < 0) extra = 0;
+  pad.style.height = extra + "px";
+}
+function selloPrint(){
+  selloFitCompact();
+  window.focus();
+  window.print();
+}
 function selloReady(){
   var imgs = Array.prototype.slice.call(document.images || []);
   if (!imgs.length) { setTimeout(selloPrint, 80); return; }
@@ -77,7 +107,7 @@ void _writeHeader(
   buffer.writeln('<div class="brand">');
   if (identity.showLogo && identity.logoUrl != null) {
     buffer.writeln(
-      '<img class="logo" src="${_esc(identity.logoUrl!)}" alt="">',
+      '<img class="${identity.printLogoBlack ? 'logo ink' : 'logo'}" src="${_esc(identity.logoUrl!)}" alt="">',
     );
   }
   if (identity.showBusinessName) {
@@ -121,7 +151,8 @@ void _writeBillTo(StringBuffer buffer, OrderDocument doc, String date) {
       '<div class="party-line">${_esc(doc.customerAddress!)}</div>',
     );
   }
-  if (doc.salesRepName != null) {
+  final compact = doc.issuerIdentity.template == DocumentPrintTemplate.compact;
+  if (!compact && doc.salesRepName != null) {
     buffer.writeln(
       '<div class="party-line">Sales Rep: ${_esc(doc.salesRepName!)}</div>',
     );
@@ -138,9 +169,45 @@ void _writeBillTo(StringBuffer buffer, OrderDocument doc, String date) {
   }
   buffer.writeln('</div>');
   buffer.writeln('</section>');
+  if (compact) {
+    final rep = _compactSalesRep(doc);
+    if (rep != null) {
+      buffer.writeln('<div class="rep">${_esc(rep)}</div>');
+    }
+  }
 }
 
-void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
+String? _compactSalesRep(OrderDocument doc) {
+  final phone = doc.salesRepPhone?.trim();
+  if (phone != null && phone.isNotEmpty) return 'Sales rep no. $phone';
+  final name = doc.salesRepName?.trim();
+  if (name != null && name.isNotEmpty) return 'Sales rep $name';
+  return null;
+}
+
+void _writeSignoff(StringBuffer buffer, DocumentIssuerIdentity identity) {
+  final signature = identity.authorizedSignatureUrl;
+  buffer.writeln('<div class="signoff">');
+  buffer.writeln('<div class="sign">');
+  buffer.writeln('<div class="sign-space"></div>');
+  buffer.writeln('<div class="sign-label">Checked by</div>');
+  buffer.writeln('</div>');
+  buffer.writeln('<div class="sign">');
+  buffer.writeln('<div class="sign-space">');
+  if (signature != null) {
+    buffer.writeln('<img class="sign-img" src="${_esc(signature)}" alt="">');
+  }
+  buffer.writeln('</div>');
+  buffer.writeln('<div class="sign-label">Authorized by</div>');
+  buffer.writeln('</div>');
+  buffer.writeln('</div>');
+}
+
+void _writeOrderBody(
+  StringBuffer buffer,
+  OrderDocument doc, {
+  required bool compact,
+}) {
   buffer.writeln('<table class="lines">');
   buffer.writeln(
     '<thead><tr><th class="num">#</th><th>Description</th>'
@@ -153,9 +220,11 @@ void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
       ..writeln('<tr>')
       ..writeln('<td class="num">${i + 1}</td>')
       ..writeln('<td>')
-      ..writeln(_esc(line.displayTitle))
       ..writeln(
-        line.sku?.trim().isNotEmpty == true
+        compact ? _esc(_compactLineTitle(line)) : _esc(line.displayTitle),
+      )
+      ..writeln(
+        !compact && line.sku?.trim().isNotEmpty == true
             ? '<div class="line-sub">${_esc(line.sku!.trim())}</div>'
             : '',
       )
@@ -166,6 +235,11 @@ void _writeOrderBody(StringBuffer buffer, OrderDocument doc) {
       ..writeln('<td class="rate">${_esc(doc.money(line.unitPrice))}</td>')
       ..writeln('<td class="amt">${_esc(doc.money(line.lineTotal))}</td>')
       ..writeln('</tr>');
+  }
+  if (compact) {
+    buffer.writeln(
+      '<tr class="pad"><td></td><td></td><td></td><td></td><td></td></tr>',
+    );
   }
   buffer.writeln('</tbody></table>');
 
@@ -267,6 +341,12 @@ void _total(
     ..writeln('<span>${_esc(label)}</span>')
     ..writeln('<span>${_esc(value)}</span>')
     ..writeln('</div>');
+}
+
+String _compactLineTitle(OrderDocumentLine line) {
+  final sku = line.sku?.trim();
+  if (sku == null || sku.isEmpty) return line.displayTitle;
+  return '${line.displayTitle} · $sku';
 }
 
 String _esc(String value) {
@@ -463,5 +543,197 @@ html, body {
 }
 @media print {
   .sheet { max-width: none; }
+}
+''';
+
+/// Dense solid-black sheet. Appended only when the compact template is selected.
+/// Logo ink uses brightness(0), which leaves PNG alpha untouched.
+const _compactPrintCss = r'''
+@page { size: A4; margin: 6mm 8mm; }
+html, body {
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.sheet.compact {
+  min-height: 285mm;
+  display: flex;
+  flex-direction: column;
+}
+.sheet.compact .bill {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.sheet.compact .lines {
+  flex: 1 1 auto;
+  height: 100%;
+}
+.sheet.compact .closing {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.sheet.compact .header { gap: 8px; margin-bottom: 2px; align-items: flex-start; }
+.sheet.compact .logo { max-width: 120px; max-height: 36px; margin-bottom: 2px; }
+.sheet.compact .logo.ink {
+  filter: brightness(0);
+  -webkit-filter: brightness(0);
+}
+.sheet.compact .business { font-size: 13px; color: #000; }
+.sheet.compact .kind-label {
+  display: inline-block;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: #000;
+  border: 0.6px solid #000;
+  padding: 1px 8px;
+}
+.sheet.compact .kind-number { font-size: 12px; font-weight: 700; color: #000; margin-top: 2px; }
+.sheet.compact .contact {
+  background: none;
+  color: #000;
+  border-radius: 0;
+  padding: 1px 0 3px;
+  margin: 2px 0 4px;
+  font-size: 9.5px;
+  font-weight: 400;
+}
+.sheet.compact .contact .sep { color: #000; }
+.sheet.compact .billto {
+  background: none;
+  border: 0.6px solid #000;
+  border-radius: 0;
+  padding: 3px 6px;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.sheet.compact .rep {
+  margin: 0 0 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #000;
+}
+.sheet.compact .label { color: #000; margin-bottom: 1px; font-size: 9px; letter-spacing: 0.04em; }
+.sheet.compact .party { font-size: 12px; }
+.sheet.compact .party-line, .sheet.compact .info-value { color: #000; margin-top: 0; }
+.sheet.compact .status-tag {
+  margin-top: 2px;
+  padding: 0 4px;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  border: 0.6px solid #000;
+  font-size: 8px;
+}
+.sheet.compact .bill {
+  border: none;
+  border-radius: 0;
+  margin-bottom: 4px;
+  overflow: visible;
+}
+.sheet.compact .lines {
+  border: 0.6px solid #000;
+}
+.sheet.compact .lines th,
+.sheet.compact .lines td {
+  border: none;
+  border-left: 0.6px solid #000;
+  border-right: 0.6px solid #000;
+  padding: 1px 4px;
+  color: #000;
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.sheet.compact .lines th {
+  background: #fff;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  border-bottom: 0.6px solid #000;
+}
+.sheet.compact .lines .num { color: #000; }
+.sheet.compact .lines tr { break-inside: avoid; page-break-inside: avoid; }
+.sheet.compact .lines tr.pad { height: 100%; break-inside: auto; page-break-inside: auto; }
+.sheet.compact .lines tr.pad td { height: 100%; }
+.sheet.compact .totals {
+  width: 58mm;
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 0.6px solid #000;
+  border-top: none;
+}
+.sheet.compact .total-row { color: #000; margin-bottom: 0; font-size: 10.5px; }
+.sheet.compact .total-row.emphasize {
+  margin-top: 1px;
+  color: #000;
+  font-size: 12px;
+}
+.sheet.compact .pay {
+  padding: 3px 0 0;
+  border-top: 0.6px solid #000;
+}
+.sheet.compact .pending {
+  margin: 4px 0;
+  padding: 3px 6px;
+  border-radius: 0;
+  background: #fff;
+  border: 0.6px solid #000;
+  color: #000;
+  font-size: 8px;
+}
+.sheet.compact .notes { padding: 3px 0 0; color: #000; font-size: 8px; }
+.sheet.compact .thanks {
+  background: none;
+  color: #000;
+  border: none;
+  border-top: 0.6px solid #000;
+  border-radius: 0;
+  padding: 3px 0 0;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sheet.compact .signoff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 15mm;
+  overflow: visible;
+}
+.sheet.compact .sign { position: relative; overflow: visible; }
+.sheet.compact .sign-space {
+  height: 28px;
+  position: relative;
+  overflow: visible;
+}
+.sheet.compact .sign-img {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: block;
+  max-height: 162px;
+  max-width: 504px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.sheet.compact .sign-label {
+  border-top: 0.6px solid #000;
+  text-align: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+.sheet.compact .terms,
+.sheet.compact .tagline {
+  margin-top: 4px;
+  color: #000;
+  font-size: 10px;
+  line-height: 1.3;
+  font-weight: 400;
 }
 ''';

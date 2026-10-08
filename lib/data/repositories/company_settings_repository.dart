@@ -3,6 +3,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/company_settings.dart';
+import 'package:sello/shared/models/document_issuer_identity.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -47,7 +48,10 @@ class CompanySettingsRepository {
     primary_color,
     nav_background_color,
     custom_branding_enabled,
-    document_show_business_name_with_logo
+    document_show_business_name_with_logo,
+    document_print_template,
+    document_logo_print_black,
+    document_authorized_signature_url
   ''';
 
   // inventory_movement_policy is added in migration 030. Include it in
@@ -211,6 +215,9 @@ class CompanySettingsRepository {
     required String? documentEmail,
     required String? documentTerms,
     required String? documentTagline,
+    required DocumentPrintTemplate documentPrintTemplate,
+    required bool documentLogoPrintBlack,
+    required String? documentAuthorizedSignatureUrl,
   }) async {
     try {
       final updated = await _client
@@ -223,6 +230,9 @@ class CompanySettingsRepository {
             'document_email': documentEmail,
             'document_terms': documentTerms,
             'document_tagline': documentTagline,
+            'document_print_template': documentPrintTemplate.dbValue,
+            'document_logo_print_black': documentLogoPrintBlack,
+            'document_authorized_signature_url': documentAuthorizedSignatureUrl,
             'updated_by': employeeId,
           })
           .eq('company_id', companyId)
@@ -282,6 +292,29 @@ class CompanySettingsRepository {
 
   Future<void> removeDocumentLogo({required String companyId}) {
     return _deleteLogoFiles(companyId, stem: 'document-logo');
+  }
+
+  Future<String> uploadAuthorizedSignature({
+    required String companyId,
+    required ProcessedMedia media,
+  }) async {
+    const stem = 'document-signature';
+    final path = '$companyId/$stem.${media.extension}';
+    await _deleteLogoFiles(companyId, stem: stem);
+    await _storage.uploadCompanyLogo(
+      path: path,
+      bytes: media.bytes,
+      contentType: media.contentType,
+    );
+    final url = _storage.publicUrl(
+      bucket: MediaConstants.companyBrandingBucket,
+      path: path,
+    );
+    return '$url?v=${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Future<void> removeAuthorizedSignature({required String companyId}) {
+    return _deleteLogoFiles(companyId, stem: 'document-signature');
   }
 
   Future<void> _deleteLogoFiles(

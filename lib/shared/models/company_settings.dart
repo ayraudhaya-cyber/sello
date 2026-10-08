@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:sello/shared/models/document_issuer_identity.dart';
 import 'package:sello/shared/models/financial_visibility.dart';
 import 'package:sello/shared/models/inventory_movement_policy.dart';
 import 'package:sello/shared/models/outbound_notification_policies.dart';
@@ -113,6 +114,9 @@ class CompanySettings extends Equatable {
     this.navBackgroundColor,
     this.customBrandingEnabled = false,
     this.documentShowBusinessNameWithLogo = false,
+    this.documentPrintTemplate = DocumentPrintTemplate.standard,
+    this.documentLogoPrintBlack = false,
+    this.documentAuthorizedSignatureUrl,
     this.ownerSetupCompleted = true,
   });
 
@@ -192,6 +196,15 @@ class CompanySettings extends Equatable {
   /// Ignored when no logo is set (name is always the fallback). Default: logo only.
   final bool documentShowBusinessNameWithLogo;
 
+  /// Printed invoice layout. Standard keeps the current sheet.
+  final DocumentPrintTemplate documentPrintTemplate;
+
+  /// Compact layout only: print the logo ink black. The stored file stays as uploaded.
+  final bool documentLogoPrintBlack;
+
+  /// Signature image printed above Authorized by on compact invoices.
+  final String? documentAuthorizedSignatureUrl;
+
   /// When false, a newly provisioned Owner is guided through first-time setup.
   /// Missing / legacy rows are treated as complete so existing tenants are
   /// never forced through the flow.
@@ -229,6 +242,9 @@ class CompanySettings extends Equatable {
     navBackgroundColor: null,
     customBrandingEnabled: false,
     documentShowBusinessNameWithLogo: false,
+    documentPrintTemplate: DocumentPrintTemplate.standard,
+    documentLogoPrintBlack: false,
+    documentAuthorizedSignatureUrl: null,
     ownerSetupCompleted: true,
   );
 
@@ -286,6 +302,10 @@ class CompanySettings extends Equatable {
     bool clearPrimaryColor = false,
     bool clearNavBackgroundColor = false,
     bool? documentShowBusinessNameWithLogo,
+    DocumentPrintTemplate? documentPrintTemplate,
+    bool? documentLogoPrintBlack,
+    String? documentAuthorizedSignatureUrl,
+    bool clearDocumentAuthorizedSignatureUrl = false,
     bool? ownerSetupCompleted,
   }) {
     return CompanySettings(
@@ -301,8 +321,7 @@ class CompanySettings extends Equatable {
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       enableLowStockAlert: enableLowStockAlert ?? this.enableLowStockAlert,
       allowOrdersAboveAvailableStock:
-          allowOrdersAboveAvailableStock ??
-          this.allowOrdersAboveAvailableStock,
+          allowOrdersAboveAvailableStock ?? this.allowOrdersAboveAvailableStock,
       salesRepsCanViewOutstandingBalances:
           salesRepsCanViewOutstandingBalances ??
           this.salesRepsCanViewOutstandingBalances,
@@ -311,8 +330,8 @@ class CompanySettings extends Equatable {
           collectionApprovalRequired ?? this.collectionApprovalRequired,
       salesRepsCanRecordDelivery:
           salesRepsCanRecordDelivery ?? this.salesRepsCanRecordDelivery,
-      outboundNotificationPolicies: outboundNotificationPolicies ??
-          this.outboundNotificationPolicies,
+      outboundNotificationPolicies:
+          outboundNotificationPolicies ?? this.outboundNotificationPolicies,
       smsSenderId: smsSenderIdEditable
           ? (clearSmsSenderId ? null : (smsSenderId ?? this.smsSenderId))
           : this.smsSenderId,
@@ -348,8 +367,17 @@ class CompanySettings extends Equatable {
           ? null
           : (navBackgroundColor ?? this.navBackgroundColor),
       customBrandingEnabled: customBrandingEnabled,
-      documentShowBusinessNameWithLogo: documentShowBusinessNameWithLogo ??
+      documentShowBusinessNameWithLogo:
+          documentShowBusinessNameWithLogo ??
           this.documentShowBusinessNameWithLogo,
+      documentPrintTemplate:
+          documentPrintTemplate ?? this.documentPrintTemplate,
+      documentLogoPrintBlack:
+          documentLogoPrintBlack ?? this.documentLogoPrintBlack,
+      documentAuthorizedSignatureUrl: clearDocumentAuthorizedSignatureUrl
+          ? null
+          : (documentAuthorizedSignatureUrl ??
+                this.documentAuthorizedSignatureUrl),
       ownerSetupCompleted: ownerSetupCompleted ?? this.ownerSetupCompleted,
     );
   }
@@ -412,6 +440,14 @@ class CompanySettings extends Equatable {
       customBrandingEnabled: json['custom_branding_enabled'] as bool? ?? false,
       documentShowBusinessNameWithLogo:
           json['document_show_business_name_with_logo'] as bool? ?? false,
+      documentPrintTemplate: DocumentPrintTemplate.fromDb(
+        json['document_print_template'] as String?,
+      ),
+      documentLogoPrintBlack:
+          json['document_logo_print_black'] as bool? ?? false,
+      documentAuthorizedSignatureUrl: _optionalText(
+        json['document_authorized_signature_url'],
+      ),
       ownerSetupCompleted: json['owner_setup_completed'] as bool? ?? true,
     );
   }
@@ -458,12 +494,12 @@ class CompanySettings extends Equatable {
     allowOrdersAboveAvailableStock,
     salesRepsCanViewOutstandingBalances,
     financialVisibility,
-        collectionApprovalRequired,
-        salesRepsCanRecordDelivery,
-        outboundNotificationPolicies,
-        smsSenderId,
-        smsSenderIdEditable,
-        inventoryMovementPolicy,
+    collectionApprovalRequired,
+    salesRepsCanRecordDelivery,
+    outboundNotificationPolicies,
+    smsSenderId,
+    smsSenderIdEditable,
+    inventoryMovementPolicy,
     logoUrl,
     logoLightUrl,
     documentLogoUrl,
@@ -476,6 +512,9 @@ class CompanySettings extends Equatable {
     navBackgroundColor,
     customBrandingEnabled,
     documentShowBusinessNameWithLogo,
+    documentPrintTemplate,
+    documentLogoPrintBlack,
+    documentAuthorizedSignatureUrl,
     ownerSetupCompleted,
   ];
 }

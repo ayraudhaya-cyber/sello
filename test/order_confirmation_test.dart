@@ -138,7 +138,7 @@ void main() {
     });
 
     test('short tokens cannot identify a document', () {
-      expect('abc'.length < 32, isTrue);
+      expect('abc'.length < 11, isTrue);
     });
   });
 

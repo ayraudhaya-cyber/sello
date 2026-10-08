@@ -7,6 +7,7 @@ import 'package:sello/services/notifications/outbound/messaging_phone.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/client_branding.dart';
 import 'package:sello/shared/models/company_settings.dart';
+import 'package:sello/shared/models/document_issuer_identity.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/providers/branding_provider.dart';
 
@@ -267,6 +268,10 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
     String? documentEmail,
     String? documentTerms,
     String? documentTagline,
+    ProcessedMedia? signature,
+    required bool clearSignature,
+    required DocumentPrintTemplate documentPrintTemplate,
+    required bool documentLogoPrintBlack,
   }) async {
     final session = ref.read(currentSessionProvider);
     final permissions = ref.read(permissionServiceProvider);
@@ -298,6 +303,19 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
         );
       }
 
+      var nextSignature = current.documentAuthorizedSignatureUrl;
+      if (clearSignature) {
+        if (current.documentAuthorizedSignatureUrl != null) {
+          await _repo.removeAuthorizedSignature(companyId: session.company.id);
+        }
+        nextSignature = null;
+      } else if (signature != null) {
+        nextSignature = await _repo.uploadAuthorizedSignature(
+          companyId: session.company.id,
+          media: signature,
+        );
+      }
+
       final nextAddress = documentAddress != null
           ? blankToNull(documentAddress)
           : current.documentAddress;
@@ -324,6 +342,9 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
         documentEmail: nextEmail,
         documentTerms: nextTerms,
         documentTagline: nextTagline,
+        documentPrintTemplate: documentPrintTemplate,
+        documentLogoPrintBlack: documentLogoPrintBlack,
+        documentAuthorizedSignatureUrl: nextSignature,
       );
 
       final draft = state.draft;
@@ -340,7 +361,13 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
                 documentEmail: saved.documentEmail,
                 documentTerms: saved.documentTerms,
                 documentTagline: saved.documentTagline,
+                documentPrintTemplate: saved.documentPrintTemplate,
+                documentLogoPrintBlack: saved.documentLogoPrintBlack,
+                documentAuthorizedSignatureUrl:
+                    saved.documentAuthorizedSignatureUrl,
                 clearDocumentLogoUrl: saved.documentLogoUrl == null,
+                clearDocumentAuthorizedSignatureUrl:
+                    saved.documentAuthorizedSignatureUrl == null,
                 clearDocumentAddress: saved.documentAddress == null,
                 clearDocumentPhone: saved.documentPhone == null,
                 clearDocumentEmail: saved.documentEmail == null,

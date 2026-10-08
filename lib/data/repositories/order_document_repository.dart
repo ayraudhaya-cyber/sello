@@ -169,7 +169,7 @@ class OrderDocumentRepository {
   /// Public resolve — works with anon key, no session.
   Future<OrderDocument?> fetchByToken(String token) async {
     final trimmed = token.trim();
-    if (trimmed.length < 32) return null;
+    if (trimmed.length < 11) return null;
     try {
       dynamic result;
       try {

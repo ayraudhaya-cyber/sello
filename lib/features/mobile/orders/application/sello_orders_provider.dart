@@ -203,6 +203,16 @@ class SelloOrdersNotifier extends Notifier<SelloOrdersState> {
     await loadOrders(resetPage: true);
   }
 
+  Future<void> clearFilters() async {
+    state = state.copyWith(
+      search: '',
+      statusFilter: OrderStatus.draft,
+      showAllStatuses: true,
+      page: 0,
+    );
+    await loadOrders(resetPage: true);
+  }
+
   Future<void> setStatusFilter(OrderStatus? value, {bool all = false}) async {
     state = state.copyWith(
       statusFilter: value ?? OrderStatus.draft,

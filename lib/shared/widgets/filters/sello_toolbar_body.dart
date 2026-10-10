@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
+import 'package:sello/shared/widgets/filters/sello_clear_filters_bar.dart';
 
 /// Responsive search + filters + actions layout for white filter panels.
 ///
@@ -18,6 +19,7 @@ class SelloToolbarBody extends StatelessWidget {
     this.actions = const [],
     this.stackBelow = 1200,
     this.filtersOnOwnRow,
+    this.onClearFilters,
   });
 
   final Widget search;
@@ -30,7 +32,16 @@ class SelloToolbarBody extends StatelessWidget {
   /// Force filters onto a second row. Defaults to true when [filters].length ≥ 3.
   final bool? filtersOnOwnRow;
 
+  /// Shown as a text link at the end of the filter row.
+  final VoidCallback? onClearFilters;
+
   bool get _filtersOnOwnRow => filtersOnOwnRow ?? filters.length >= 3;
+
+  List<Widget> get _filters {
+    final clear = onClearFilters;
+    if (clear == null) return filters;
+    return [...filters, SelloClearFiltersLink(onPressed: clear)];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +50,7 @@ class SelloToolbarBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           search,
-          for (final filter in filters) ...[
+          for (final filter in _filters) ...[
             const SizedBox(height: AppSpacing.sm),
             filter,
           ],
@@ -88,13 +99,13 @@ class SelloToolbarBody extends StatelessWidget {
                   ],
                 ],
               ),
-              if (filters.isNotEmpty) ...[
+              if (_filters.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),
                 Wrap(
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
-                  crossAxisAlignment: WrapCrossAlignment.end,
-                  children: filters,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: _filters,
                 ),
               ],
             ],
@@ -105,14 +116,14 @@ class SelloToolbarBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(child: search),
-            if (filters.isNotEmpty) ...[
+            if (_filters.isNotEmpty) ...[
               const SizedBox(width: AppSpacing.sm),
               Flexible(
                 child: Wrap(
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
-                  crossAxisAlignment: WrapCrossAlignment.end,
-                  children: filters,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: _filters,
                 ),
               ),
             ],

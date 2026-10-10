@@ -198,41 +198,45 @@ void main() {
       );
     }
 
-    test('buyer receives confirmation and owner/manager receives new-order notice',
-        () async {
-      final gateway = _FakeGateway(
-        snapshot(
-          customer: const OrderConfirmationContact(
-            id: 'cust-1',
-            name: 'City Mart',
-            phone: '0771234567',
-            whatsapp: '0771234567',
-          ),
-          hub: const [
-            OrderConfirmationHubRecipient(
-              id: 'own-1',
-              name: 'Owner',
-              role: 'owner',
-              phone: '0779999999',
+    test(
+      'buyer receives confirmation and owner/manager receives new-order notice',
+      () async {
+        final gateway = _FakeGateway(
+          snapshot(
+            customer: const OrderConfirmationContact(
+              id: 'cust-1',
+              name: 'City Mart',
+              phone: '0771234567',
+              whatsapp: '0771234567',
             ),
-          ],
-        ),
-      );
-      final dispatcher = OrderConfirmationDispatcher(
-        gateway: gateway,
-        links: const DocumentLinkFactory(overrideOrigin: 'https://app.sello.test'),
-      );
+            hub: const [
+              OrderConfirmationHubRecipient(
+                id: 'own-1',
+                name: 'Owner',
+                role: 'owner',
+                phone: '0779999999',
+              ),
+            ],
+          ),
+        );
+        final dispatcher = OrderConfirmationDispatcher(
+          gateway: gateway,
+          links: const DocumentLinkFactory(
+            overrideOrigin: 'https://app.sello.test',
+          ),
+        );
 
-      final outcome = await dispatcher.dispatch('order-1');
+        final outcome = await dispatcher.dispatch('order-1');
 
-      expect(outcome, isNotNull);
-      expect(outcome!.orderNumber, 'SO-9');
-      expect(outcome.documentUrl, contains('/d/'));
-      expect(outcome.customerActions, isNotEmpty);
-      expect(outcome.hubActions, isNotEmpty);
-      expect(outcome.customerActions.first.launchUri, contains('confirmed'));
-      expect(outcome.hubActions.first.launchUri, contains('New%20order'));
-    });
+        expect(outcome, isNotNull);
+        expect(outcome!.orderNumber, 'SO-9');
+        expect(outcome.documentUrl, contains('/d/'));
+        expect(outcome.customerActions, isNotEmpty);
+        expect(outcome.hubActions, isNotEmpty);
+        expect(outcome.customerActions.first.launchUri, contains('confirmed'));
+        expect(outcome.hubActions.first.launchUri, contains('New%20order'));
+      },
+    );
 
     test('returns null when the tenant disables both order messages', () async {
       final gateway = _FakeGateway(snapshot());
@@ -244,9 +248,9 @@ void main() {
       );
       policies = policies.copyWithType(
         OutboundNotificationType.orderNotification,
-        policies.policyFor(OutboundNotificationType.orderNotification).copyWith(
-              enabled: false,
-            ),
+        policies
+            .policyFor(OutboundNotificationType.orderNotification)
+            .copyWith(enabled: false),
       );
       final dispatcher = OrderConfirmationDispatcher(
         gateway: gateway,
@@ -284,7 +288,9 @@ void main() {
               .policyFor(OutboundNotificationType.orderConfirmation)
               .copyWith(enabled: false),
         ),
-        links: const DocumentLinkFactory(overrideOrigin: 'https://app.sello.test'),
+        links: const DocumentLinkFactory(
+          overrideOrigin: 'https://app.sello.test',
+        ),
       );
 
       final outcome = await dispatcher.dispatch('order-1');
@@ -358,13 +364,15 @@ void main() {
       );
     });
 
-    test('prepare failure is surfaced by the dispatcher, not the order write',
-        () async {
-      final dispatcher = OrderConfirmationDispatcher(
-        gateway: _ThrowingGateway(),
-      );
-      expect(dispatcher.dispatch('order-1'), throwsA(isA<StateError>()));
-    });
+    test(
+      'prepare failure is surfaced by the dispatcher, not the order write',
+      () async {
+        final dispatcher = OrderConfirmationDispatcher(
+          gateway: _ThrowingGateway(),
+        );
+        expect(dispatcher.dispatch('order-1'), throwsA(isA<StateError>()));
+      },
+    );
   });
 
   group('CollectionAcknowledgementDispatcher', () {
@@ -384,7 +392,8 @@ void main() {
         customerName: 'City Mart',
         receivedAt: DateTime.utc(2026, 8, 17),
         salesRepName: 'Nimal',
-        customer: customer ??
+        customer:
+            customer ??
             const OrderConfirmationContact(
               id: 'cust-1',
               name: 'City Mart',
@@ -401,56 +410,62 @@ void main() {
       );
     }
 
-    test('sends buyer acknowledgement and owner/manager submitted notice',
-        () async {
-      final dispatcher = CollectionAcknowledgementDispatcher(
-        prepare: (_) async => collection(),
-        recordDispatch: ({
-          required String eventId,
-          required OutboundChannel channel,
-          required OutboundRecipientKind recipientKind,
-          required String recipientKey,
-          String? address,
-          OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
-          String? skipReason,
-        }) async =>
-            true,
-        links: const DocumentLinkFactory(overrideOrigin: 'https://app.sello.test'),
-      );
+    test(
+      'sends buyer acknowledgement and owner/manager submitted notice',
+      () async {
+        final dispatcher = CollectionAcknowledgementDispatcher(
+          prepare: (_) async => collection(),
+          recordDispatch:
+              ({
+                required String eventId,
+                required OutboundChannel channel,
+                required OutboundRecipientKind recipientKind,
+                required String recipientKey,
+                String? address,
+                OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
+                String? skipReason,
+              }) async => true,
+          links: const DocumentLinkFactory(
+            overrideOrigin: 'https://app.sello.test',
+          ),
+        );
 
-      final outcome = await dispatcher.dispatch('pay-1');
-      expect(outcome, isNotNull);
-      expect(outcome!.customerActions, isNotEmpty);
-      expect(outcome.hubActions, isNotEmpty);
-      expect(outcome.messageBody, contains('pending owner/manager review'));
-      expect(
-        outcome.hubActions.first.launchUri,
-        contains('submitted%20for%20review'),
-      );
-      expect(outcome.documentUrl, contains('/d/'));
-      expect(outcome.messageBody.toLowerCase(), isNot(contains('approved')));
-    });
+        final outcome = await dispatcher.dispatch('pay-1');
+        expect(outcome, isNotNull);
+        expect(outcome!.customerActions, isNotEmpty);
+        expect(outcome.hubActions, isNotEmpty);
+        expect(outcome.messageBody, contains('pending owner/manager review'));
+        expect(
+          outcome.hubActions.first.launchUri,
+          contains('submitted%20for%20review'),
+        );
+        expect(outcome.documentUrl, contains('/d/'));
+        expect(outcome.messageBody.toLowerCase(), isNot(contains('approved')));
+      },
+    );
 
     test('disabled acknowledgement does not send to the buyer', () async {
       final dispatcher = CollectionAcknowledgementDispatcher(
         prepare: (_) async => collection(),
-        recordDispatch: ({
-          required String eventId,
-          required OutboundChannel channel,
-          required OutboundRecipientKind recipientKind,
-          required String recipientKey,
-          String? address,
-          OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
-          String? skipReason,
-        }) async =>
-            true,
+        recordDispatch:
+            ({
+              required String eventId,
+              required OutboundChannel channel,
+              required OutboundRecipientKind recipientKind,
+              required String recipientKey,
+              String? address,
+              OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
+              String? skipReason,
+            }) async => true,
         policies: OutboundNotificationPolicies.defaults.copyWithType(
           OutboundNotificationType.collectionAcknowledgement,
           OutboundNotificationPolicies.defaults
               .policyFor(OutboundNotificationType.collectionAcknowledgement)
               .copyWith(enabled: false),
         ),
-        links: const DocumentLinkFactory(overrideOrigin: 'https://app.sello.test'),
+        links: const DocumentLinkFactory(
+          overrideOrigin: 'https://app.sello.test',
+        ),
       );
 
       final outcome = await dispatcher.dispatch('pay-1');
@@ -475,6 +490,11 @@ class _FakeGateway implements OrderConfirmationGateway {
   }
 
   @override
+  Future<OrderConfirmationPrepareResult?> prepareInvoiceCorrection(
+    String orderId,
+  ) async => null;
+
+  @override
   Future<bool> recordDispatch({
     required String eventId,
     required OutboundChannel channel,
@@ -493,6 +513,11 @@ class _ThrowingGateway implements OrderConfirmationGateway {
   Future<OrderConfirmationPrepareResult> prepare(String orderId) {
     throw StateError('prepare failed');
   }
+
+  @override
+  Future<OrderConfirmationPrepareResult?> prepareInvoiceCorrection(
+    String orderId,
+  ) async => null;
 
   @override
   Future<bool> recordDispatch({

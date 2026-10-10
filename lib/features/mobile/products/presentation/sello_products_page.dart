@@ -140,6 +140,16 @@ class _SelloProductsPageState extends ConsumerState<SelloProductsPage> {
               ),
             ),
           ],
+          if (state.search.trim().isNotEmpty || state.categoryId != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelloClearFiltersLink(
+                onPressed: () {
+                  _searchController.clear();
+                  ref.read(selloCatalogProvider.notifier).clearFilters();
+                },
+              ),
+            ),
           const SizedBox(height: AppSpacing.md),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,

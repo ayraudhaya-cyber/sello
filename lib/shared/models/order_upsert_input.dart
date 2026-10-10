@@ -86,6 +86,7 @@ class OrderLineDraft {
     this.discount,
     this.discountType,
     this.existingItemId,
+    this.deliveredQuantity = 0,
     this.productBrand,
     this.productAttributes = const {},
   });
@@ -110,6 +111,10 @@ class OrderLineDraft {
   num? discount;
   String? discountType;
   final String? existingItemId;
+
+  /// Already fulfilled units. Used so a correction can keep those units
+  /// and only ask stock for a real increase.
+  final num deliveredQuantity;
   final String? productBrand;
   final Map<String, String> productAttributes;
 
@@ -166,6 +171,7 @@ class OrderLineDraft {
       discount: clearDiscount ? null : (discount ?? this.discount),
       discountType: clearDiscount ? null : (discountType ?? this.discountType),
       existingItemId: existingItemId,
+      deliveredQuantity: deliveredQuantity,
       productBrand: productBrand,
       productAttributes: productAttributes,
     );

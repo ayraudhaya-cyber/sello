@@ -50,6 +50,11 @@ class HubScheduleState {
 
   bool get isEmpty => !isLoading && initialized && items.isEmpty;
 
+  bool get hasActiveFilters =>
+      search.trim().isNotEmpty ||
+      statusFilter != VisitStatusFilter.all ||
+      employeeId != null;
+
   HubScheduleState copyWith({
     List<ScheduledVisit>? items,
     List<SalesRepOption>? reps,
@@ -248,6 +253,15 @@ class HubScheduleNotifier extends Notifier<HubScheduleState> {
     state = state.copyWith(
       employeeId: employeeId,
       clearEmployee: employeeId == null,
+    );
+    loadVisits();
+  }
+
+  void clearFilters() {
+    state = state.copyWith(
+      search: '',
+      statusFilter: VisitStatusFilter.all,
+      clearEmployee: true,
     );
     loadVisits();
   }

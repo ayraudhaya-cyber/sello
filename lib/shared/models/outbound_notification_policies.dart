@@ -10,68 +10,65 @@ enum OutboundNotificationType {
   receipt;
 
   String get dbKey => switch (this) {
-        OutboundNotificationType.orderConfirmation => 'order_confirmation',
-        OutboundNotificationType.orderNotification => 'new_order_notification',
-        OutboundNotificationType.collectionAcknowledgement =>
-          'collection_acknowledgement',
-        OutboundNotificationType.collectionSubmitted => 'collection_submitted',
-        OutboundNotificationType.invoice => 'invoice',
-        OutboundNotificationType.receipt => 'receipt',
-      };
+    OutboundNotificationType.orderConfirmation => 'order_confirmation',
+    OutboundNotificationType.orderNotification => 'new_order_notification',
+    OutboundNotificationType.collectionAcknowledgement =>
+      'collection_acknowledgement',
+    OutboundNotificationType.collectionSubmitted => 'collection_submitted',
+    OutboundNotificationType.invoice => 'invoice',
+    OutboundNotificationType.receipt => 'receipt',
+  };
 
   String get label => switch (this) {
-        OutboundNotificationType.orderConfirmation => 'Order confirmation',
-        OutboundNotificationType.orderNotification => 'New order',
-        OutboundNotificationType.collectionAcknowledgement =>
-          'Collection acknowledgement',
-        OutboundNotificationType.collectionSubmitted => 'Collection notice',
-        OutboundNotificationType.invoice => 'Invoices',
-        OutboundNotificationType.receipt => 'Receipts',
-      };
+    OutboundNotificationType.orderConfirmation => 'Order confirmation',
+    OutboundNotificationType.orderNotification => 'New order',
+    OutboundNotificationType.collectionAcknowledgement =>
+      'Collection acknowledgement',
+    OutboundNotificationType.collectionSubmitted => 'Collection notice',
+    OutboundNotificationType.invoice => 'Invoices',
+    OutboundNotificationType.receipt => 'Receipts',
+  };
 
   /// Short heading used inside an event group in Settings.
   String get audienceHeading => switch (this) {
-        OutboundNotificationType.orderConfirmation ||
-        OutboundNotificationType.collectionAcknowledgement ||
-        OutboundNotificationType.invoice ||
-        OutboundNotificationType.receipt =>
-          'Message to the buyer',
-        OutboundNotificationType.orderNotification ||
-        OutboundNotificationType.collectionSubmitted =>
-          'Message to your team',
-      };
+    OutboundNotificationType.orderConfirmation ||
+    OutboundNotificationType.collectionAcknowledgement ||
+    OutboundNotificationType.invoice ||
+    OutboundNotificationType.receipt => 'Message to the buyer',
+    OutboundNotificationType.orderNotification ||
+    OutboundNotificationType.collectionSubmitted => 'Message to your team',
+  };
 
   String get audienceLabel => switch (this) {
-        OutboundNotificationType.orderConfirmation => 'Buyer',
-        OutboundNotificationType.orderNotification => 'Owner / Manager',
-        OutboundNotificationType.collectionAcknowledgement => 'Buyer',
-        OutboundNotificationType.collectionSubmitted => 'Owner / Manager',
-        OutboundNotificationType.invoice => 'Buyer',
-        OutboundNotificationType.receipt => 'Buyer',
-      };
+    OutboundNotificationType.orderConfirmation => 'Buyer',
+    OutboundNotificationType.orderNotification => 'Owner / Manager',
+    OutboundNotificationType.collectionAcknowledgement => 'Buyer',
+    OutboundNotificationType.collectionSubmitted => 'Owner / Manager',
+    OutboundNotificationType.invoice => 'Buyer',
+    OutboundNotificationType.receipt => 'Buyer',
+  };
 
   String get hint => switch (this) {
-        OutboundNotificationType.orderConfirmation =>
-          'Sent to the buyer when an order is completed. Keep it short — the invoice link opens the full item list.',
-        OutboundNotificationType.orderNotification =>
-          'Sent to the configured Owner / Manager when a new order is completed.',
-        OutboundNotificationType.collectionAcknowledgement =>
-          'Sent when a Sales Rep submits a collection that needs approval. Balances do not change until an Owner / Manager approves.',
-        OutboundNotificationType.collectionSubmitted =>
-          'Tells the Owner / Manager about collections: by SMS when one is recorded, and with a WhatsApp prompt when a Sales Rep submits one for review. Choose below whether collections you record yourself are included.',
-        OutboundNotificationType.invoice =>
-          'Customer invoice messaging. Enable when you are ready to send invoices separately.',
-        OutboundNotificationType.receipt =>
-          'Payment receipt messaging after a collection is posted.',
-      };
+    OutboundNotificationType.orderConfirmation =>
+      'Sent to the buyer when an order is completed. Keep it short — the invoice link opens the full item list.',
+    OutboundNotificationType.orderNotification =>
+      'Sent to the configured Owner / Manager when a new order is completed.',
+    OutboundNotificationType.collectionAcknowledgement =>
+      'Sent when a Sales Rep submits a collection that needs approval. Balances do not change until an Owner / Manager approves.',
+    OutboundNotificationType.collectionSubmitted =>
+      'Tells the Owner / Manager about collections: by SMS when one is recorded, and with a WhatsApp prompt when a Sales Rep submits one for review. Choose below whether collections you record yourself are included.',
+    OutboundNotificationType.invoice =>
+      'Customer invoice messaging. Enable when you are ready to send invoices separately.',
+    OutboundNotificationType.receipt =>
+      'Payment receipt messaging after a collection is posted.',
+  };
 
   bool get isOrderFamily => switch (this) {
-        OutboundNotificationType.orderConfirmation ||
-        OutboundNotificationType.orderNotification ||
-        OutboundNotificationType.invoice =>
-          true,
-        _ => false,
-      };
+    OutboundNotificationType.orderConfirmation ||
+    OutboundNotificationType.orderNotification ||
+    OutboundNotificationType.invoice => true,
+    _ => false,
+  };
 
   bool get isCollectionFamily => !isOrderFamily;
 
@@ -104,16 +101,16 @@ enum OutboundRecipientTarget {
   salesRep;
 
   String get dbKey => switch (this) {
-        OutboundRecipientTarget.customer => 'customer',
-        OutboundRecipientTarget.hub => 'hub',
-        OutboundRecipientTarget.salesRep => 'sales_rep',
-      };
+    OutboundRecipientTarget.customer => 'customer',
+    OutboundRecipientTarget.hub => 'hub',
+    OutboundRecipientTarget.salesRep => 'sales_rep',
+  };
 
   String get label => switch (this) {
-        OutboundRecipientTarget.customer => 'Buyer / customer',
-        OutboundRecipientTarget.hub => 'Owner / Manager',
-        OutboundRecipientTarget.salesRep => 'Sales representative',
-      };
+    OutboundRecipientTarget.customer => 'Buyer / customer',
+    OutboundRecipientTarget.hub => 'Owner / Manager',
+    OutboundRecipientTarget.salesRep => 'Sales representative',
+  };
 
   static OutboundRecipientTarget? tryParse(String? key) {
     return switch (key) {
@@ -134,6 +131,7 @@ class OutboundTypePolicy extends Equatable {
     required this.includeDocumentLink,
     required this.recipients,
     this.notifyWhenTeamRecords = true,
+    this.resendOnCorrection = false,
   });
 
   final bool enabled;
@@ -146,6 +144,10 @@ class OutboundTypePolicy extends Equatable {
   /// records the collection themselves. Sales Rep collections always notify.
   final bool notifyWhenTeamRecords;
 
+  /// Order confirmation only. When on, a correction texts the buyer again
+  /// if an SMS was already sent for that invoice.
+  final bool resendOnCorrection;
+
   bool get hasAnyChannel => whatsapp || sms;
 
   bool sendsTo(OutboundRecipientTarget target) => recipients.contains(target);
@@ -157,6 +159,7 @@ class OutboundTypePolicy extends Equatable {
     bool? includeDocumentLink,
     List<OutboundRecipientTarget>? recipients,
     bool? notifyWhenTeamRecords,
+    bool? resendOnCorrection,
   }) {
     return OutboundTypePolicy(
       enabled: enabled ?? this.enabled,
@@ -166,17 +169,19 @@ class OutboundTypePolicy extends Equatable {
       recipients: recipients ?? this.recipients,
       notifyWhenTeamRecords:
           notifyWhenTeamRecords ?? this.notifyWhenTeamRecords,
+      resendOnCorrection: resendOnCorrection ?? this.resendOnCorrection,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'whatsapp': whatsapp,
-        'sms': sms,
-        'include_document_link': includeDocumentLink,
-        'recipients': [for (final r in recipients) r.dbKey],
-        'notify_when_team_records': notifyWhenTeamRecords,
-      };
+    'enabled': enabled,
+    'whatsapp': whatsapp,
+    'sms': sms,
+    'include_document_link': includeDocumentLink,
+    'recipients': [for (final r in recipients) r.dbKey],
+    'notify_when_team_records': notifyWhenTeamRecords,
+    'resend_on_correction': resendOnCorrection,
+  };
 
   factory OutboundTypePolicy.fromJson(
     Map<String, dynamic>? json, {
@@ -196,23 +201,27 @@ class OutboundTypePolicy extends Equatable {
       whatsapp: json['whatsapp'] as bool? ?? fallback.whatsapp,
       sms: json['sms'] as bool? ?? fallback.sms,
       includeDocumentLink:
-          json['include_document_link'] as bool? ?? fallback.includeDocumentLink,
+          json['include_document_link'] as bool? ??
+          fallback.includeDocumentLink,
       recipients: parsed.isEmpty ? fallback.recipients : parsed,
-      notifyWhenTeamRecords: json['notify_when_team_records'] as bool? ??
+      notifyWhenTeamRecords:
+          json['notify_when_team_records'] as bool? ??
           fallback.notifyWhenTeamRecords,
+      resendOnCorrection:
+          json['resend_on_correction'] as bool? ?? fallback.resendOnCorrection,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [
-        enabled,
-        whatsapp,
-        sms,
-        includeDocumentLink,
-        recipients,
-        notifyWhenTeamRecords,
-      ];
+  List<Object?> get props => [
+    enabled,
+    whatsapp,
+    sms,
+    includeDocumentLink,
+    recipients,
+    notifyWhenTeamRecords,
+    resendOnCorrection,
+  ];
 }
 
 /// Tenant-wide outbound messaging configuration.
@@ -340,12 +349,7 @@ class OutboundNotificationPolicies extends Equatable {
     OutboundNotificationType type,
     OutboundTypePolicy policy,
   ) {
-    return copyWith(
-      types: {
-        ...types,
-        type: policy,
-      },
-    );
+    return copyWith(types: {...types, type: policy});
   }
 
   OutboundNotificationPolicies copyWithTemplate(
@@ -425,10 +429,8 @@ class OutboundNotificationPolicies extends Equatable {
           recipients: [OutboundRecipientTarget.hub],
         );
       }
-      types[OutboundNotificationType.collectionAcknowledgement] =
-          legacy.copyWith(
-        recipients: const [OutboundRecipientTarget.customer],
-      );
+      types[OutboundNotificationType.collectionAcknowledgement] = legacy
+          .copyWith(recipients: const [OutboundRecipientTarget.customer]);
     }
 
     return OutboundNotificationPolicies(
@@ -440,16 +442,13 @@ class OutboundNotificationPolicies extends Equatable {
   }
 
   Map<String, dynamic> toJson() => {
-        'channels': {
-          'whatsapp': whatsappEnabled,
-          'sms': smsEnabled,
-        },
-        'types': {
-          for (final type in OutboundNotificationType.values)
-            type.dbKey: policyFor(type).toJson(),
-        },
-        'templates': templates,
-      };
+    'channels': {'whatsapp': whatsappEnabled, 'sms': smsEnabled},
+    'types': {
+      for (final type in OutboundNotificationType.values)
+        type.dbKey: policyFor(type).toJson(),
+    },
+    'templates': templates,
+  };
 
   @override
   List<Object?> get props => [whatsappEnabled, smsEnabled, types, templates];

@@ -54,6 +54,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
     this.onSmsInvoice,
     this.onCollectionSaved,
     this.onChangeSalesRep,
+    this.onCorrectInvoice,
     this.readOnly = false,
   });
 
@@ -75,6 +76,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
   /// Called after a collection is saved so lists can refresh.
   final VoidCallback? onCollectionSaved;
   final VoidCallback? onChangeSalesRep;
+  final VoidCallback? onCorrectInvoice;
   final bool readOnly;
 
   @override
@@ -431,6 +433,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                   ? (totalDelivered > 0 ? onCancelRemaining : onCancelOrder)
                   : (canArchive ? onArchive : null),
               leading: _InvoiceFooterLinks(
+                onCorrectInvoice: widget.onCorrectInvoice,
                 onViewInvoice: onViewInvoice,
                 onPrintInvoice: onPrintInvoice,
                 onWhatsAppInvoice: onWhatsAppInvoice,
@@ -453,6 +456,13 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               onDestructive: totalDelivered > 0
                   ? onCancelRemaining
                   : onCancelOrder,
+              leading: _InvoiceFooterLinks(
+                onCorrectInvoice: widget.onCorrectInvoice,
+                onViewInvoice: onViewInvoice,
+                onPrintInvoice: onPrintInvoice,
+                onWhatsAppInvoice: onWhatsAppInvoice,
+                onSmsInvoice: onSmsInvoice,
+              ),
               cancelLabel: 'Close',
               cancelVariant: SelloButtonVariant.outline,
               onCancel: () => Navigator.of(context).maybePop(),
@@ -463,6 +473,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               destructiveLabel: canArchive ? 'Archive' : null,
               onDestructive: canArchive ? onArchive : null,
               leading: _InvoiceFooterLinks(
+                onCorrectInvoice: widget.onCorrectInvoice,
                 onViewInvoice: onViewInvoice,
                 onPrintInvoice: onPrintInvoice,
                 onWhatsAppInvoice: onWhatsAppInvoice,
@@ -480,18 +491,21 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
 
 class _InvoiceFooterLinks extends StatelessWidget {
   const _InvoiceFooterLinks({
+    this.onCorrectInvoice,
     this.onViewInvoice,
     this.onPrintInvoice,
     this.onWhatsAppInvoice,
     this.onSmsInvoice,
   });
 
+  final VoidCallback? onCorrectInvoice;
   final VoidCallback? onViewInvoice;
   final VoidCallback? onPrintInvoice;
   final VoidCallback? onWhatsAppInvoice;
   final VoidCallback? onSmsInvoice;
 
   bool get _hasAny =>
+      onCorrectInvoice != null ||
       onViewInvoice != null ||
       onPrintInvoice != null ||
       onWhatsAppInvoice != null ||
@@ -508,6 +522,12 @@ class _InvoiceFooterLinks extends StatelessWidget {
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          if (onCorrectInvoice != null)
+            _InvoiceLink(
+              label: 'Correct invoice',
+              icon: Icons.edit_outlined,
+              onPressed: onCorrectInvoice!,
+            ),
           if (onViewInvoice != null)
             _InvoiceLink(
               label: 'View invoice',

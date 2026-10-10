@@ -1,8 +1,8 @@
 import 'package:sello/services/notifications/outbound/document_link_factory.dart';
 import 'package:sello/services/notifications/outbound/messaging_phone.dart';
 import 'package:sello/services/notifications/outbound/order_confirmation_message.dart';
-import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/notifications/outbound/outbound_message_template.dart';
+import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/notifications/outbound/outbound_sms.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_document.dart';
@@ -13,6 +13,11 @@ import 'package:sello/shared/utils/formatters.dart';
 /// Persistence used by [OrderConfirmationDispatcher]. Fakeable in tests.
 abstract class OrderConfirmationGateway {
   Future<OrderConfirmationPrepareResult> prepare(String orderId);
+
+  /// Null when this invoice was never texted to the buyer.
+  Future<OrderConfirmationPrepareResult?> prepareInvoiceCorrection(
+    String orderId,
+  );
 
   Future<bool> recordDispatch({
     required String eventId,
@@ -89,7 +94,8 @@ class OrderConfirmationDispatcher {
       orderNumber: prepared.order.number,
       customerName: prepared.order.customerName,
       salesRepName: prepared.order.salesRepName ?? '',
-      orderedAt: prepared.order.completedAt ??
+      orderedAt:
+          prepared.order.completedAt ??
           prepared.order.orderedAt ??
           DateTime.now().toUtc(),
       total: prepared.order.total,
@@ -170,6 +176,73 @@ class OrderConfirmationDispatcher {
     );
   }
 
+  /// Texts the buyer that an invoice changed, only when Settings allows it
+  /// and an SMS was already sent for that order. Never throws.
+  Future<bool> sendInvoiceCorrection(String orderId) async {
+    try {
+      final effectivePolicies = await _resolvePolicies();
+      final type = OutboundNotificationType.orderConfirmation;
+      final typePolicy = effectivePolicies.policyFor(type);
+      if (!typePolicy.resendOnCorrection ||
+          !effectivePolicies.channelSms(type)) {
+        return false;
+      }
+      final prepared = await gateway.prepareInvoiceCorrection(orderId);
+      if (prepared == null) return false;
+      final customer = prepared.customer;
+      final eventId = prepared.eventId;
+      if (customer == null ||
+          customer.id.isEmpty ||
+          eventId == null ||
+          eventId.isEmpty) {
+        return false;
+      }
+      final sms = MessagingPhone.preferredSms(
+        customer.phone,
+        customer.whatsapp,
+      );
+      if (sms == null || sms.isEmpty) return false;
+      final sender = smsSender;
+      if (sender == null) return false;
+      final copy = OrderConfirmationCopy(
+        companyName: prepared.order.companyName,
+        orderNumber: prepared.order.number,
+        customerName: prepared.order.customerName,
+        salesRepName: prepared.order.salesRepName ?? '',
+        orderedAt:
+            prepared.order.completedAt ??
+            prepared.order.orderedAt ??
+            DateTime.now().toUtc(),
+        total: prepared.order.total,
+        discountAmount: prepared.order.discountAmount,
+        currencyCode: prepared.order.currency,
+        documentUrl: links.orderDocument(prepared.token),
+      );
+      final body = OutboundMessageTemplate.render(
+        OutboundMessageTemplate.invoiceCorrectionDefault,
+        values: {
+          ...copy.templateValues,
+          if (!typePolicy.includeDocumentLink) ...{
+            'invoice_link': null,
+            'document_link': null,
+          },
+        },
+      );
+      final result = await sender.send(
+        OutboundSmsRequest(
+          eventId: eventId,
+          recipientKind: OutboundRecipientKind.customer,
+          recipientKey: 'customer:${customer.id}',
+          recipient: sms,
+          message: body,
+        ),
+      );
+      return result.didSend;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Sends one prepared SMS action (View → Send SMS). Never throws.
   Future<OutboundSmsResult> sendSmsAction({
     required OrderConfirmationOutcome outcome,
@@ -227,40 +300,37 @@ class OrderConfirmationDispatcher {
     if (customer == null || customer.id.isEmpty) {
       return 'Customer record is missing.';
     }
-        final whatsapp = MessagingPhone.preferredWhatsApp(
-          customer.whatsapp,
-          customer.phone,
-        );
-        final sms = MessagingPhone.preferredSms(
-          customer.phone,
-          customer.whatsapp,
-        );
-        if (whatsapp == null && sms == null) {
-          const skipped = 'Customer has no WhatsApp or phone number.';
-          await _skip(
-            prepared.eventId,
-            channel: OutboundChannel.whatsapp,
-            kind: OutboundRecipientKind.customer,
-            key: 'customer:${customer.id}',
-            reason: skipped,
-          );
-          return skipped;
-        }
-        await _addChannelActions(
-          actions: actions,
-          eventId: prepared.eventId,
-          kind: OutboundRecipientKind.customer,
-          key: 'customer:${customer.id}',
-          name: customer.name,
-          whatsappDigits: whatsapp,
-          smsRecipient: sms,
-          body: body,
-          alreadyPrepared: prepared.alreadyPrepared,
-          policy: channelPolicy,
-          smsMode: smsMode,
-          invoiceLabels: true,
-        );
-        return null;
+    final whatsapp = MessagingPhone.preferredWhatsApp(
+      customer.whatsapp,
+      customer.phone,
+    );
+    final sms = MessagingPhone.preferredSms(customer.phone, customer.whatsapp);
+    if (whatsapp == null && sms == null) {
+      const skipped = 'Customer has no WhatsApp or phone number.';
+      await _skip(
+        prepared.eventId,
+        channel: OutboundChannel.whatsapp,
+        kind: OutboundRecipientKind.customer,
+        key: 'customer:${customer.id}',
+        reason: skipped,
+      );
+      return skipped;
+    }
+    await _addChannelActions(
+      actions: actions,
+      eventId: prepared.eventId,
+      kind: OutboundRecipientKind.customer,
+      key: 'customer:${customer.id}',
+      name: customer.name,
+      whatsappDigits: whatsapp,
+      smsRecipient: sms,
+      body: body,
+      alreadyPrepared: prepared.alreadyPrepared,
+      policy: channelPolicy,
+      smsMode: smsMode,
+      invoiceLabels: true,
+    );
+    return null;
   }
 
   Future<void> _dispatchHub({
@@ -360,8 +430,8 @@ class OrderConfirmationDispatcher {
       );
       final whatsappLabel = kind == OutboundRecipientKind.customer
           ? (invoiceLabels && smsMode == OrderConfirmationSmsMode.shareActions
-              ? 'WhatsApp invoice'
-              : 'WhatsApp customer')
+                ? 'WhatsApp invoice'
+                : 'WhatsApp customer')
           : 'WhatsApp ${roleLabel ?? name}';
       actions.add(
         OrderConfirmationAction(
@@ -502,8 +572,10 @@ class CollectionAcknowledgementDispatcher {
     this.smsSender,
   });
 
-  final Future<CollectionAcknowledgementPrepareResult> Function(String paymentId)
-      prepare;
+  final Future<CollectionAcknowledgementPrepareResult> Function(
+    String paymentId,
+  )
+  prepare;
   final Future<bool> Function({
     required String eventId,
     required OutboundChannel channel,
@@ -512,7 +584,8 @@ class CollectionAcknowledgementDispatcher {
     String? address,
     OutboundDispatchStatus status,
     String? skipReason,
-  }) recordDispatch;
+  })
+  recordDispatch;
   final OutboundNotificationPolicies policies;
   final Future<OutboundNotificationPolicies> Function()? policiesResolver;
   final DocumentLinkFactory links;
@@ -534,8 +607,7 @@ class CollectionAcknowledgementDispatcher {
     bool pendingReview = true,
   }) async {
     final resolver = policiesResolver;
-    final effectivePolicies =
-        resolver == null ? policies : await resolver();
+    final effectivePolicies = resolver == null ? policies : await resolver();
     final activeTypes = [
       for (final type in _collectionTypes)
         if ((pendingReview ||
@@ -548,8 +620,10 @@ class CollectionAcknowledgementDispatcher {
     final prepared = await prepare(paymentId);
     final tokenUrl = links.orderDocument(prepared.token);
     final symbol = SelloFormatters.currencySymbol(prepared.currency);
-    final amountLabel =
-        SelloFormatters.currency(prepared.amount, symbol: symbol);
+    final amountLabel = SelloFormatters.currency(
+      prepared.amount,
+      symbol: symbol,
+    );
 
     final actions = <OrderConfirmationAction>[];
     String messageBody = '';
@@ -574,14 +648,18 @@ class CollectionAcknowledgementDispatcher {
           'payment_number': prepared.paymentNumber,
           'payment_method': prepared.methodLabel,
           'date': SelloFormatters.date(prepared.receivedAt),
-          'collection_status':
-              pendingReview ? 'submitted for review' : 'recorded',
+          'collection_status': pendingReview
+              ? 'submitted for review'
+              : 'recorded',
           'approval_note': pendingReview
               ? 'Balances update only after owner/manager approval.'
               : null,
-          'receipt_link': documentUrl.trim().isEmpty ? null : documentUrl.trim(),
-          'document_link':
-              documentUrl.trim().isEmpty ? null : documentUrl.trim(),
+          'receipt_link': documentUrl.trim().isEmpty
+              ? null
+              : documentUrl.trim(),
+          'document_link': documentUrl.trim().isEmpty
+              ? null
+              : documentUrl.trim(),
         },
       );
       if (type == OutboundNotificationType.collectionAcknowledgement ||
@@ -649,10 +727,7 @@ class CollectionAcknowledgementDispatcher {
       customer.whatsapp,
       customer.phone,
     );
-    final sms = MessagingPhone.preferredSms(
-      customer.phone,
-      customer.whatsapp,
-    );
+    final sms = MessagingPhone.preferredSms(customer.phone, customer.whatsapp);
     if (whatsapp == null && sms == null) {
       return 'Customer has no WhatsApp or phone number.';
     }
@@ -705,8 +780,9 @@ class CollectionAcknowledgementDispatcher {
         // Leave a trace so "why didn't they get it?" has an answer.
         await recordDispatch(
           eventId: prepared.eventId,
-          channel:
-              channelPolicy.sms ? OutboundChannel.sms : OutboundChannel.whatsapp,
+          channel: channelPolicy.sms
+              ? OutboundChannel.sms
+              : OutboundChannel.whatsapp,
           recipientKind: OutboundRecipientKind.hub,
           recipientKey: 'employee:${hub.id}',
           address: null,
@@ -868,7 +944,8 @@ class CollectionAcknowledgementPrepareResult {
       methodLabel: method.replaceAll('_', ' '),
       companyName: paymentMap['company_name']?.toString() ?? 'Sello',
       customerName: paymentMap['customer_name']?.toString() ?? 'Customer',
-      receivedAt: DateTime.tryParse(paymentMap['received_at']?.toString() ?? '') ??
+      receivedAt:
+          DateTime.tryParse(paymentMap['received_at']?.toString() ?? '') ??
           DateTime.now().toUtc(),
       salesRepName: paymentMap['sales_rep_name']?.toString(),
       customer: parseContact(customerJson),
@@ -908,17 +985,18 @@ class PaymentReceivedDispatcher {
     String? address,
     OutboundDispatchStatus status,
     String? skipReason,
-  }) recordDispatch;
+  })
+  recordDispatch;
   final OutboundNotificationPolicies policies;
   final Future<OutboundNotificationPolicies> Function()? policiesResolver;
   final OutboundSmsSender? smsSender;
 
   Future<void> dispatch(String paymentId) async {
     final resolver = policiesResolver;
-    final effectivePolicies =
-        resolver == null ? policies : await resolver();
-    final receiptPolicy =
-        effectivePolicies.policyFor(OutboundNotificationType.receipt);
+    final effectivePolicies = resolver == null ? policies : await resolver();
+    final receiptPolicy = effectivePolicies.policyFor(
+      OutboundNotificationType.receipt,
+    );
     if (!effectivePolicies.smsEnabled || !receiptPolicy.sms) return;
 
     final prepared = await prepare(paymentId);
@@ -941,13 +1019,12 @@ class PaymentReceivedDispatcher {
       return;
     }
 
-    final sms = MessagingPhone.preferredSms(
-      customer.phone,
-      customer.whatsapp,
-    );
+    final sms = MessagingPhone.preferredSms(customer.phone, customer.whatsapp);
     final symbol = SelloFormatters.currencySymbol(prepared.currency);
-    final amountLabel =
-        SelloFormatters.currency(prepared.amount, symbol: symbol);
+    final amountLabel = SelloFormatters.currency(
+      prepared.amount,
+      symbol: symbol,
+    );
     final body = OutboundMessageTemplate.openingBalancePaymentReceived(
       amountLabel: amountLabel,
       oldInvoiceReference: prepared.openingReference,

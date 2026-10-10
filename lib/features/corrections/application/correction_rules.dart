@@ -9,28 +9,39 @@ abstract final class OrderCorrectionRules {
     return status != OrderStatus.cancelled;
   }
 
-  /// Customer change is only safe on a draft with no collections.
+  /// Issued invoices can be corrected in place. Drafts use the draft editor.
+  static bool canCorrectInvoice(OrderStatus status) {
+    return status == OrderStatus.placed ||
+        status == OrderStatus.partiallyDelivered ||
+        status == OrderStatus.completed;
+  }
+
+  /// Customer change is safe only when nothing has been collected.
   static bool canChangeCustomer({
     required OrderStatus status,
     required bool hasCollections,
   }) {
-    return status == OrderStatus.draft && !hasCollections;
+    if (hasCollections || status == OrderStatus.cancelled) return false;
+    return status == OrderStatus.draft || canCorrectInvoice(status);
   }
 
-  static String customerBlockedMessage(OrderStatus status) {
-    if (status == OrderStatus.draft) {
-      return 'This draft already has a collection against it. '
-          'Correct or cancel that payment first, then change the customer.';
+  static String customerBlockedMessage({
+    required OrderStatus status,
+    required bool hasCollections,
+  }) {
+    if (status == OrderStatus.cancelled) {
+      return 'Cancelled invoices cannot be corrected.';
     }
-    return 'The customer can only be changed while this order is still a draft. '
-        'After it is placed or delivered, changing customer would mix up '
-        'outstanding balances. Cancel this order and create a new one for the '
-        'correct customer.';
+    if (hasCollections) {
+      return 'This invoice already has a collection. '
+          'Correct or cancel that payment before changing the customer.';
+    }
+    return 'This invoice cannot change customer.';
   }
 
-  /// Line quantity / product / price stay on the draft editor.
+  /// Commercial lines can be corrected until the invoice is cancelled.
   static bool canEditLines(OrderStatus status) {
-    return status == OrderStatus.draft;
+    return status == OrderStatus.draft || canCorrectInvoice(status);
   }
 }
 

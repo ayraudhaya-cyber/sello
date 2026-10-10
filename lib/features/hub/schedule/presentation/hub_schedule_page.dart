@@ -203,6 +203,12 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
                 ? null
                 : () => ref.read(hubScheduleProvider.notifier).refresh(),
             onSchedule: state.isSaving ? null : () => _openEditor(),
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubScheduleProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
           if (state.isLoading && state.items.isEmpty)
@@ -293,6 +299,7 @@ class _ScheduleToolbar extends StatelessWidget {
     required this.onPickDate,
     required this.onRefresh,
     required this.onSchedule,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -307,6 +314,7 @@ class _ScheduleToolbar extends StatelessWidget {
   final VoidCallback onPickDate;
   final VoidCallback? onRefresh;
   final VoidCallback? onSchedule;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -398,6 +406,7 @@ class _ScheduleToolbar extends StatelessWidget {
               ),
             ),
           ],
+          onClearFilters: onClearFilters,
           actions: [
             SelloButton(
               label: 'Plan visits',

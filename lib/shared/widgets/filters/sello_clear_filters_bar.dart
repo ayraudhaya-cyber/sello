@@ -1,8 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/theme/theme.dart';
-import 'package:sello/shared/widgets/buttons/sello_button.dart';
 
-/// Shown under a Hub toolbar when the list is not in its default view.
+/// Text link shown beside list filters when the view is not the default.
+class SelloClearFiltersLink extends StatelessWidget {
+  const SelloClearFiltersLink({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        minimumSize: const Size(0, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      child: const Text(
+        'Clear filters',
+        style: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Kept for call sites that place the link under the toolbar.
 class SelloClearFiltersBar extends StatelessWidget {
   const SelloClearFiltersBar({
     super.key,
@@ -18,43 +46,11 @@ class SelloClearFiltersBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!visible) return const SizedBox.shrink();
-
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceMuted.withValues(alpha: 0.65),
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.outlinePanel),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.filter_alt_outlined,
-              size: 18,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-            SelloButton(
-              label: 'Clear filter',
-              size: SelloButtonSize.small,
-              variant: SelloButtonVariant.outline,
-              onPressed: onClear,
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SelloClearFiltersLink(onPressed: onClear),
       ),
     );
   }

@@ -160,7 +160,9 @@ void main() {
           'sku': 'FSB',
           'quantity': 20,
           'unit_price': 255,
-          'line_total': 5100,
+          'discount': 10,
+          'discount_type': 'percentage',
+          'line_total': 4590,
         },
       ],
     });
@@ -175,7 +177,9 @@ void main() {
     expect(html, contains('Floating shelf bracket · FSB'));
     expect(html, isNot(contains('class="line-sub"')));
     expect(html, isNot(contains('.logo.ink {\n  background')));
-    expect(html, contains('Sales rep no. 0775438802'));
+    expect(html, contains('Sales Rep: Mohamed (0775438802)'));
+    expect(html, contains('<th class="disc">Discount</th>'));
+    expect(html, contains('Rs 510.00'));
     expect(html, contains('Checked by'));
     expect(html, contains('Authorized by'));
     expect(html, contains('class="sign-img"'));
@@ -208,5 +212,6 @@ void main() {
     expect(html, isNot(contains('Checked by')));
     expect(html, isNot(contains('class="pad"')));
     expect(html, isNot(contains('class="closing"')));
+    expect(html, isNot(contains('class="disc"')));
   });
 }

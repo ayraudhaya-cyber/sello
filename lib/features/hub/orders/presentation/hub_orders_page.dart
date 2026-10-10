@@ -147,16 +147,41 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     }
   }
 
-  Future<void> _openEditor({OrderDetail? existing}) async {
+  Future<void> _openEditor({
+    OrderDetail? existing,
+    bool correcting = false,
+  }) async {
     final result = await showDialog<OrderEditorResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) => OrderEditorDialog(
         existing: existing,
+        correcting: correcting,
         currencySymbol: _currencySymbol(),
       ),
     );
     if (result == null) return;
+
+    if (result.correcting) {
+      final saved = await ref
+          .read(hubOrdersProvider.notifier)
+          .correctInvoice(result.input);
+      if (!mounted) return;
+      if (!saved.isOk) {
+        SelloSnackbars.error(context, saved.error!);
+      } else if (saved.correctionSmsSent) {
+        SelloSnackbars.success(
+          context,
+          'Invoice corrected. The buyer was sent an updated SMS.',
+        );
+      } else {
+        SelloSnackbars.success(
+          context,
+          'Invoice corrected. The invoice link already shows this change.',
+        );
+      }
+      return;
+    }
 
     final saved = await ref
         .read(hubOrdersProvider.notifier)
@@ -226,6 +251,15 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
             ? () {
                 Navigator.of(context).pop();
                 _openEditor(existing: detail);
+              }
+            : null,
+        onCorrectInvoice:
+            (ref.read(permissionServiceProvider)?.canCorrectFinancials ??
+                    false) &&
+                OrderCorrectionRules.canCorrectInvoice(detail.summary.status)
+            ? () {
+                Navigator.of(context).pop();
+                _openEditor(existing: detail, correcting: true);
               }
             : null,
         onComplete: detail.summary.isEditable
@@ -626,11 +660,13 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       context: context,
       title: 'Cancel order?',
       message: order.status == OrderStatus.placed
-          ? '${order.orderNumber} will be cancelled. No inventory will change.'
-          : '${order.orderNumber} will be cancelled. Draft and cancelled orders '
-                'never reduce inventory.',
+          ? '${order.orderNumber} will be closed and will not be delivered. '
+                'Nothing has left stock, so inventory and the customer balance stay as they are. '
+                'A shared invoice link stops opening.'
+          : '${order.orderNumber} will be closed and will not be delivered. '
+                'Stock and the customer balance stay as they are.',
       confirmLabel: 'Cancel order',
-      cancelLabel: 'Keep',
+      cancelLabel: 'Keep order',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
@@ -703,15 +739,14 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
             onExport: _exporting ? null : _exportOrders,
             isExporting: _exporting,
             onAdd: state.isSaving ? null : () => _openEditor(),
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubOrdersProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          SelloClearFiltersBar(
-            visible: state.hasActiveFilters,
-            onClear: () {
-              _searchController.clear();
-              ref.read(hubOrdersProvider.notifier).clearFilters();
-            },
-          ),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,
           ),
@@ -989,6 +1024,7 @@ class _OrdersToolbar extends StatelessWidget {
     required this.onExport,
     required this.isExporting,
     required this.onAdd,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -1003,6 +1039,7 @@ class _OrdersToolbar extends StatelessWidget {
   final VoidCallback? onExport;
   final bool isExporting;
   final VoidCallback? onAdd;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -1147,6 +1184,7 @@ class _OrdersToolbar extends StatelessWidget {
         filters: [status, payment, date, rep],
         actions: [refresh, export, add],
         filtersOnOwnRow: true,
+        onClearFilters: onClearFilters,
       ),
     );
   }

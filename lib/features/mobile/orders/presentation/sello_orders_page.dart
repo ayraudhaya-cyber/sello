@@ -432,9 +432,11 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     final confirmed = await showSelloDialog(
       context: context,
       title: 'Cancel order?',
-      message: '${order.orderNumber} will be cancelled. Stock is not affected.',
+      message:
+          '${order.orderNumber} will be closed and will not be delivered. '
+          'Stock and the customer balance stay as they are.',
       confirmLabel: 'Cancel order',
-      cancelLabel: 'Keep draft',
+      cancelLabel: 'Keep order',
       destructive: true,
     );
     if (confirmed != true || !mounted) return;
@@ -538,6 +540,13 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
                       .read(selloOrdersProvider.notifier)
                       .setStatusFilter(null, all: true),
                 ),
+                if (state.search.trim().isNotEmpty || !state.showAllStatuses)
+                  SelloClearFiltersLink(
+                    onPressed: () {
+                      _searchController.clear();
+                      ref.read(selloOrdersProvider.notifier).clearFilters();
+                    },
+                  ),
               ],
             ),
           ),

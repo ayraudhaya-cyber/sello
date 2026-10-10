@@ -194,6 +194,11 @@ class SelloCatalogNotifier extends Notifier<SelloCatalogState> {
     await loadProducts(resetPage: true);
   }
 
+  Future<void> clearFilters() async {
+    state = state.copyWith(search: '', page: 0, clearCategory: true);
+    await loadProducts(resetPage: true);
+  }
+
   Future<void> setCategoryFilter(String? value) async {
     state = state.copyWith(
       categoryId: value,

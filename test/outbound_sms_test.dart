@@ -434,7 +434,9 @@ void main() {
         expect(sms.providerPosts, 0);
         expect(outcome, isNotNull);
         expect(
-          outcome!.customerActions.any((a) => a.channel == OutboundChannel.whatsapp),
+          outcome!.customerActions.any(
+            (a) => a.channel == OutboundChannel.whatsapp,
+          ),
           isTrue,
         );
         expect(
@@ -612,50 +614,58 @@ void main() {
       );
     }
 
-    test('owner-recorded collection texts the team when the switch is on',
-        () async {
-      final sms = _RecordingSmsSender();
-      final dispatcher = CollectionAcknowledgementDispatcher(
-        prepare: (_) async => recordedByOwner(),
-        recordDispatch: _alwaysRecord,
-        smsSender: sms,
-        policies: teamRecordsPolicy(notify: true),
-      );
-      await dispatcher.dispatch('pay-1', pendingReview: false);
-      expect(
-        sms.requests.where((r) => r.recipientKind == OutboundRecipientKind.hub),
-        hasLength(1),
-      );
-    });
+    test(
+      'owner-recorded collection texts the team when the switch is on',
+      () async {
+        final sms = _RecordingSmsSender();
+        final dispatcher = CollectionAcknowledgementDispatcher(
+          prepare: (_) async => recordedByOwner(),
+          recordDispatch: _alwaysRecord,
+          smsSender: sms,
+          policies: teamRecordsPolicy(notify: true),
+        );
+        await dispatcher.dispatch('pay-1', pendingReview: false);
+        expect(
+          sms.requests.where(
+            (r) => r.recipientKind == OutboundRecipientKind.hub,
+          ),
+          hasLength(1),
+        );
+      },
+    );
 
-    test('owner-recorded collection is silent when the switch is off',
-        () async {
-      final sms = _RecordingSmsSender();
-      final dispatcher = CollectionAcknowledgementDispatcher(
-        prepare: (_) async => recordedByOwner(),
-        recordDispatch: _alwaysRecord,
-        smsSender: sms,
-        policies: teamRecordsPolicy(notify: false),
-      );
-      await dispatcher.dispatch('pay-1', pendingReview: false);
-      expect(sms.requests, isEmpty);
-    });
+    test(
+      'owner-recorded collection is silent when the switch is off',
+      () async {
+        final sms = _RecordingSmsSender();
+        final dispatcher = CollectionAcknowledgementDispatcher(
+          prepare: (_) async => recordedByOwner(),
+          recordDispatch: _alwaysRecord,
+          smsSender: sms,
+          policies: teamRecordsPolicy(notify: false),
+        );
+        await dispatcher.dispatch('pay-1', pendingReview: false);
+        expect(sms.requests, isEmpty);
+      },
+    );
 
-    test('rep-recorded collection still notifies when the switch is off',
-        () async {
-      final sms = _RecordingSmsSender();
-      final dispatcher = CollectionAcknowledgementDispatcher(
-        prepare: (_) async => collection(),
-        recordDispatch: _alwaysRecord,
-        smsSender: sms,
-        policies: teamRecordsPolicy(notify: false),
-      );
-      await dispatcher.dispatch('pay-1', pendingReview: false);
-      expect(
-        sms.requests.any((r) => r.recipientKind == OutboundRecipientKind.hub),
-        isTrue,
-      );
-    });
+    test(
+      'rep-recorded collection still notifies when the switch is off',
+      () async {
+        final sms = _RecordingSmsSender();
+        final dispatcher = CollectionAcknowledgementDispatcher(
+          prepare: (_) async => collection(),
+          recordDispatch: _alwaysRecord,
+          smsSender: sms,
+          policies: teamRecordsPolicy(notify: false),
+        );
+        await dispatcher.dispatch('pay-1', pendingReview: false);
+        expect(
+          sms.requests.any((r) => r.recipientKind == OutboundRecipientKind.hub),
+          isTrue,
+        );
+      },
+    );
 
     test('collection SMS disabled → no Text.lk request', () async {
       final sms = _RecordingSmsSender();
@@ -713,7 +723,10 @@ void main() {
       expect(sms.requests.single.message, contains('50,000.00'));
       expect(sms.requests.single.message, contains('Reference: INV-4587'));
       expect(sms.requests.single.message, isNot(contains('Nimal')));
-      expect(sms.requests.single.message.toLowerCase(), isNot(contains('aging')));
+      expect(
+        sms.requests.single.message.toLowerCase(),
+        isNot(contains('aging')),
+      );
     });
 
     test('pending or order-only prepare does not send', () async {
@@ -747,39 +760,44 @@ void main() {
       expect(sms.results.last, OutboundSmsStatus.alreadySent);
     });
 
-    test('existing order collection acknowledgement still sends pending copy',
-        () async {
-      final sms = _RecordingSmsSender();
-      final dispatcher = CollectionAcknowledgementDispatcher(
-        prepare: (_) async => CollectionAcknowledgementPrepareResult(
-          alreadyPrepared: false,
-          eventId: 'ev-ack',
-          token: 'cccccccccccccccccccccccccccccccccccccccccccccccc',
-          paymentNumber: 'PAY-1',
-          amount: 25000,
-          currency: 'LKR',
-          methodLabel: 'cash',
-          companyName: 'Acme',
-          customerName: 'City Mart',
-          receivedAt: DateTime.utc(2026, 8, 17),
-          customer: const OrderConfirmationContact(
-            id: 'cust-1',
-            name: 'City Mart',
-            phone: '0771111111',
+    test(
+      'existing order collection acknowledgement still sends pending copy',
+      () async {
+        final sms = _RecordingSmsSender();
+        final dispatcher = CollectionAcknowledgementDispatcher(
+          prepare: (_) async => CollectionAcknowledgementPrepareResult(
+            alreadyPrepared: false,
+            eventId: 'ev-ack',
+            token: 'cccccccccccccccccccccccccccccccccccccccccccccccc',
+            paymentNumber: 'PAY-1',
+            amount: 25000,
+            currency: 'LKR',
+            methodLabel: 'cash',
+            companyName: 'Acme',
+            customerName: 'City Mart',
+            receivedAt: DateTime.utc(2026, 8, 17),
+            customer: const OrderConfirmationContact(
+              id: 'cust-1',
+              name: 'City Mart',
+              phone: '0771111111',
+            ),
           ),
-        ),
-        recordDispatch: _alwaysRecord,
-        smsSender: sms,
-      );
+          recordDispatch: _alwaysRecord,
+          smsSender: sms,
+        );
 
-      await dispatcher.dispatch('pay-order');
-      expect(sms.requests, isNotEmpty);
-      expect(
-        sms.requests.first.message,
-        contains('pending owner/manager review'),
-      );
-      expect(sms.requests.first.message, isNot(contains('Payment received:')));
-    });
+        await dispatcher.dispatch('pay-order');
+        expect(sms.requests, isNotEmpty);
+        expect(
+          sms.requests.first.message,
+          contains('pending owner/manager review'),
+        );
+        expect(
+          sms.requests.first.message,
+          isNot(contains('Payment received:')),
+        );
+      },
+    );
   });
 
   group('Test SMS', () {
@@ -900,8 +918,14 @@ void main() {
   group('onboarding Sender ID verification', () {
     test('tenant-facing copy does not name the SMS provider', () {
       expect(OutboundSmsVerify.title, 'Set up SMS notifications');
-      expect(OutboundSmsVerify.explanation.toLowerCase(), isNot(contains('text.lk')));
-      expect(OutboundSmsVerify.rejectedMessage.toLowerCase(), isNot(contains('text.lk')));
+      expect(
+        OutboundSmsVerify.explanation.toLowerCase(),
+        isNot(contains('text.lk')),
+      );
+      expect(
+        OutboundSmsVerify.rejectedMessage.toLowerCase(),
+        isNot(contains('text.lk')),
+      );
       expect(
         OutboundSmsVerify.explanation,
         contains('Sender ID registered for your business'),
@@ -933,13 +957,8 @@ void main() {
         senderId: 'AcmeCo',
       );
       expect(result.senderActivated, isTrue);
-      expect(sms.verifyCalls, [
-        ('94765644465', 'AcmeCo'),
-      ]);
-      expect(
-        OutboundSmsVerify.feedback(result),
-        OutboundSmsVerify.successBody,
-      );
+      expect(sms.verifyCalls, [('94765644465', 'AcmeCo')]);
+      expect(OutboundSmsVerify.feedback(result), OutboundSmsVerify.successBody);
     });
 
     test('rejected Sender ID is not saved', () async {
@@ -971,10 +990,7 @@ void main() {
         'Enter a valid Sender ID (3 to 11 letters or digits).',
       );
       expect(
-        OutboundSmsVerify.blockReason(
-          senderId: 'AcmeCo',
-          phone: '0765644465',
-        ),
+        OutboundSmsVerify.blockReason(senderId: 'AcmeCo', phone: '0765644465'),
         isNull,
       );
     });
@@ -1174,6 +1190,11 @@ class _RecordingGateway implements OrderConfirmationGateway {
   @override
   Future<OrderConfirmationPrepareResult> prepare(String orderId) async =>
       prepared;
+
+  @override
+  Future<OrderConfirmationPrepareResult?> prepareInvoiceCorrection(
+    String orderId,
+  ) async => null;
 
   @override
   Future<bool> recordDispatch({

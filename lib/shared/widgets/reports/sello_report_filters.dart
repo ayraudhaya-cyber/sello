@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/models/report_models.dart';
+import 'package:sello/shared/widgets/filters/sello_clear_filters_bar.dart';
 import 'package:sello/shared/widgets/inputs/sello_dropdown.dart';
 
 /// Shared report filter strip — reuse on Hub Reports and future dashboards.
@@ -120,6 +121,13 @@ class SelloReportFiltersBar extends StatelessWidget {
                 ],
                 onChanged: (value) => onCategoryChanged?.call(value),
               ),
+            ),
+          if (query != const ReportQuery() || categoryFilter != null)
+            SelloClearFiltersLink(
+              onPressed: () {
+                onQueryChanged(const ReportQuery());
+                onCategoryChanged?.call(null);
+              },
             ),
           TextButton.icon(
             onPressed: () => _pickCustomRange(context),

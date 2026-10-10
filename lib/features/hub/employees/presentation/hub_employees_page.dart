@@ -370,15 +370,14 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
             onRefresh: state.isLoading
                 ? null
                 : () => ref.read(hubEmployeesProvider.notifier).refresh(),
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubEmployeesProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          SelloClearFiltersBar(
-            visible: state.hasActiveFilters,
-            onClear: () {
-              _searchController.clear();
-              ref.read(hubEmployeesProvider.notifier).clearFilters();
-            },
-          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -676,6 +675,7 @@ class _Toolbar extends StatelessWidget {
     required this.onRoleChanged,
     required this.onBranchChanged,
     required this.onRefresh,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -685,6 +685,7 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<EmployeeRoleFilter?> onRoleChanged;
   final ValueChanged<String?> onBranchChanged;
   final VoidCallback? onRefresh;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -783,6 +784,7 @@ class _Toolbar extends StatelessWidget {
       onSearchChanged: onSearchChanged,
       filters: [role, status, branch],
       actions: [refresh],
+      onClearFilters: onClearFilters,
     );
   }
 }

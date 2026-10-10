@@ -10,6 +10,7 @@ class SelloListToolbar extends StatelessWidget {
     this.searchHint = 'Search...',
     this.filters = const [],
     this.actions = const [],
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -17,6 +18,7 @@ class SelloListToolbar extends StatelessWidget {
   final String searchHint;
   final List<Widget> filters;
   final List<Widget> actions;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +30,7 @@ class SelloListToolbar extends StatelessWidget {
       ),
       filters: filters,
       actions: actions,
+      onClearFilters: onClearFilters,
     );
   }
 }

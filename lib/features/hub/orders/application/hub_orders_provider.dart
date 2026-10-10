@@ -325,6 +325,35 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     await loadOrders();
   }
 
+  Future<OrderMutationResult> correctInvoice(OrderUpsertInput input) async {
+    final session = ref.read(currentSessionProvider);
+    if (session == null) {
+      return const OrderMutationResult.fail('No active session found.');
+    }
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.correctInvoice(input: input);
+      var smsSent = false;
+      final orderId = input.orderId;
+      if (orderId != null && orderId.isNotEmpty) {
+        smsSent = await ref
+            .read(orderConfirmationDispatcherProvider)
+            .sendInvoiceCorrection(orderId);
+      }
+      await loadOrders(showLoading: false);
+      unawaited(refreshHubInventoryQuietly(ref));
+      unawaited(refreshHubProductsQuietly(ref));
+      state = state.copyWith(isSaving: false, clearError: true);
+      return OrderMutationResult.ok(
+        orderId: orderId,
+        correctionSmsSent: smsSent,
+      );
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return OrderMutationResult.fail(failure.message);
+    }
+  }
+
   Future<OrderMutationResult> saveOrder(
     OrderUpsertInput input, {
     bool complete = false,

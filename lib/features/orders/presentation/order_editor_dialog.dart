@@ -34,6 +34,7 @@ class OrderEditorResult {
     required this.input,
     this.complete = false,
     this.place = false,
+    this.correcting = false,
   });
 
   final OrderUpsertInput input;
@@ -43,6 +44,9 @@ class OrderEditorResult {
 
   /// Sales Rep submit — demand recorded as placed, no stock movement.
   final bool place;
+
+  /// Issued-invoice correction. Same number and link.
+  final bool correcting;
 }
 
 /// Conversation-driven sales workspace — select customer, add products, complete or draft.
@@ -64,6 +68,7 @@ class OrderEditorDialog extends ConsumerStatefulWidget {
     this.hideEmptyBasket = false,
     this.hideCartBar = false,
     this.onBasketChanged,
+    this.correcting = false,
   });
 
   final OrderDetail? existing;
@@ -94,6 +99,9 @@ class OrderEditorDialog extends ConsumerStatefulWidget {
 
   /// Notifies host when line count changes (for progressive disclosure).
   final ValueChanged<int>? onBasketChanged;
+
+  /// Correct a placed or delivered invoice. One save, no place or complete.
+  final bool correcting;
 
   @override
   ConsumerState<OrderEditorDialog> createState() => OrderEditorDialogState();
@@ -141,8 +149,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   bool get _isEdit => widget.existing != null;
 
   Map<String, OrderLineDraft> get _linesByVariant => {
-        for (final line in _lines) line.lineKey: line,
-      };
+    for (final line in _lines) line.lineKey: line,
+  };
 
   CompanySettings get _settings =>
       ref.read(selloCompanySettingsProvider).valueOrNull ??
@@ -212,10 +220,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
   num? _maxQuantityForVariant(String variantId) {
     final line = _linesByVariant[variantId];
-    ProductSummary? product =
-        line != null ? _catalogProduct(line.productId) : null;
-    ProductVariant? variant =
-        product == null ? null : _variantOnProduct(product, variantId);
+    ProductSummary? product = line != null
+        ? _catalogProduct(line.productId)
+        : null;
+    ProductVariant? variant = product == null
+        ? null
+        : _variantOnProduct(product, variantId);
     if (product == null || variant == null) {
       final hit = _catalogVariant(variantId);
       product = hit?.product;
@@ -224,11 +234,16 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final available = product == null
         ? line?.availableStock
         : _availableForVariant(product, variant);
-    return OrderStockPolicy.maxOrderQuantity(
-      allowOrdersAboveAvailableStock:
-          _settings.allowOrdersAboveAvailableStock,
+    final cap = OrderStockPolicy.maxOrderQuantity(
+      allowOrdersAboveAvailableStock: _settings.allowOrdersAboveAvailableStock,
       availableStock: available,
     );
+    if (!widget.correcting || cap == null) return cap;
+    final ordered = line?.quantity ?? 0;
+    final delivered = line?.deliveredQuantity ?? 0;
+    final undelivered = ordered - delivered < 0 ? 0 : ordered - delivered;
+    final headroom = cap > undelivered ? cap : undelivered;
+    return delivered + headroom;
   }
 
   void _showStockLimitFeedback(num? available) {
@@ -243,9 +258,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
   void _onStockLimitReached(String variantId) {
     final max = _maxQuantityForVariant(variantId);
-    _showStockLimitFeedback(
-      max ?? _linesByVariant[variantId]?.availableStock,
-    );
+    _showStockLimitFeedback(max ?? _linesByVariant[variantId]?.availableStock);
   }
 
   @override
@@ -256,8 +269,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       _paymentMethod = existing.summary.paymentMethod;
       _notes.text = existing.summary.notes ?? '';
       _orderDiscount.text = existing.summary.discountFixedAmount.toString();
-      _orderDiscountPercent.text =
-          existing.summary.discountPercent.toString();
+      _orderDiscountPercent.text = existing.summary.discountPercent.toString();
       for (final line in existing.lines) {
         _lines.add(
           OrderLineDraft(
@@ -271,6 +283,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             discount: line.discount,
             discountType: line.discountType,
             existingItemId: line.id,
+            deliveredQuantity: line.deliveredQuantity,
             productBrand: line.productBrand,
             productAttributes: Map<String, String>.from(line.productAttributes),
           ),
@@ -313,8 +326,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   Future<void> _hydrateCustomer(String customerId) async {
     setState(() => _loadingCustomer = true);
     try {
-      final customer =
-          await ref.read(customerRepositoryProvider).fetchById(customerId);
+      final customer = await ref
+          .read(customerRepositoryProvider)
+          .fetchById(customerId);
       if (!mounted) return;
       setState(() {
         _customer = customer;
@@ -337,11 +351,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       _showCustomerResults = true;
     });
     try {
-      final result = await ref.read(customerRepositoryProvider).fetchCustomers(
-            search: query,
-            isActive: true,
-            pageSize: 12,
-          );
+      final result = await ref
+          .read(customerRepositoryProvider)
+          .fetchCustomers(search: query, isActive: true, pageSize: 12);
       if (!mounted) return;
       setState(() {
         _customerResults = result.items;
@@ -407,7 +419,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       return;
     }
     try {
-      final page = await ref.read(orderRepositoryProvider).fetchOrders(
+      final page = await ref
+          .read(orderRepositoryProvider)
+          .fetchOrders(
             customerId: customerId,
             statuses: RepeatLastOrder.repeatableStatuses,
             pageSize: 8,
@@ -430,8 +444,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final customerId = _customer?.id;
     if (source == null || customerId == null) return;
     try {
-      final detail =
-          await ref.read(orderRepositoryProvider).fetchById(source.id);
+      final detail = await ref
+          .read(orderRepositoryProvider)
+          .fetchById(source.id);
       if (!mounted || detail == null) return;
       if (detail.summary.customerId != customerId) return;
       final restored = await restoreFromProductLines([
@@ -480,7 +495,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       _catalogError = null;
     });
     try {
-      final result = await ref.read(productRepositoryProvider).fetchProducts(
+      final result = await ref
+          .read(productRepositoryProvider)
+          .fetchProducts(
             search: _productSearch.text,
             categoryId: _categoryId,
             isActive: true,
@@ -516,7 +533,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final nextPage = _catalogPage + 1;
     setState(() => _catalogLoadingMore = true);
     try {
-      final result = await ref.read(productRepositoryProvider).fetchProducts(
+      final result = await ref
+          .read(productRepositoryProvider)
+          .fetchProducts(
             search: _productSearch.text,
             categoryId: _categoryId,
             isActive: true,
@@ -574,8 +593,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   void _addOrIncrementVariant(ProductSummary product, ProductVariant variant) {
     final available = _availableForVariant(product, variant);
     final max = OrderStockPolicy.maxOrderQuantity(
-      allowOrdersAboveAvailableStock:
-          _settings.allowOrdersAboveAvailableStock,
+      allowOrdersAboveAvailableStock: _settings.allowOrdersAboveAvailableStock,
       availableStock: available,
     );
     if (max != null && max <= 0) {
@@ -717,16 +735,16 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       OrderCalculations.subtotal(_lines.map((line) => line.lineTotal));
 
   num get _resolvedDiscount => OrderCalculations.resolvedOrderDiscount(
-        subtotal: _subtotal,
-        orderDiscountAmount: _orderDiscountValue,
-        orderDiscountPercent: _orderDiscountPercentValue,
-      );
+    subtotal: _subtotal,
+    orderDiscountAmount: _orderDiscountValue,
+    orderDiscountPercent: _orderDiscountPercentValue,
+  );
 
   num get _total => OrderCalculations.grandTotal(
-        subtotal: _subtotal,
-        orderDiscount: _orderDiscountValue,
-        orderDiscountPercent: _orderDiscountPercentValue,
-      );
+    subtotal: _subtotal,
+    orderDiscount: _orderDiscountValue,
+    orderDiscountPercent: _orderDiscountPercentValue,
+  );
 
   OrderUpsertInput _buildInput() {
     return OrderUpsertInput(
@@ -735,8 +753,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       lines: List<OrderLineDraft>.from(_lines),
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       paymentMethod: _paymentMethod,
-      paymentStatus: _paymentMethod == PaymentMethod.credit ||
-              _paymentMethod == null
+      paymentStatus:
+          _paymentMethod == PaymentMethod.credit || _paymentMethod == null
           ? PaymentStatus.unpaid
           : PaymentStatus.unpaid,
       orderDiscount: _orderDiscountValue,
@@ -749,7 +767,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   CustomerSummary? get selectedCustomer => _customer;
   List<OrderLineDraft> get lines => List.unmodifiable(_lines);
   num get runningTotal => _total;
-  num get itemQuantity => _lines.fold<num>(0, (sum, line) => sum + line.quantity);
+  num get itemQuantity =>
+      _lines.fold<num>(0, (sum, line) => sum + line.quantity);
   num get orderDiscountAmount => _orderDiscountValue;
   num get orderDiscountPercent => _orderDiscountPercentValue;
 
@@ -762,8 +781,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         _orderDiscount.text = amount == 0 ? '0' : amount.toString();
       }
       if (percent != null) {
-        _orderDiscountPercent.text =
-            percent == 0 ? '0' : percent.toString();
+        _orderDiscountPercent.text = percent == 0 ? '0' : percent.toString();
       }
     });
     _notifyBasketChanged();
@@ -785,11 +803,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     if (lines.isEmpty) return 0;
     try {
       final ids = [for (final line in lines) line.productId];
-      final products = await ref.read(productRepositoryProvider).fetchProductsByIds(
-            ids: ids,
-            branchId: _branchId,
-            isActive: true,
-          );
+      final products = await ref
+          .read(productRepositoryProvider)
+          .fetchProductsByIds(ids: ids, branchId: _branchId, isActive: true);
       final byId = {for (final product in products) product.id: product};
       final stockWarnings = <String>[];
       setState(() {
@@ -820,7 +836,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               productName: product.name,
               productSku: _skuForVariant(product, variant),
               imageUrl: product.imageUrl,
-            imageCacheKey: product.imageCacheKey,
+              imageCacheKey: product.imageCacheKey,
               unitPrice: _priceForVariant(product, variant),
               quantity: qty,
               availableStock: available,
@@ -834,10 +850,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       });
       _notifyBasketChanged();
       if (stockWarnings.isNotEmpty && mounted) {
-        SelloSnackbars.warning(
-          context,
-          stockWarnings.first,
-        );
+        SelloSnackbars.warning(context, stockWarnings.first);
       }
       return _lines.length;
     } catch (_) {
@@ -863,7 +876,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         final variant = _variantOnProduct(product, _lines[i].variantId);
         _lines[i] = _lines[i].copyWith(
           availableStock: _availableForVariant(product, variant),
-          unitPrice: _priceForVariant(product, variant),
+          unitPrice: widget.correcting
+              ? _lines[i].unitPrice
+              : _priceForVariant(product, variant),
           productSku: _skuForVariant(product, variant),
           variantLabel: _labelForVariant(variant) ?? _lines[i].variantLabel,
         );
@@ -938,7 +953,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     }
     if (complete && _paymentMethod == null) {
       if (!widget.embedded) {
-        setState(() => _error = 'Choose a payment method to complete the order.');
+        setState(
+          () => _error = 'Choose a payment method to complete the order.',
+        );
         return null;
       }
     }
@@ -990,8 +1007,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
     final result = OrderEditorResult(
       input: _buildInput(),
-      complete: complete,
-      place: place,
+      complete: widget.correcting ? false : complete,
+      place: widget.correcting ? false : place,
+      correcting: widget.correcting,
     );
     if (widget.embedded) {
       widget.onEmbeddedResult?.call(result);
@@ -1036,10 +1054,14 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final useSteps = isMobile && !widget.embedded;
     final selling = !useSteps || _step == 0;
     final visitMode = widget.visitMode || widget.embedded;
-    final primaryActionLabel =
-        _isSalesWorkspace ? 'Submit order' : 'Mark as delivered';
+    final correcting = widget.correcting;
+    final primaryActionLabel = correcting
+        ? 'Save correction'
+        : (_isSalesWorkspace ? 'Submit order' : 'Mark as delivered');
     void onPrimaryAction() {
-      if (_isSalesWorkspace) {
+      if (correcting) {
+        _submit();
+      } else if (_isSalesWorkspace) {
         _submit(place: true);
       } else {
         _submit(complete: true);
@@ -1085,21 +1107,25 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     }
 
     return SelloFormDialog(
-      title: useSteps
+      title: correcting
+          ? 'Correct invoice'
+          : useSteps
           ? (_step == 0
-              ? (_isEdit
-                  ? 'Edit order'
-                  : (visitMode ? 'Visit order' : 'New order'))
-              : 'Review & submit')
+                ? (_isEdit
+                      ? 'Edit order'
+                      : (visitMode ? 'Visit order' : 'New order'))
+                : 'Review & submit')
           : (_isEdit
-              ? 'Edit draft order'
-              : (visitMode ? 'Visit order' : 'New order')),
-      subtitle: useSteps
+                ? 'Edit draft order'
+                : (visitMode ? 'Visit order' : 'New order')),
+      subtitle: correcting
+          ? 'The same invoice link updates itself. Collected payments cannot be exceeded.'
+          : useSteps
           ? (_step == 0
-              ? (visitMode
-                  ? null
-                  : 'Pick the customer, then browse products together.')
-              : null)
+                ? (visitMode
+                      ? null
+                      : 'Pick the customer, then browse products together.')
+                : null)
           : null,
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
@@ -1111,7 +1137,19 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         8,
       ),
       body: body,
-      footer: useSteps
+      footer: correcting
+          ? SelloDialogFooter(
+              cancelLabel: useSteps && _step > 0 ? 'Back' : 'Close',
+              cancelVariant: SelloButtonVariant.outline,
+              onCancel: useSteps
+                  ? _goBack
+                  : () => Navigator.of(context).maybePop(),
+              primaryLabel: useSteps && _step == 0
+                  ? 'Review correction'
+                  : 'Save correction',
+              onPrimary: useSteps && _step == 0 ? _goCheckout : onPrimaryAction,
+            )
+          : useSteps
           ? SelloDialogFooter(
               cancelLabel: _step == 0 ? 'Close' : 'Back',
               cancelVariant: SelloButtonVariant.outline,
@@ -1149,10 +1187,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       children: [
         Expanded(flex: 62, child: _buildCatalogPane(symbol)),
         const SizedBox(width: 16),
-        SizedBox(
-          width: 340,
-          child: _buildOrderSidebar(symbol),
-        ),
+        SizedBox(width: 340, child: _buildOrderSidebar(symbol)),
       ],
     );
   }
@@ -1209,50 +1244,52 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
                     ),
                   )
                 : _customerResults.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          'No matching customers. Try another name or phone.',
-                          style: TextStyle(
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'No matching customers. Try another name or phone.',
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    itemCount: _customerResults.length,
+                    separatorBuilder: (_, _) => const Divider(
+                      height: 1,
+                      color: AppColors.outlineSubtle,
+                    ),
+                    itemBuilder: (context, index) {
+                      final customer = _customerResults[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          customer.name,
+                          style: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
-                            fontSize: 13.5,
-                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
                           ),
                         ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        itemCount: _customerResults.length,
-                        separatorBuilder: (_, _) =>
-                            const Divider(height: 1, color: AppColors.outlineSubtle),
-                        itemBuilder: (context, index) {
-                          final customer = _customerResults[index];
-                          return ListTile(
-                            dense: true,
-                            title: Text(
-                              customer.name,
-                              style: const TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            subtitle: Text(
-                              [
-                                if (customer.phone != null) customer.phone!,
-                                'Owes ${SelloFormatters.currency(customer.outstandingBalance, symbol: symbol)}',
-                              ].join(' · '),
-                              style: const TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 12.5,
-                                color: AppColors.textTertiary,
-                              ),
-                            ),
-                            onTap: () => _selectCustomer(customer),
-                          );
-                        },
-                      ),
+                        subtitle: Text(
+                          [
+                            if (customer.phone != null) customer.phone!,
+                            'Owes ${SelloFormatters.currency(customer.outstandingBalance, symbol: symbol)}',
+                          ].join(' · '),
+                          style: const TextStyle(
+                            fontFamily: AppTypography.fontFamily,
+                            fontSize: 12.5,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                        onTap: () => _selectCustomer(customer),
+                      );
+                    },
+                  ),
           ),
         ],
       ],
@@ -1283,16 +1320,12 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         ),
         const SizedBox(height: AppSpacing.sm),
         _IntelligenceSuggestionsStrip(
-          onRepeatLastOrder:
-              _repeatSource == null ? null : _repeatLastOrder,
+          onRepeatLastOrder: _repeatSource == null ? null : _repeatLastOrder,
         ),
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
-            ProductLayoutSwitcher(
-              mode: _layoutMode,
-              onChanged: _setLayoutMode,
-            ),
+            ProductLayoutSwitcher(mode: _layoutMode, onChanged: _setLayoutMode),
             const Spacer(),
             if (catalogOpen && _catalog.isNotEmpty)
               Text(
@@ -1313,36 +1346,36 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           child: !catalogOpen
               ? const _CatalogGate()
               : _catalogLoading && _catalog.isEmpty
-                  ? const Center(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2.4),
+              ? const Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
+                )
+              : _catalogError != null && _catalog.isEmpty
+              ? SelloStateView.error(
+                  title: 'Unable to load products',
+                  message: _catalogError,
+                  actionLabel: 'Try again',
+                  onAction: _loadCatalog,
+                )
+              : _catalog.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'No products match. Try another search or category.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
                       ),
-                    )
-                  : _catalogError != null && _catalog.isEmpty
-                      ? SelloStateView.error(
-                          title: 'Unable to load products',
-                          message: _catalogError,
-                          actionLabel: 'Try again',
-                          onAction: _loadCatalog,
-                        )
-                      : _catalog.isEmpty
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(24),
-                                child: Text(
-                                  'No products match. Try another search or category.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontFamily: AppTypography.fontFamily,
-                                    fontSize: 14,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : _buildProductCatalog(symbol),
+                    ),
+                  ),
+                )
+              : _buildProductCatalog(symbol),
         ),
       ],
     );
@@ -1437,14 +1470,11 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         },
         quantityForVariant: (variant) =>
             _linesByVariant[variant.id]?.quantity ?? 0,
-        maxQuantityForVariant: (variant) =>
-            _maxQuantityForVariant(variant.id),
-        onAddVariant: (variant) =>
-            _addOrIncrementVariant(product, variant),
+        maxQuantityForVariant: (variant) => _maxQuantityForVariant(variant.id),
+        onAddVariant: (variant) => _addOrIncrementVariant(product, variant),
         onVariantQuantityChanged: (variant, qty) =>
             _setLineQuantity(variant.id, qty),
-        onStockLimitReached: (variant) =>
-            _onStockLimitReached(variant.id),
+        onStockLimitReached: (variant) => _onStockLimitReached(variant.id),
         offlineStockHint: _offlineStockHint,
         reorderLevel: _settings.defaultReorderLevel,
         large: large,
@@ -1454,10 +1484,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     }
 
     final variant = product.defaultVariant;
-    final line =
-        variant == null ? null : _linesByVariant[variant.id];
-    final max =
-        variant == null ? 0 : _maxQuantityForVariant(variant.id);
+    final line = variant == null ? null : _linesByVariant[variant.id];
+    final max = variant == null ? 0 : _maxQuantityForVariant(variant.id);
 
     // Prefer default-variant price/stock on simple catalog cards.
     final displayProduct = variant == null
@@ -1465,7 +1493,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
         : product.copyWith(
             sellingPrice: variant.sellingPrice,
             availableStockQuantity:
-                variant.availableStockQuantity ?? product.availableStockQuantity,
+                variant.availableStockQuantity ??
+                product.availableStockQuantity,
           );
 
     if (listLayout) {
@@ -1571,10 +1600,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
                 ),
               ),
               if (_lines.isNotEmpty && !widget.embedded)
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: context.brandAccent,
-                ),
+                Icon(Icons.chevron_right_rounded, color: context.brandAccent),
             ],
           ),
         ),
@@ -1720,16 +1746,18 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
                 controller: _orderDiscount,
                 label: 'Discount amount',
                 hint: '0',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onChanged: (_) => setState(() {}),
               ),
               right: SelloTextField(
                 controller: _orderDiscountPercent,
                 label: 'Discount %',
                 hint: '0',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1757,11 +1785,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               ),
             ],
             const SizedBox(height: 8),
-            const _TotalReadout(
-              label: 'Tax',
-              value: 'Reserved',
-              muted: true,
-            ),
+            const _TotalReadout(label: 'Tax', value: 'Reserved', muted: true),
             const SizedBox(height: 8),
             _TotalReadout(
               label: 'Grand total',
@@ -1777,8 +1801,9 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final method in PaymentMethod.values
-                    .where((m) => m != PaymentMethod.creditSettlement))
+                for (final method in PaymentMethod.values.where(
+                  (m) => m != PaymentMethod.creditSettlement,
+                ))
                   ChoiceChip(
                     label: Text(method.label),
                     selected: _paymentMethod == method,
@@ -2131,10 +2156,7 @@ class _LineEditorTile extends StatelessWidget {
       line.unitPrice,
       symbol: currencySymbol,
     );
-    final meta = [
-      ?sku,
-      unitPrice,
-    ].join(' · ');
+    final meta = [?sku, unitPrice].join(' · ');
 
     return Container(
       padding: EdgeInsets.all(compact ? 8 : 12),

@@ -357,6 +357,8 @@ class OrderDocumentLine extends Equatable {
     required this.lineTotal,
     this.sku,
     this.variantLabel,
+    this.discount,
+    this.discountType,
   });
 
   final String name;
@@ -368,6 +370,24 @@ class OrderDocumentLine extends Equatable {
   final num quantity;
   final num unitPrice;
   final num lineTotal;
+
+  /// Stored line discount. Null when the line has none.
+  final num? discount;
+
+  /// `percentage` or `fixed`. Null when the line has no discount.
+  final String? discountType;
+
+  /// Money taken off this line. Zero when none was applied.
+  num get discountAmount {
+    final value = discount;
+    if (value == null || value <= 0) return 0;
+    final gross = quantity * unitPrice;
+    if (discountType == 'percentage') {
+      final amount = gross * value / 100;
+      return amount > gross ? gross : amount;
+    }
+    return value > gross ? gross : value;
+  }
 
   /// Parent name · option when labeled; never shows "Default".
   String get displayTitle {
@@ -392,11 +412,21 @@ class OrderDocumentLine extends Equatable {
       quantity: _numValue(json['quantity']),
       unitPrice: _numValue(json['unit_price']),
       lineTotal: _numValue(json['line_total']),
+      discount: json['discount'] == null ? null : _numValue(json['discount']),
+      discountType: _stringValue(json['discount_type']),
     );
   }
 
   @override
-  List<Object?> get props => [name, variantLabel, sku, quantity, lineTotal];
+  List<Object?> get props => [
+    name,
+    variantLabel,
+    sku,
+    quantity,
+    lineTotal,
+    discount,
+    discountType,
+  ];
 }
 
 String? _usableVariantLabel(String? raw) {

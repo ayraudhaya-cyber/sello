@@ -38,11 +38,19 @@ void main() {
         item('p3', 'v6'),
       ];
 
-      final page0 = paginateGroupedInventory(items: items, page: 0, pageSize: 2);
+      final page0 = paginateGroupedInventory(
+        items: items,
+        page: 0,
+        pageSize: 2,
+      );
       expect(page0.items.map((row) => row.productId).toSet(), {'p1', 'p2'});
       expect(page0.hasMore, isTrue);
 
-      final page1 = paginateGroupedInventory(items: items, page: 1, pageSize: 2);
+      final page1 = paginateGroupedInventory(
+        items: items,
+        page: 1,
+        pageSize: 2,
+      );
       expect(page1.items.map((row) => row.productId).toSet(), {'p3'});
       expect(page1.hasMore, isFalse);
     });
@@ -51,7 +59,10 @@ void main() {
   group('OrderCorrectionRules', () {
     test('Owner can change Sales Rep except cancelled', () {
       expect(OrderCorrectionRules.canChangeSalesRep(OrderStatus.draft), isTrue);
-      expect(OrderCorrectionRules.canChangeSalesRep(OrderStatus.placed), isTrue);
+      expect(
+        OrderCorrectionRules.canChangeSalesRep(OrderStatus.placed),
+        isTrue,
+      );
       expect(
         OrderCorrectionRules.canChangeSalesRep(OrderStatus.completed),
         isTrue,
@@ -62,7 +73,7 @@ void main() {
       );
     });
 
-    test('customer change is draft-only and blocked after collections', () {
+    test('customer change is allowed until a collection exists', () {
       expect(
         OrderCorrectionRules.canChangeCustomer(
           status: OrderStatus.draft,
@@ -72,31 +83,47 @@ void main() {
       );
       expect(
         OrderCorrectionRules.canChangeCustomer(
-          status: OrderStatus.draft,
+          status: OrderStatus.completed,
+          hasCollections: false,
+        ),
+        isTrue,
+      );
+      expect(
+        OrderCorrectionRules.canChangeCustomer(
+          status: OrderStatus.completed,
           hasCollections: true,
         ),
         isFalse,
       );
       expect(
         OrderCorrectionRules.canChangeCustomer(
-          status: OrderStatus.placed,
-          hasCollections: false,
-        ),
-        isFalse,
-      );
-      expect(
-        OrderCorrectionRules.canChangeCustomer(
-          status: OrderStatus.completed,
+          status: OrderStatus.cancelled,
           hasCollections: false,
         ),
         isFalse,
       );
     });
 
-    test('line edits stay on drafts', () {
+    test('issued invoices can correct lines; cancelled cannot', () {
+      expect(
+        OrderCorrectionRules.canCorrectInvoice(OrderStatus.draft),
+        isFalse,
+      );
+      expect(
+        OrderCorrectionRules.canCorrectInvoice(OrderStatus.placed),
+        isTrue,
+      );
+      expect(
+        OrderCorrectionRules.canCorrectInvoice(OrderStatus.completed),
+        isTrue,
+      );
+      expect(
+        OrderCorrectionRules.canCorrectInvoice(OrderStatus.cancelled),
+        isFalse,
+      );
       expect(OrderCorrectionRules.canEditLines(OrderStatus.draft), isTrue);
-      expect(OrderCorrectionRules.canEditLines(OrderStatus.placed), isFalse);
-      expect(OrderCorrectionRules.canEditLines(OrderStatus.completed), isFalse);
+      expect(OrderCorrectionRules.canEditLines(OrderStatus.placed), isTrue);
+      expect(OrderCorrectionRules.canEditLines(OrderStatus.cancelled), isFalse);
     });
   });
 

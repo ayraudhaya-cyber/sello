@@ -13,6 +13,11 @@ class SupabaseOrderConfirmationGateway implements OrderConfirmationGateway {
       _documents.prepareConfirmation(orderId);
 
   @override
+  Future<OrderConfirmationPrepareResult?> prepareInvoiceCorrection(
+    String orderId,
+  ) => _documents.prepareInvoiceCorrectionSms(orderId);
+
+  @override
   Future<bool> recordDispatch({
     required String eventId,
     required OutboundChannel channel,

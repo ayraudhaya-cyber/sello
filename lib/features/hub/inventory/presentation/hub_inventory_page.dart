@@ -446,15 +446,14 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             isRefreshing: state.isLoading,
             onExport: _exportData,
             isExporting: _exporting,
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubInventoryProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          SelloClearFiltersBar(
-            visible: state.hasActiveFilters,
-            onClear: () {
-              _searchController.clear();
-              ref.read(hubInventoryProvider.notifier).clearFilters();
-            },
-          ),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,
           ),
@@ -730,6 +729,7 @@ class _Toolbar extends StatelessWidget {
     required this.isRefreshing,
     required this.onExport,
     required this.isExporting,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -741,6 +741,7 @@ class _Toolbar extends StatelessWidget {
   final bool isRefreshing;
   final VoidCallback onExport;
   final bool isExporting;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -833,6 +834,7 @@ class _Toolbar extends StatelessWidget {
         search: search,
         filters: [status, category],
         actions: [export, refresh],
+        onClearFilters: onClearFilters,
       ),
     );
   }

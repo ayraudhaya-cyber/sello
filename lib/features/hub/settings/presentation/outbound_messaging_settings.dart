@@ -662,6 +662,18 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
                   ),
               ],
             ),
+            if (widget.type == OutboundNotificationType.orderConfirmation) ...[
+              const SizedBox(height: 14),
+              SelloStatusToggle(
+                value: policy.resendOnCorrection,
+                label: 'SMS the buyer again when an invoice is corrected',
+                helper:
+                    'Only if an SMS was already sent for that order. '
+                    'The invoice link stays the same and already shows the correction.',
+                onChanged: (value) =>
+                    _patchPolicy(policy.copyWith(resendOnCorrection: value)),
+              ),
+            ],
             if (widget.type == OutboundNotificationType.collectionSubmitted &&
                 policy.sendsTo(OutboundRecipientTarget.hub)) ...[
               const SizedBox(height: 14),

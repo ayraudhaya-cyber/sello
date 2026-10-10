@@ -46,6 +46,13 @@ abstract final class OutboundMessageTemplate {
       '{{#approval_note}}\n\n{{approval_note}}{{/approval_note}}'
       '{{#receipt_link}}\n\nView receipt: {{receipt_link}}{{/receipt_link}}';
 
+  static const invoiceCorrectionDefault =
+      '{{business_name}}\n'
+      'Invoice {{order_number}} was updated.\n'
+      '\n'
+      'Total: {{order_total}}'
+      '{{#invoice_link}}\n\n{{invoice_link}}{{/invoice_link}}';
+
   static const invoiceDefault =
       '{{business_name}}\n'
       'Invoice {{invoice_number}}\n'
@@ -70,15 +77,14 @@ abstract final class OutboundMessageTemplate {
       '{{#business_name}}\n\n{{business_name}}{{/business_name}}';
 
   static String defaultFor(OutboundNotificationType type) => switch (type) {
-        OutboundNotificationType.orderConfirmation => orderConfirmationDefault,
-        OutboundNotificationType.orderNotification => orderNotificationDefault,
-        OutboundNotificationType.collectionAcknowledgement =>
-          collectionAcknowledgementDefault,
-        OutboundNotificationType.collectionSubmitted =>
-          collectionSubmittedDefault,
-        OutboundNotificationType.invoice => invoiceDefault,
-        OutboundNotificationType.receipt => receiptDefault,
-      };
+    OutboundNotificationType.orderConfirmation => orderConfirmationDefault,
+    OutboundNotificationType.orderNotification => orderNotificationDefault,
+    OutboundNotificationType.collectionAcknowledgement =>
+      collectionAcknowledgementDefault,
+    OutboundNotificationType.collectionSubmitted => collectionSubmittedDefault,
+    OutboundNotificationType.invoice => invoiceDefault,
+    OutboundNotificationType.receipt => receiptDefault,
+  };
 
   static String openingBalancePaymentReceived({
     required String amountLabel,
@@ -119,11 +125,7 @@ abstract final class OutboundMessageTemplate {
 
     // Drop leftover unknown tokens.
     output = output.replaceAll(RegExp(r'\{\{/?\w+\}\}'), '');
-    return output
-        .split('\n')
-        .map((line) => line.trimRight())
-        .join('\n')
-        .trim();
+    return output.split('\n').map((line) => line.trimRight()).join('\n').trim();
   }
 
   /// Copies equivalent tokens so old and new placeholder names both work.

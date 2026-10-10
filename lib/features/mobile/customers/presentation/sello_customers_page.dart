@@ -142,6 +142,16 @@ class _SelloCustomersPageState extends ConsumerState<SelloCustomersPage> {
               );
             },
           ),
+          if (state.search.trim().isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelloClearFiltersLink(
+                onPressed: () {
+                  _searchController.clear();
+                  ref.read(selloCustomersProvider.notifier).setSearch('');
+                },
+              ),
+            ),
           const SizedBox(height: AppSpacing.sm),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,

@@ -40,28 +40,29 @@ class OrderConfirmationOutcome extends Equatable {
   bool get customerWasSkipped =>
       customerSkippedReason != null && customerSkippedReason!.isNotEmpty;
 
-  List<OrderConfirmationAction> get customerActions =>
-      actions.where((a) => a.recipientKind == OutboundRecipientKind.customer).toList();
+  List<OrderConfirmationAction> get customerActions => actions
+      .where((a) => a.recipientKind == OutboundRecipientKind.customer)
+      .toList();
 
-  List<OrderConfirmationAction> get hubActions =>
-      actions.where((a) => a.recipientKind == OutboundRecipientKind.hub).toList();
+  List<OrderConfirmationAction> get hubActions => actions
+      .where((a) => a.recipientKind == OutboundRecipientKind.hub)
+      .toList();
 
-  List<OrderConfirmationAction> get salesRepActions =>
-      actions
-          .where((a) => a.recipientKind == OutboundRecipientKind.salesRep)
-          .toList();
+  List<OrderConfirmationAction> get salesRepActions => actions
+      .where((a) => a.recipientKind == OutboundRecipientKind.salesRep)
+      .toList();
 
   @override
   List<Object?> get props => [
-        orderNumber,
-        documentUrl,
-        alreadyPrepared,
-        eventId,
-        token,
-        actions,
-        customerSkippedReason,
-        includeDocumentLink,
-      ];
+    orderNumber,
+    documentUrl,
+    alreadyPrepared,
+    eventId,
+    token,
+    actions,
+    customerSkippedReason,
+    includeDocumentLink,
+  ];
 }
 
 class OrderConfirmationAction extends Equatable {
@@ -87,26 +88,31 @@ class OrderConfirmationAction extends Equatable {
 
   @override
   List<Object?> get props => [
-        channel,
-        recipientKind,
-        recipientKey,
-        launchUri,
-        duplicate,
-      ];
+    channel,
+    recipientKind,
+    recipientKey,
+    launchUri,
+    duplicate,
+  ];
 }
 
 /// Return value for Hub / Sales order writes.
 class OrderMutationResult {
-  const OrderMutationResult.ok({this.confirmation, this.orderId})
-      : error = null;
+  const OrderMutationResult.ok({
+    this.confirmation,
+    this.orderId,
+    this.correctionSmsSent = false,
+  }) : error = null;
 
   const OrderMutationResult.fail(this.error)
-      : confirmation = null,
-        orderId = null;
+    : confirmation = null,
+      orderId = null,
+      correctionSmsSent = false;
 
   final String? error;
   final OrderConfirmationOutcome? confirmation;
   final String? orderId;
+  final bool correctionSmsSent;
 
   bool get isOk => error == null;
 }

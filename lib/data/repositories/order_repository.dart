@@ -813,6 +813,53 @@ class OrderRepository {
     return events;
   }
 
+  /// Corrects a placed or delivered invoice. Same number and public link.
+  Future<void> correctInvoice({required OrderUpsertInput input}) async {
+    final orderId = input.orderId;
+    if (orderId == null || orderId.isEmpty) {
+      throw const ValidationFailure('Invoice not found.');
+    }
+    if (input.lines.isEmpty) {
+      throw const ValidationFailure(
+        'Add at least one product before saving the correction.',
+      );
+    }
+    try {
+      await _client.rpc(
+        'correct_invoice',
+        params: {
+          'p_order_id': orderId,
+          'p_payload': {
+            'customer_id': input.customerId,
+            'payment_method': input.paymentMethod?.dbValue,
+            'notes': input.notes,
+            'discount_percent': input.orderDiscountPercent,
+            'discount_fixed_amount': input.orderDiscount,
+            'lines': [
+              for (final line in input.lines)
+                {
+                  if (line.existingItemId != null) 'id': line.existingItemId,
+                  'product_id': line.productId,
+                  if (line.variantId != null) 'variant_id': line.variantId,
+                  'quantity': line.quantity,
+                  'unit_price': line.unitPrice,
+                  if (line.discount != null) 'discount': line.discount,
+                  if (line.discountType != null)
+                    'discount_type': line.discountType,
+                },
+            ],
+          },
+        },
+      );
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } on AppFailure {
+      rethrow;
+    } catch (error) {
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
   Future<OrderSaveResult> saveOrder({
     required OrderUpsertInput input,
     required String companyId,

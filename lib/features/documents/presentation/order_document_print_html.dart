@@ -67,7 +67,7 @@ function selloFitCompact(){
   if (!pad) return;
   sheet.style.minHeight = "0px";
   pad.style.height = "0px";
-  var pagePx = (297 - 12) * 96 / 25.4;
+  var pagePx = (297 - 20) * 96 / 25.4;
   var natural = sheet.getBoundingClientRect().height;
   var pages = Math.max(1, Math.ceil((natural - 1) / pagePx));
   var extra = pages * pagePx - natural - 8;
@@ -178,11 +178,14 @@ void _writeBillTo(StringBuffer buffer, OrderDocument doc, String date) {
 }
 
 String? _compactSalesRep(OrderDocument doc) {
-  final phone = doc.salesRepPhone?.trim();
-  if (phone != null && phone.isNotEmpty) return 'Sales rep no. $phone';
   final name = doc.salesRepName?.trim();
-  if (name != null && name.isNotEmpty) return 'Sales rep $name';
-  return null;
+  final phone = doc.salesRepPhone?.trim();
+  final hasName = name != null && name.isNotEmpty;
+  final hasPhone = phone != null && phone.isNotEmpty;
+  if (!hasName && !hasPhone) return null;
+  if (hasName && hasPhone) return 'Sales Rep: $name ($phone)';
+  if (hasName) return 'Sales Rep: $name';
+  return 'Sales Rep: $phone';
 }
 
 void _writeSignoff(StringBuffer buffer, DocumentIssuerIdentity identity) {
@@ -212,6 +215,7 @@ void _writeOrderBody(
   buffer.writeln(
     '<thead><tr><th class="num">#</th><th>Description</th>'
     '<th class="qty">Qty</th><th class="rate">Rate</th>'
+    '${compact ? '<th class="disc">Discount</th>' : ''}'
     '<th class="amt">Amount</th></tr></thead><tbody>',
   );
   for (var i = 0; i < doc.lines.length; i++) {
@@ -233,12 +237,17 @@ void _writeOrderBody(
         '<td class="qty">${_esc(SelloFormatters.quantity(line.quantity))}</td>',
       )
       ..writeln('<td class="rate">${_esc(doc.money(line.unitPrice))}</td>')
+      ..writeln(
+        compact
+            ? '<td class="disc">${line.discountAmount > 0 ? _esc(doc.money(line.discountAmount)) : ''}</td>'
+            : '',
+      )
       ..writeln('<td class="amt">${_esc(doc.money(line.lineTotal))}</td>')
       ..writeln('</tr>');
   }
   if (compact) {
     buffer.writeln(
-      '<tr class="pad"><td></td><td></td><td></td><td></td><td></td></tr>',
+      '<tr class="pad"><td></td><td></td><td></td><td></td><td></td><td></td></tr>',
     );
   }
   buffer.writeln('</tbody></table>');
@@ -481,7 +490,7 @@ html, body {
   vertical-align: top;
 }
 .lines .num { width: 28px; color: #736C90; }
-.lines .qty, .lines .rate, .lines .amt { text-align: right; white-space: nowrap; }
+.lines .qty, .lines .rate, .lines .disc, .lines .amt { text-align: right; white-space: nowrap; }
 .lines .amt { font-weight: 600; }
 .line-sub { color: #736C90; font-size: 10px; margin-top: 1px; }
 .totals { padding: 10px 12px 8px; }
@@ -549,7 +558,7 @@ html, body {
 /// Dense solid-black sheet. Appended only when the compact template is selected.
 /// Logo ink uses brightness(0), which leaves PNG alpha untouched.
 const _compactPrintCss = r'''
-@page { size: A4; margin: 6mm 8mm; }
+@page { size: A4; margin: 10mm 8mm; }
 html, body {
   color: #000;
   font-family: Arial, Helvetica, sans-serif;
@@ -557,7 +566,7 @@ html, body {
   line-height: 1.25;
 }
 .sheet.compact {
-  min-height: 285mm;
+  min-height: 277mm;
   display: flex;
   flex-direction: column;
 }

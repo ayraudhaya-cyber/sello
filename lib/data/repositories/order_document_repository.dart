@@ -58,6 +58,29 @@ class OrderDocumentRepository {
     return url;
   }
 
+  /// Null when no customer SMS was sent for this invoice yet.
+  Future<OrderConfirmationPrepareResult?> prepareInvoiceCorrectionSms(
+    String orderId,
+  ) async {
+    try {
+      final result = await _client.rpc(
+        'prepare_invoice_correction_sms',
+        params: {'p_order_id': orderId},
+      );
+      final json = result is Map<String, dynamic>
+          ? result
+          : result is Map
+          ? Map<String, dynamic>.from(result)
+          : null;
+      if (json == null || json['send'] != true) return null;
+      return OrderConfirmationPrepareResult.fromJson(json);
+    } on PostgrestException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<OrderConfirmationPrepareResult> prepareConfirmation(
     String orderId,
   ) async {
@@ -85,7 +108,7 @@ class OrderDocumentRepository {
   }
 
   Future<CollectionAcknowledgementPrepareResult>
-      prepareCollectionAcknowledgement(String paymentId) async {
+  prepareCollectionAcknowledgement(String paymentId) async {
     try {
       final result = await _client.rpc(
         'prepare_collection_acknowledgement',

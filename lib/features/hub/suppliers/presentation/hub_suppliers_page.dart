@@ -253,15 +253,14 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
             onRefresh: state.isLoading
                 ? null
                 : () => ref.read(hubSuppliersProvider.notifier).refresh(),
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubSuppliersProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          SelloClearFiltersBar(
-            visible: state.hasActiveFilters,
-            onClear: () {
-              _searchController.clear();
-              ref.read(hubSuppliersProvider.notifier).clearFilters();
-            },
-          ),
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -508,6 +507,7 @@ class _Toolbar extends StatelessWidget {
     required this.onSearchChanged,
     required this.onStatusChanged,
     required this.onRefresh,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -515,6 +515,7 @@ class _Toolbar extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<SupplierStatusFilter?> onStatusChanged;
   final VoidCallback? onRefresh;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -556,6 +557,7 @@ class _Toolbar extends StatelessWidget {
       onSearchChanged: onSearchChanged,
       filters: [status],
       actions: [refresh],
+      onClearFilters: onClearFilters,
     );
   }
 }

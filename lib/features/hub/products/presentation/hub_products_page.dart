@@ -236,15 +236,14 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
             onRefresh: () => ref.read(hubProductsProvider.notifier).refresh(),
             isRefreshing: state.isLoading,
             onAdd: state.isSaving ? null : () => _openEditor(),
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubProductsProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          SelloClearFiltersBar(
-            visible: state.hasActiveFilters,
-            onClear: () {
-              _searchController.clear();
-              ref.read(hubProductsProvider.notifier).clearFilters();
-            },
-          ),
           if (state.statusFilter == ProductStatusFilter.inactive) ...[
             const _ArchivedProductsBanner(),
             const SizedBox(height: AppSpacing.md),
@@ -537,6 +536,7 @@ class _ProductsToolbar extends StatelessWidget {
     required this.onRefresh,
     required this.isRefreshing,
     required this.onAdd,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -547,6 +547,7 @@ class _ProductsToolbar extends StatelessWidget {
   final VoidCallback onRefresh;
   final bool isRefreshing;
   final VoidCallback? onAdd;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -625,6 +626,7 @@ class _ProductsToolbar extends StatelessWidget {
         search: search,
         filters: [status, category],
         actions: [refresh, add],
+        onClearFilters: onClearFilters,
       ),
     );
   }

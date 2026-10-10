@@ -419,15 +419,14 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
             onExport: _exporting ? null : _exportCustomers,
             isExporting: _exporting,
             onAdd: state.isSaving ? null : () => _openEditor(),
+            onClearFilters: state.hasActiveFilters
+                ? () {
+                    _searchController.clear();
+                    ref.read(hubCustomersProvider.notifier).clearFilters();
+                  }
+                : null,
           ),
           const SizedBox(height: AppSpacing.mdPlus),
-          SelloClearFiltersBar(
-            visible: state.hasActiveFilters,
-            onClear: () {
-              _searchController.clear();
-              ref.read(hubCustomersProvider.notifier).clearFilters();
-            },
-          ),
           if (state.statusFilter == CustomerStatusFilter.inactive) ...[
             const _ArchivedCustomersBanner(),
             const SizedBox(height: AppSpacing.md),
@@ -723,6 +722,7 @@ class _CustomersToolbar extends StatelessWidget {
     required this.onExport,
     required this.isExporting,
     required this.onAdd,
+    this.onClearFilters,
   });
 
   final TextEditingController searchController;
@@ -736,6 +736,7 @@ class _CustomersToolbar extends StatelessWidget {
   final VoidCallback? onExport;
   final bool isExporting;
   final VoidCallback? onAdd;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -838,6 +839,7 @@ class _CustomersToolbar extends StatelessWidget {
         search: search,
         filters: [status, type, owing],
         actions: [refresh, export, add],
+        onClearFilters: onClearFilters,
       ),
     );
   }

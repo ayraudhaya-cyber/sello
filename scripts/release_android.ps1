@@ -77,8 +77,12 @@ if ($oldVersion -ne "$versionName+$buildNumber") {
 
 function Update-Manifests() {
   Write-Host "Updating release manifests..."
-  $notesArg = if ($Notes) { $Notes } else { "" }
-  dart run scripts/update_release_json.dart $versionName $buildNumber $today $notesArg $Apps
+  # An empty notes argument is dropped by PowerShell and the app name
+  # ("both") gets stored as the release notes. Omit notes unless one was given.
+  $dartArgs = @($versionName, "$buildNumber", $today)
+  if ($Notes) { $dartArgs += $Notes }
+  $dartArgs += $Apps
+  dart run scripts/update_release_json.dart @dartArgs
   if ($LASTEXITCODE -ne 0) { Write-Error "Failed to update release manifests" }
   Write-Host "Updated releases\sello-release.json"
   Write-Host "Updated web\sello-release.json"

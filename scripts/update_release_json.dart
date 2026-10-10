@@ -14,8 +14,18 @@ void main(List<String> args) {
   final version = args[0];
   final build = int.parse(args[1]);
   final date = args[2];
-  final notes = args.length > 3 ? args[3] : '';
-  final appsArg = args.length > 4 ? args[4] : 'both';
+  var notes = '';
+  var appsArg = 'both';
+  if (args.length > 3) {
+    final fourth = args[3];
+    const appNames = {'both', 'sales_rep', 'owner_manager'};
+    if (appNames.contains(fourth) && args.length == 4) {
+      appsArg = fourth;
+    } else {
+      notes = fourth;
+      if (args.length > 4) appsArg = args[4];
+    }
+  }
   final apps = appsArg == 'both'
       ? ['sales_rep', 'owner_manager']
       : [appsArg];

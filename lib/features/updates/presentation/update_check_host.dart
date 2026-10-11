@@ -8,6 +8,8 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/updates/presentation/app_updated_card.dart';
 import 'package:sello/features/updates/presentation/update_prompt.dart';
 import 'package:sello/features/updates/presentation/whats_new_banner.dart';
+import 'package:sello/services/updates/bundled_release_notes.dart';
+import 'package:sello/services/updates/release_app_kind.dart';
 import 'package:sello/services/updates/installer_download.dart';
 import 'package:sello/services/updates/installer_download_update.dart';
 import 'package:sello/services/updates/release_highlights_store.dart';
@@ -41,6 +43,7 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   var _highlightsVisible = false;
   String? _promptedIdentity;
   String? _highlightsIdentity;
+  String? _highlightsNotes;
   String? _dismissedHighlightsIdentity;
   StreamSubscription<InstallerDownloadUpdate>? _downloadSub;
   var _downloading = false;
@@ -173,24 +176,36 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
             ),
           )
         else if (showHighlights)
-          Positioned(
-            right: isMobile ? 16 : 24,
-            left: isMobile ? 16 : null,
-            bottom: 16 + MediaQuery.paddingOf(context).bottom,
-            child: SafeArea(
-              top: false,
-              left: false,
-              right: false,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: isMobile ? double.infinity : 380,
-                ),
-                child: AppUpdatedShortcuts(
-                  onDismiss: _dismissHighlights,
-                  child: AppUpdatedCard(
-                    versionLabel: snapshot.installed.versionName,
-                    notes: snapshot.notes,
-                    onDismiss: _dismissHighlights,
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _dismissHighlights,
+              child: SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16 : 24,
+                    16,
+                    isMobile ? 16 : 24,
+                    16 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: isMobile ? double.infinity : 380,
+                        ),
+                        child: AppUpdatedShortcuts(
+                          onDismiss: _dismissHighlights,
+                          child: AppUpdatedCard(
+                            versionLabel: snapshot.installed.versionName,
+                            notes: _highlightsNotes,
+                            onDismiss: _dismissHighlights,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -238,10 +253,33 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
     final shouldShow = await store.shouldShowHighlights(snapshot.installed);
     if (!mounted || !shouldShow) return;
 
+    final notes = await _notesForInstalledBuild(snapshot, app);
+    if (!mounted || notes == null) return;
+
     setState(() {
       _highlightsVisible = true;
       _highlightsIdentity = highlightsKey;
+      _highlightsNotes = notes;
     });
+  }
+
+  /// Notes that belong to this installed build. An older remote file is ignored.
+  Future<String?> _notesForInstalledBuild(
+    UpdateCheckSnapshot snapshot,
+    ReleaseAppKind app,
+  ) async {
+    final bundled = await BundledReleaseNotes.forInstalled(
+      installed: snapshot.installed,
+      app: app,
+    );
+    if (bundled != null) return bundled;
+
+    final remoteIsThisBuild =
+        snapshot.latest?.identity == snapshot.installed.identity;
+    if (!remoteIsThisBuild) return null;
+    final remote = snapshot.notes?.trim();
+    if (remote == null || remote.isEmpty) return null;
+    return remote;
   }
 
   Future<void> _dismissHighlights() async {

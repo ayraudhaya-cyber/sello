@@ -16,7 +16,8 @@ abstract final class SelloHelpContent {
         'Select the customer.',
         'Tick the orders or opening balance, or Select all.',
         'Enter the amount.',
-        'Choose Cash, Card, Bank, or Wallet. For a cheque, use Record collection on the order, or Payments → Cheques.',
+        'On an order, apply wallet credit, then record the rest as Cash, Card, Bank, or Cheque.',
+        'Receive Payment can also use Wallet as the whole collection.',
         'Save.',
       ],
       notes: [

@@ -113,43 +113,55 @@ class AppUpdatedCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              for (final line in highlights.take(5))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: SingleChildScrollView(
+                  child: Column(
                     children: [
-                      SizedBox(
-                        width: 44,
-                        child: Row(
-                          children: [
-                            Text(
-                              line.emoji,
-                              style: const TextStyle(fontSize: 15, height: 1.25),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              line.icon,
-                              size: 14,
-                              color: AppColors.textTertiary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          line.text,
-                          style: const TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontSize: 13.5,
-                            height: 1.4,
-                            color: AppColors.textSecondary,
+                      for (final line in highlights)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 44,
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      line.emoji,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      line.icon,
+                                      size: 14,
+                                      color: AppColors.textTertiary,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  line.text,
+                                  style: const TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
+                                    fontSize: 13.5,
+                                    height: 1.4,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
+              ),
               const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerLeft,

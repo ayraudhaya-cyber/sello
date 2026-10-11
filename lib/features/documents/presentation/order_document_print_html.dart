@@ -11,15 +11,15 @@ String buildOrderDocumentPrintHtml(OrderDocument doc) {
   final date = SelloFormatters.date(doc.completedAt ?? doc.orderedAt);
   final buffer = StringBuffer()
     ..writeln('<!DOCTYPE html>')
-    ..writeln('<html lang="en">')
+    ..writeln('<html lang="en" moznomarginboxes>')
     ..writeln('<head>')
     ..writeln('<meta charset="utf-8">')
     ..writeln(
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
     )
-    ..writeln(
-      '<title>${_esc('${doc.kindLabel} ${doc.kindNumber}'.trim())}</title>',
-    )
+    // Blank on purpose. Chrome prints the document title in the page header,
+    // which would repeat the invoice number already shown on the sheet.
+    ..writeln('<title> </title>')
     ..writeln(
       '<style>$_printCss${identity.template == DocumentPrintTemplate.compact ? _compactPrintCss : ''}</style>',
     )
@@ -67,7 +67,7 @@ function selloFitCompact(){
   if (!pad) return;
   sheet.style.minHeight = "0px";
   pad.style.height = "0px";
-  var pagePx = (297 - 20) * 96 / 25.4;
+  var pagePx = 297 * 96 / 25.4;
   var natural = sheet.getBoundingClientRect().height;
   var pages = Math.max(1, Math.ceil((natural - 1) / pagePx));
   var extra = pages * pagePx - natural - 8;
@@ -368,7 +368,9 @@ String _esc(String value) {
 }
 
 const _printCss = r'''
-@page { size: A4; margin: 14mm 14mm; }
+/* Zero page margin hides the browser date, title, URL, and page count.
+   Anything above ~8mm gives Chrome room to draw them. Inset lives on .sheet. */
+@page { size: A4; margin: 0; }
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
@@ -381,7 +383,12 @@ html, body {
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-.sheet { width: 100%; max-width: 180mm; margin: 0 auto; }
+.sheet {
+  width: 100%;
+  max-width: 180mm;
+  margin: 0 auto;
+  padding: 18mm 14mm;
+}
 .header {
   display: flex;
   align-items: center;
@@ -558,7 +565,7 @@ html, body {
 /// Dense solid-black sheet. Appended only when the compact template is selected.
 /// Logo ink uses brightness(0), which leaves PNG alpha untouched.
 const _compactPrintCss = r'''
-@page { size: A4; margin: 10mm 8mm; }
+@page { size: A4; margin: 0; }
 html, body {
   color: #000;
   font-family: Arial, Helvetica, sans-serif;
@@ -566,7 +573,10 @@ html, body {
   line-height: 1.25;
 }
 .sheet.compact {
-  min-height: 277mm;
+  max-width: none;
+  box-sizing: border-box;
+  min-height: 296mm;
+  padding: 14mm 8mm;
   display: flex;
   flex-direction: column;
 }

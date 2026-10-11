@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sello/services/updates/bundled_release_notes.dart';
+import 'package:sello/services/updates/release_app_kind.dart';
 import 'package:sello/services/updates/release_highlights_presenter.dart';
 import 'package:sello/services/updates/release_highlights_store.dart';
 import 'package:sello/shared/models/app_version.dart';
@@ -26,6 +28,41 @@ void main() {
       final lines = ReleaseHighlightsPresenter.lines(null);
       expect(lines, isNotEmpty);
       expect(lines.first.emoji, '✨');
+    });
+  });
+
+  group('BundledReleaseNotes', () {
+    const installed = AppVersion(major: 1, minor: 0, patch: 14, build: 15);
+    const raw = '''
+{
+  "schema_version": 2,
+  "apps": {
+    "owner_manager": {
+      "latest": {
+        "version": "1.0.14",
+        "build": 15,
+        "notes": "Correct a placed invoice\\nClear filters in one click"
+      }
+    }
+  }
+}
+''';
+
+    test('uses notes only when they belong to this build', () {
+      final notes = BundledReleaseNotes.notesFor(
+        rawJson: raw,
+        installed: installed,
+        app: ReleaseAppKind.ownerManager,
+      );
+      expect(notes, contains('Correct a placed invoice'));
+      expect(
+        BundledReleaseNotes.notesFor(
+          rawJson: raw,
+          installed: const AppVersion(major: 1, minor: 0, patch: 14, build: 16),
+          app: ReleaseAppKind.ownerManager,
+        ),
+        isNull,
+      );
     });
   });
 

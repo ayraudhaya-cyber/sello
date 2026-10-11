@@ -88,4 +88,41 @@ abstract final class OrderCollectionRules {
     if (holderName.trim().isEmpty) return 'Name on the cheque is required.';
     return null;
   }
+
+  /// How much of [available] can be applied to this collection.
+  static num walletCap({required num available, required num outstanding}) {
+    final wallet = available < 0 ? 0 : available;
+    final due = outstanding < 0 ? 0 : outstanding;
+    return wallet < due ? wallet : due;
+  }
+
+  /// Wallet sits beside the cash, card, bank, or cheque amount.
+  /// Either part may be zero. Together they cannot pass [outstanding].
+  static String? validateWithWallet({
+    required num walletApplied,
+    required num walletAvailable,
+    required num? received,
+    required num outstanding,
+  }) {
+    if (walletApplied < -0.001) {
+      return 'Wallet amount cannot be negative.';
+    }
+    if (walletApplied > walletAvailable + 0.001) {
+      return 'Wallet balance is not enough for that amount.';
+    }
+    if (walletApplied > outstanding + 0.001) {
+      return 'Wallet amount is more than the remaining balance.';
+    }
+    final cash = received ?? 0;
+    if (cash < -0.001) {
+      return 'Enter an amount greater than zero.';
+    }
+    if (walletApplied <= 0.001 && cash <= 0.001) {
+      return 'Enter an amount greater than zero.';
+    }
+    if (walletApplied + cash > outstanding + 0.001) {
+      return 'Wallet and the amount received are more than the remaining balance.';
+    }
+    return null;
+  }
 }

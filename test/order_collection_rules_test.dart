@@ -67,6 +67,44 @@ void main() {
       );
     });
 
+    test('wallet applies beside the amount received', () {
+      expect(
+        OrderCollectionRules.walletCap(available: 3000, outstanding: 12000),
+        3000,
+      );
+      expect(
+        OrderCollectionRules.walletCap(available: 15000, outstanding: 12000),
+        12000,
+      );
+      expect(
+        OrderCollectionRules.validateWithWallet(
+          walletApplied: 3000,
+          walletAvailable: 3000,
+          received: 9000,
+          outstanding: 12000,
+        ),
+        isNull,
+      );
+      expect(
+        OrderCollectionRules.validateWithWallet(
+          walletApplied: 3000,
+          walletAvailable: 3000,
+          received: 12000,
+          outstanding: 12000,
+        ),
+        isNotNull,
+      );
+      expect(
+        OrderCollectionRules.validateWithWallet(
+          walletApplied: 12000,
+          walletAvailable: 12000,
+          received: 0,
+          outstanding: 12000,
+        ),
+        isNull,
+      );
+    });
+
     test('partial collection leaves a remainder on the same order', () {
       const outstanding = 100000;
       expect(

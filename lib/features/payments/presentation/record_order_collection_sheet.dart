@@ -93,6 +93,7 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
 class _RecordOrderCollectionSheetState
     extends ConsumerState<RecordOrderCollectionSheet> {
   final _amount = TextEditingController();
+  final _wallet = TextEditingController();
   final _bank = TextEditingController();
   final _chequeNumber = TextEditingController();
   final _holder = TextEditingController();
@@ -100,6 +101,7 @@ class _RecordOrderCollectionSheetState
   DateTime _chequeDate = DateTime.now();
   bool _saving = false;
   bool _loading = true;
+  num _walletAvailable = 0;
   String? _error;
   AssociatedChequeMatch? _match;
 
@@ -131,6 +133,7 @@ class _RecordOrderCollectionSheetState
   @override
   void dispose() {
     _amount.dispose();
+    _wallet.dispose();
     _bank.dispose();
     _chequeNumber.dispose();
     _holder.dispose();
@@ -138,6 +141,42 @@ class _RecordOrderCollectionSheetState
   }
 
   num? get _parsedAmount => num.tryParse(_amount.text.trim());
+
+  num get _walletApplied {
+    if (_usingExisting || _walletAvailable <= 0.001) return 0;
+    final parsed = num.tryParse(_wallet.text.trim()) ?? 0;
+    return parsed < 0 ? 0 : parsed;
+  }
+
+  /// Room left after an associated cheque that this save is not collecting.
+  num get _collectableNow {
+    final reserved =
+        _match != null && _match!.usesExisting && !_usingExisting
+        ? _match!.applicableAmount
+        : 0;
+    final room = widget.outstanding - reserved;
+    return room < 0 ? 0 : room;
+  }
+
+  bool get _showWallet =>
+      !_usingExisting &&
+      _walletAvailable > 0.001 &&
+      OrderCollectionRules.walletCap(
+            available: _walletAvailable,
+            outstanding: _collectableNow,
+          ) >
+          0.001;
+
+  num get _receivedRoom {
+    final ceiling = OrderCollectionAssociation.newCollectionCeiling(
+      remaining: widget.outstanding,
+      method: _method,
+      match: _match,
+    );
+    final base = ceiling > 0 ? ceiling : widget.outstanding;
+    final room = base - (_showWallet ? _walletApplied : 0);
+    return room < 0 ? 0 : room;
+  }
 
   String _money(num value) =>
       SelloFormatters.currency(value, symbol: widget.currencySymbol);
@@ -149,16 +188,24 @@ class _RecordOrderCollectionSheetState
   }
 
   void _syncAmountToCeiling() {
-    final ceiling = OrderCollectionAssociation.newCollectionCeiling(
-      remaining: widget.outstanding,
-      method: _method,
-      match: _match,
+    _writeAmount(_receivedRoom);
+  }
+
+  void _applyDefaultWallet() {
+    final cap = OrderCollectionRules.walletCap(
+      available: _walletAvailable,
+      outstanding: _collectableNow,
     );
-    _writeAmount(ceiling > 0 ? ceiling : widget.outstanding);
+    _wallet.text = cap == cap.roundToDouble()
+        ? cap.toStringAsFixed(0)
+        : cap.toString();
   }
 
   Future<void> _loadAssociatedCheques() async {
     try {
+      final customer = await ref
+          .read(customerRepositoryProvider)
+          .fetchById(widget.customerId);
       final cheques = await ref
           .read(chequeRepositoryProvider)
           .fetchCheques(customerId: widget.customerId, pageSize: 100);
@@ -180,10 +227,14 @@ class _RecordOrderCollectionSheetState
       if (!mounted) return;
       setState(() {
         _match = match;
+        _walletAvailable = customer?.walletBalance ?? 0;
         _loading = false;
         if (match != null &&
             match.applicableAmount >= widget.outstanding - 0.001) {
           _method = PaymentMethod.cheque;
+        }
+        if (!_usingExisting && _walletAvailable > 0.001) {
+          _applyDefaultWallet();
         }
         _syncAmountToCeiling();
       });
@@ -199,17 +250,26 @@ class _RecordOrderCollectionSheetState
       return;
     }
 
-    final amountError = OrderCollectionRules.validateNewCollection(
-      method: _method,
-      amount: _parsedAmount,
-      remaining: widget.outstanding,
-      match: _match,
-    );
+    final walletApplied = _walletApplied;
+    final amountError = _showWallet
+        ? OrderCollectionRules.validateWithWallet(
+            walletApplied: walletApplied,
+            walletAvailable: _walletAvailable,
+            received: _parsedAmount,
+            outstanding: _collectableNow,
+          )
+        : OrderCollectionRules.validateNewCollection(
+            method: _method,
+            amount: _parsedAmount,
+            remaining: widget.outstanding,
+            match: _match,
+          );
     if (amountError != null) {
       setState(() => _error = amountError);
       return;
     }
-    if (_method == PaymentMethod.cheque) {
+    final amount = _parsedAmount ?? 0;
+    if (_method == PaymentMethod.cheque && amount > 0.001) {
       final chequeError = OrderCollectionRules.validateCheque(
         bankName: _bank.text,
         chequeNumber: _chequeNumber.text,
@@ -221,56 +281,85 @@ class _RecordOrderCollectionSheetState
       }
     }
 
-    final amount = _parsedAmount!;
     setState(() {
       _saving = true;
       _error = null;
     });
+    var walletSaved = false;
     try {
-      final allocation = PaymentAllocationInput(
-        orderId: widget.orderId,
-        amount: amount,
-      );
-      if (OrderCollectionAssociation.shouldCreateNewCheque(
-        method: _method,
-        match: _match,
-      )) {
-        await ref
-            .read(chequeRepositoryProvider)
-            .createCheque(
-              CreateChequeInput(
-                customerId: widget.customerId,
-                amount: amount,
-                bankName: _bank.text.trim(),
-                chequeNumber: _chequeNumber.text.trim(),
-                holderName: _holder.text.trim(),
-                chequeDate: _chequeDate,
-                collectionDate: DateTime.now(),
-                allocations: [allocation],
-                markCollected: true,
-                visitId: widget.orderVisitId,
-                notes: 'Collected against ${widget.orderNumber}',
-              ),
-            );
-      } else {
-        final result = await ref
+      if (walletApplied > 0.001) {
+        final walletResult = await ref
             .read(paymentRepositoryProvider)
             .receivePayment(
               ReceivePaymentInput(
                 customerId: widget.customerId,
-                amount: amount,
-                method: _method,
-                allocations: [allocation],
-                notes: 'Collected against ${widget.orderNumber}',
+                amount: walletApplied,
+                method: PaymentMethod.wallet,
+                allocations: [
+                  PaymentAllocationInput(
+                    orderId: widget.orderId,
+                    amount: walletApplied,
+                  ),
+                ],
+                notes: 'Wallet applied to ${widget.orderNumber}',
                 visitId: widget.orderVisitId,
               ),
             );
+        walletSaved = true;
         if (!mounted) return;
-        if (result.isPendingReview) {
+        if (walletResult.isPendingReview && amount <= 0.001) {
           await presentCollectionAcknowledgement(
             context,
-            result.acknowledgement,
+            walletResult.acknowledgement,
           );
+        }
+      }
+      if (amount > 0.001) {
+        final allocation = PaymentAllocationInput(
+          orderId: widget.orderId,
+          amount: amount,
+        );
+        if (OrderCollectionAssociation.shouldCreateNewCheque(
+          method: _method,
+          match: _match,
+        )) {
+          await ref
+              .read(chequeRepositoryProvider)
+              .createCheque(
+                CreateChequeInput(
+                  customerId: widget.customerId,
+                  amount: amount,
+                  bankName: _bank.text.trim(),
+                  chequeNumber: _chequeNumber.text.trim(),
+                  holderName: _holder.text.trim(),
+                  chequeDate: _chequeDate,
+                  collectionDate: DateTime.now(),
+                  allocations: [allocation],
+                  markCollected: true,
+                  visitId: widget.orderVisitId,
+                  notes: 'Collected against ${widget.orderNumber}',
+                ),
+              );
+        } else {
+          final result = await ref
+              .read(paymentRepositoryProvider)
+              .receivePayment(
+                ReceivePaymentInput(
+                  customerId: widget.customerId,
+                  amount: amount,
+                  method: _method,
+                  allocations: [allocation],
+                  notes: 'Collected against ${widget.orderNumber}',
+                  visitId: widget.orderVisitId,
+                ),
+              );
+          if (!mounted) return;
+          if (result.isPendingReview) {
+            await presentCollectionAcknowledgement(
+              context,
+              result.acknowledgement,
+            );
+          }
         }
       }
       if (!mounted) return;
@@ -279,13 +368,17 @@ class _RecordOrderCollectionSheetState
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = error.message;
+        _error = walletSaved
+            ? 'Wallet was applied. The rest could not be saved. ${error.message}'
+            : error.message;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Unable to record this collection.';
+        _error = walletSaved
+            ? 'Wallet was applied. The rest could not be saved.'
+            : 'Unable to record this collection.';
       });
     }
   }
@@ -456,11 +549,31 @@ class _RecordOrderCollectionSheetState
                   amountLabel: _money(match.applicableAmount),
                 ),
               ],
+              if (_showWallet) ...[
+                const SizedBox(height: 16),
+                SelloTextField(
+                  controller: _wallet,
+                  label: 'Apply from wallet',
+                  helperText: '${_money(_walletAvailable)} available',
+                  enabled: !_saving,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  onChanged: (_) => setState(() {
+                    _error = null;
+                    _syncAmountToCeiling();
+                  }),
+                ),
+              ],
               const SizedBox(height: 16),
               SelloTextField(
                 controller: _amount,
-                label: 'Amount received',
-                required: true,
+                label: _showWallet ? 'Amount still to receive' : 'Amount received',
+                required:
+                    !_showWallet || _walletApplied + 0.001 < _collectableNow,
                 enabled: !_usingExisting && !_saving,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -470,8 +583,10 @@ class _RecordOrderCollectionSheetState
                 ],
               ),
               const SizedBox(height: 18),
-              const Text(
-                'How is this amount being received?',
+              Text(
+                _showWallet && _walletApplied > 0.001
+                    ? 'How is the rest being received?'
+                    : 'How is this amount being received?',
                 style: TextStyle(
                   fontFamily: AppTypography.fontFamily,
                   fontSize: 12,

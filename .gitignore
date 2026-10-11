@@ -59,6 +59,8 @@ app.*.map.json
 .env
 .env.local
 .env.release
+# Written at web build time. Public anon key only — still not committed.
+web/supabase_public.js
 
 # Android signing (never commit keystores or passwords)
 *.jks

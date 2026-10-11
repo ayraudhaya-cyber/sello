@@ -349,7 +349,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         correctionSmsSent: smsSent,
       );
     } on AppFailure catch (failure) {
-      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.fail(failure.message);
     }
   }

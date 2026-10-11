@@ -31,6 +31,9 @@ flutter --version
 flutter config --no-analytics --enable-web
 flutter pub get
 
+# iPhone invoice page reads this instead of booting Flutter. Anon key only.
+node -e 'const fs=require("fs"); fs.writeFileSync("web/supabase_public.js","window.selloPublic="+JSON.stringify({url:process.env.SUPABASE_URL,key:process.env.SUPABASE_ANON_KEY})+";\n");'
+
 # Public web origin for Auth email redirects + customer document links.
 SELLO_PUBLIC_URL="${SELLO_PUBLIC_URL:-https://sello.cashro.pro}"
 

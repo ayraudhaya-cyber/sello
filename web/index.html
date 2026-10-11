@@ -34,15 +34,49 @@
   <meta name="theme-color" content="#6C4FF2">
 </head>
 <body>
-  <script src="pwa_install.js"></script>
   <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
+    Public invoices (/d/…) opened on iPhone skip the Flutter canvas engine.
+    Safari’s advanced privacy protection blocks that engine and leaves a
+    blank page with “Reduce Protections”. Every other route still boots Flutter.
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      var path = location.pathname || "/";
+      var isDocument = path === "/d" || path.indexOf("/d/") === 0;
+      var apple =
+        /iPhone|iPad|iPod/.test(navigator.userAgent || "") ||
+        (navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1);
+
+      function loadFlutter() {
+        var pwa = document.createElement("script");
+        pwa.src = "pwa_install.js";
+        document.body.appendChild(pwa);
+        var boot = document.createElement("script");
+        boot.src = "flutter_bootstrap.js";
+        boot.async = true;
+        document.body.appendChild(boot);
+      }
+
+      if (!isDocument || !apple) {
+        loadFlutter();
+        return;
+      }
+
+      var config = document.createElement("script");
+      config.src = "supabase_public.js";
+      config.onload = function () {
+        var pub = window.selloPublic || {};
+        if (!pub.url || !pub.key) {
+          loadFlutter();
+          return;
+        }
+        var view = document.createElement("script");
+        view.src = "document_view.js";
+        document.body.appendChild(view);
+      };
+      config.onerror = loadFlutter;
+      document.body.appendChild(config);
+    })();
+  </script>
 </body>
 </html>

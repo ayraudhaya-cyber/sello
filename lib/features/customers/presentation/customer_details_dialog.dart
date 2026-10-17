@@ -11,6 +11,9 @@ import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/customer_receivable_adjustment.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_visit.dart';
+import 'package:sello/shared/models/order_summary.dart';
+import 'package:sello/shared/models/order_status.dart';
+import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/utils/phone_number.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -36,6 +39,8 @@ class CustomerDetailsDialog extends StatefulWidget {
     this.enableVisitActions = false,
     this.onNewOrder,
     this.onReceivePayment,
+    this.onViewOrder,
+    this.onReceiveOrderPayment,
   });
 
   final CustomerSummary customer;
@@ -45,7 +50,7 @@ class CustomerDetailsDialog extends StatefulWidget {
   final VoidCallback? onAddExistingCheque;
   final VoidCallback? onAddOpeningBalance;
   final Future<void> Function(CustomerReceivableAdjustment item)?
-      onCorrectOpeningBalance;
+  onCorrectOpeningBalance;
   final int openingBalanceHistoryEpoch;
   final bool readOnly;
   final String currencySymbol;
@@ -59,12 +64,14 @@ class CustomerDetailsDialog extends StatefulWidget {
   /// Hub shortcuts shown above the tabs (active customers only).
   final VoidCallback? onNewOrder;
   final VoidCallback? onReceivePayment;
+  final Future<void> Function(OrderSummary order)? onViewOrder;
+  final void Function(OrderSummary order)? onReceiveOrderPayment;
 
   @override
   State<CustomerDetailsDialog> createState() => _CustomerDetailsDialogState();
 }
 
-enum _CustomerDetailTab { overview, visitHistory }
+enum _CustomerDetailTab { overview, orders, visitHistory }
 
 class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
   static const double _sectionGap = 36;
@@ -78,7 +85,9 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
   Widget build(BuildContext context) {
     final isMobile = context.isMobile;
     final canManage =
-        !widget.readOnly && widget.onEdit != null && widget.onToggleArchive != null;
+        !widget.readOnly &&
+        widget.onEdit != null &&
+        widget.onToggleArchive != null;
 
     return SelloFormDialog(
       header: _CustomerHero(customer: customer),
@@ -136,8 +145,8 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
               onChanged: (value) => setState(() => _tab = value),
             ),
             const SizedBox(height: AppSpacing.mdPlus),
-            if (_tab == _CustomerDetailTab.overview)
-              _HubOverviewBody(
+            switch (_tab) {
+              _CustomerDetailTab.overview => _HubOverviewBody(
                 customer: customer,
                 currencySymbol: widget.currencySymbol,
                 assignedRepresentativeName: widget.assignedRepresentativeName,
@@ -148,9 +157,18 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                 onAddExistingCheque: widget.onAddExistingCheque,
                 sectionGap: _sectionGap,
                 fieldGap: _fieldGap,
-              )
-            else
-              _HubVisitHistoryBody(customer: customer),
+              ),
+              _CustomerDetailTab.orders => _HubCustomerOrdersBody(
+                customer: customer,
+                currencySymbol: widget.currencySymbol,
+                onNewOrder: widget.onNewOrder,
+                onViewOrder: widget.onViewOrder,
+                onReceivePayment: widget.onReceiveOrderPayment,
+              ),
+              _CustomerDetailTab.visitHistory => _HubVisitHistoryBody(
+                customer: customer,
+              ),
+            },
           ],
         ],
       ),
@@ -162,30 +180,27 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
               onCancel: widget.onToggleArchive,
               primaryLabel: 'Edit Customer',
               onPrimary: widget.onEdit,
-              destructiveLabel:
-                  customer.isActive ? null : 'Delete permanently',
-              onDestructive:
-                  customer.isActive ? null : widget.onDeletePermanently,
+              destructiveLabel: customer.isActive ? null : 'Delete permanently',
+              onDestructive: customer.isActive
+                  ? null
+                  : widget.onDeletePermanently,
             )
           : widget.enableVisitActions
-              ? _SalesVisitFooter(customer: customer)
-              : SelloDialogFooter(
-                  cancelLabel: 'Close',
-                  cancelVariant: SelloButtonVariant.outline,
-                  onCancel: () => Navigator.of(context).maybePop(),
-                  primaryLabel: 'New order',
-                  onPrimary: null,
-                  primaryEnabled: false,
-                ),
+          ? _SalesVisitFooter(customer: customer)
+          : SelloDialogFooter(
+              cancelLabel: 'Close',
+              cancelVariant: SelloButtonVariant.outline,
+              onCancel: () => Navigator.of(context).maybePop(),
+              primaryLabel: 'New order',
+              onPrimary: null,
+              primaryEnabled: false,
+            ),
     );
   }
 }
 
 class _CustomerDetailTabs extends StatelessWidget {
-  const _CustomerDetailTabs({
-    required this.tab,
-    required this.onChanged,
-  });
+  const _CustomerDetailTabs({required this.tab, required this.onChanged});
 
   final _CustomerDetailTab tab;
   final ValueChanged<_CustomerDetailTab> onChanged;
@@ -200,17 +215,15 @@ class _CustomerDetailTabs extends StatelessWidget {
         children: [
           _tab(context, 'Overview', _CustomerDetailTab.overview),
           const SizedBox(width: AppSpacing.lg),
+          _tab(context, 'Orders', _CustomerDetailTab.orders),
+          const SizedBox(width: AppSpacing.lg),
           _tab(context, 'Visit History', _CustomerDetailTab.visitHistory),
         ],
       ),
     );
   }
 
-  Widget _tab(
-    BuildContext context,
-    String label,
-    _CustomerDetailTab value,
-  ) {
+  Widget _tab(BuildContext context, String label, _CustomerDetailTab value) {
     final selected = tab == value;
     return InkWell(
       onTap: () => onChanged(value),
@@ -268,7 +281,7 @@ class _HubOverviewBody extends StatelessWidget {
   final int openingBalanceHistoryEpoch;
   final VoidCallback? onAddOpeningBalance;
   final Future<void> Function(CustomerReceivableAdjustment item)?
-      onCorrectOpeningBalance;
+  onCorrectOpeningBalance;
   final VoidCallback? onAddExistingCheque;
   final double sectionGap;
   final double fieldGap;
@@ -297,14 +310,14 @@ class _HubOverviewBody extends StatelessWidget {
             children: [
               SelloFormRow(
                 left: _ProfileField(
-                  label: 'Outstanding balance',
+                  label: 'Outstanding now',
                   value: SelloFormatters.currency(
                     customer.outstandingBalance,
                     symbol: currencySymbol,
                   ),
                 ),
                 right: _ProfileField(
-                  label: 'Wallet balance',
+                  label: 'Wallet credit',
                   value: SelloFormatters.currency(
                     customer.walletBalance,
                     symbol: currencySymbol,
@@ -323,12 +336,21 @@ class _HubOverviewBody extends StatelessWidget {
                       : 'Credit not allowed',
                   mutedEmpty: !customer.creditAllowed,
                 ),
-                right: _ProfileField(
-                  label: 'Opening balance',
-                  value: SelloFormatters.currency(
-                    customer.openingBalance,
-                    symbol: currencySymbol,
-                  ),
+                right: _OpeningBalanceSummaryField(
+                  customerId: customer.id,
+                  amount: customer.openingBalance,
+                  currencySymbol: currencySymbol,
+                  epoch: openingBalanceHistoryEpoch,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Outstanding now includes unpaid orders and the remaining '
+                'opening balance. Wallet credit is money available for a '
+                'future payment.',
+                style: _CustomerDetailType.label.copyWith(
+                  color: AppColors.textFaint,
+                  fontSize: 12,
                 ),
               ),
               if (hasFinancialActions) ...[
@@ -564,6 +586,331 @@ class _HubOverviewBody extends StatelessWidget {
   }
 }
 
+class _HubCustomerOrdersBody extends ConsumerStatefulWidget {
+  const _HubCustomerOrdersBody({
+    required this.customer,
+    required this.currencySymbol,
+    this.onNewOrder,
+    this.onViewOrder,
+    this.onReceivePayment,
+  });
+
+  final CustomerSummary customer;
+  final String currencySymbol;
+  final VoidCallback? onNewOrder;
+  final Future<void> Function(OrderSummary order)? onViewOrder;
+  final void Function(OrderSummary order)? onReceivePayment;
+
+  @override
+  ConsumerState<_HubCustomerOrdersBody> createState() =>
+      _HubCustomerOrdersBodyState();
+}
+
+class _HubCustomerOrdersBodyState
+    extends ConsumerState<_HubCustomerOrdersBody> {
+  static const _pageSize = 20;
+
+  List<OrderSummary> _orders = const [];
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_load);
+  }
+
+  Future<void> _load({bool more = false}) async {
+    if (more && _loadingMore) return;
+    setState(() {
+      if (more) {
+        _loadingMore = true;
+      } else {
+        _loading = true;
+        _error = null;
+      }
+    });
+    try {
+      final page = await ref
+          .read(orderRepositoryProvider)
+          .fetchOrders(
+            customerId: widget.customer.id,
+            page: more ? _orders.length ~/ _pageSize : 0,
+            pageSize: _pageSize,
+          );
+      if (!mounted) return;
+      setState(() {
+        _orders = more ? [..._orders, ...page.items] : page.items;
+        _hasMore = page.hasMore;
+        _loading = false;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Unable to load this customer’s orders.';
+        _loading = false;
+        _loadingMore = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _ProfileSection(
+      label: 'Customer orders',
+      showDivider: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _orders.isEmpty
+                      ? 'Sales and payment status for this customer.'
+                      : '${_orders.length} recent order${_orders.length == 1 ? '' : 's'}',
+                  style: _CustomerDetailType.label.copyWith(
+                    color: AppColors.textTertiary,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (widget.onNewOrder != null)
+                SelloButton(
+                  label: 'New order',
+                  icon: Icons.add_shopping_cart_rounded,
+                  size: SelloButtonSize.small,
+                  variant: SelloButtonVariant.outline,
+                  onPressed: widget.onNewOrder,
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (_error != null)
+            SelloStateView.error(
+              title: 'Orders unavailable',
+              message: _error,
+              actionLabel: 'Try again',
+              onAction: _load,
+            )
+          else if (_orders.isEmpty)
+            SelloEmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No orders yet',
+              message: 'New orders for this customer will appear here.',
+              actionLabel: widget.onNewOrder == null
+                  ? null
+                  : 'Create first order',
+              onAction: widget.onNewOrder,
+            )
+          else ...[
+            for (var index = 0; index < _orders.length; index++) ...[
+              if (index > 0) const SizedBox(height: AppSpacing.sm),
+              _CustomerOrderCard(
+                order: _orders[index],
+                currencySymbol: widget.currencySymbol,
+                onView: widget.onViewOrder == null
+                    ? null
+                    : () => widget.onViewOrder!(_orders[index]),
+                onReceivePayment:
+                    _canReceivePayment(_orders[index]) &&
+                        widget.onReceivePayment != null
+                    ? () => widget.onReceivePayment!(_orders[index])
+                    : null,
+              ),
+            ],
+            if (_hasMore) ...[
+              const SizedBox(height: AppSpacing.md),
+              Align(
+                alignment: Alignment.center,
+                child: SelloButton(
+                  label: 'Load more',
+                  size: SelloButtonSize.small,
+                  variant: SelloButtonVariant.outline,
+                  loading: _loadingMore,
+                  onPressed: _loadingMore ? null : () => _load(more: true),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  bool _canReceivePayment(OrderSummary order) {
+    return order.status.isSubmitted &&
+        order.paymentStatus != PaymentStatus.paid &&
+        order.paymentStatus != PaymentStatus.refunded;
+  }
+}
+
+class _CustomerOrderCard extends StatelessWidget {
+  const _CustomerOrderCard({
+    required this.order,
+    required this.currencySymbol,
+    this.onView,
+    this.onReceivePayment,
+  });
+
+  final OrderSummary order;
+  final String currencySymbol;
+  final VoidCallback? onView;
+  final VoidCallback? onReceivePayment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.panel),
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.orderNumber,
+                      style: _CustomerDetailType.label.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        SelloFormatters.date(order.orderedAt),
+                        if (order.employeeName != null) order.employeeName!,
+                      ].join(' · '),
+                      style: _CustomerDetailType.label.copyWith(
+                        color: AppColors.textFaint,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        SelloStatusBadge(
+                          label: order.status.label,
+                          tone: _orderTone(order.status),
+                        ),
+                        SelloStatusBadge(
+                          label: order.paymentStatus.label,
+                          tone: _paymentTone(order.paymentStatus),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                SelloFormatters.currency(order.total, symbol: currencySymbol),
+                style: _CustomerDetailType.value.copyWith(fontSize: 16),
+              ),
+              if (onView != null) ...[
+                const SizedBox(width: AppSpacing.xs),
+                _OrderIconAction(
+                  icon: Icons.visibility_outlined,
+                  tooltip: 'View order',
+                  onPressed: onView!,
+                ),
+              ],
+              if (onReceivePayment != null) ...[
+                const SizedBox(width: AppSpacing.xs),
+                _OrderIconAction(
+                  icon: Icons.payments_outlined,
+                  tooltip: 'Receive payment',
+                  emphasized: true,
+                  onPressed: onReceivePayment!,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static SelloStatusTone _orderTone(OrderStatus status) => switch (status) {
+    OrderStatus.completed => SelloStatusTone.success,
+    OrderStatus.cancelled => SelloStatusTone.neutral,
+    OrderStatus.partiallyDelivered => SelloStatusTone.warning,
+    OrderStatus.placed => SelloStatusTone.info,
+    OrderStatus.draft => SelloStatusTone.neutral,
+  };
+
+  static SelloStatusTone _paymentTone(PaymentStatus status) => switch (status) {
+    PaymentStatus.paid => SelloStatusTone.success,
+    PaymentStatus.partial => SelloStatusTone.warning,
+    PaymentStatus.refunded => SelloStatusTone.neutral,
+    PaymentStatus.unpaid => SelloStatusTone.danger,
+  };
+}
+
+class _OrderIconAction extends StatelessWidget {
+  const _OrderIconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.emphasized = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(
+        foregroundColor: emphasized
+            ? AppColors.primary
+            : AppColors.textSecondary,
+        backgroundColor: emphasized
+            ? AppColors.primaryContainer
+            : AppColors.surface,
+        side: BorderSide(
+          color: emphasized
+              ? AppColors.primary.withValues(alpha: 0.24)
+              : AppColors.outlinePanel,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+      ),
+    );
+  }
+}
+
 class _HubVisitHistoryBody extends StatelessWidget {
   const _HubVisitHistoryBody({required this.customer});
 
@@ -601,12 +948,8 @@ class _HubVisitHistoryBody extends StatelessWidget {
   }
 }
 
-
 class _FinancialAction extends StatelessWidget {
-  const _FinancialAction({
-    required this.button,
-    required this.hint,
-  });
+  const _FinancialAction({required this.button, required this.hint});
 
   final Widget button;
   final String hint;
@@ -749,10 +1092,7 @@ class _FieldSalesFocus extends StatelessWidget {
                 mutedEmpty: customer.createdAt == null,
               ),
               const SizedBox(height: 12),
-              _ProfileField(
-                label: 'Type',
-                value: customer.customerType.label,
-              ),
+              _ProfileField(label: 'Type', value: customer.customerType.label),
               if (assignedRepresentativeName != null) ...[
                 const SizedBox(height: 12),
                 _ProfileField(
@@ -811,14 +1151,14 @@ class _SalesVisitFooter extends ConsumerWidget {
       primaryLabel: visitingThis
           ? 'Open visit'
           : active == null
-              ? 'Open visit'
-              : 'Busy',
+          ? 'Open visit'
+          : 'Busy',
       primaryEnabled: visitingThis || active == null,
       onPrimary: visitingThis
           ? complete
           : active == null
-              ? start
-              : null,
+          ? start
+          : null,
     );
   }
 }
@@ -851,11 +1191,12 @@ class _CustomerVisitTimelineState
       return;
     }
     try {
-      final items =
-          await ref.read(visitRepositoryProvider).fetchCustomerVisitHistory(
-                companyId: session.company.id,
-                customerId: widget.customerId,
-              );
+      final items = await ref
+          .read(visitRepositoryProvider)
+          .fetchCustomerVisitHistory(
+            companyId: session.company.id,
+            customerId: widget.customerId,
+          );
       if (!mounted) return;
       setState(() {
         _items = items;
@@ -930,8 +1271,7 @@ class _CustomerVisitTimelineState
                     Text(
                       [
                         SelloFormatters.dateTime(_items[i].startedAt),
-                        if (_items[i].outcome != null)
-                          _items[i].outcome!.label,
+                        if (_items[i].outcome != null) _items[i].outcome!.label,
                         _items[i].durationLabel,
                       ].join(' · '),
                       style: _CustomerDetailType.label.copyWith(
@@ -957,8 +1297,7 @@ class _CustomerVisitTimelineState
                           ),
                         ),
                       ),
-                    if (_items[i].orderCount > 0 ||
-                        _items[i].paymentCount > 0)
+                    if (_items[i].orderCount > 0 || _items[i].paymentCount > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
@@ -1175,22 +1514,38 @@ class _OpeningBalanceRow extends StatelessWidget {
   final Future<void> Function(CustomerReceivableAdjustment item)? onCorrect;
 
   TextStyle get _title => _CustomerDetailType.label.copyWith(
-        color: AppColors.textPrimary,
-        fontWeight: FontWeight.w600,
-      );
+    color: AppColors.textPrimary,
+    fontWeight: FontWeight.w600,
+  );
 
   TextStyle get _meta => _CustomerDetailType.label.copyWith(
-        color: AppColors.textFaint,
-        fontSize: 12,
-      );
+    color: AppColors.textFaint,
+    fontSize: 12,
+  );
 
   @override
   Widget build(BuildContext context) {
     final reference = item.referenceNumber?.trim();
+    final collected = item.remaining <= 0.001;
+    final partiallyCollected =
+        !collected && item.remaining + 0.001 < item.amount;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Opening balance', style: _title),
+        Row(
+          children: [
+            Text('Opening balance', style: _title),
+            if (collected || partiallyCollected) ...[
+              const SizedBox(width: AppSpacing.xs),
+              SelloStatusBadge(
+                label: collected ? 'Collected' : 'Partially collected',
+                tone: collected
+                    ? SelloStatusTone.success
+                    : SelloStatusTone.warning,
+              ),
+            ],
+          ],
+        ),
         const SizedBox(height: 2),
         Text(item.adjustmentNumber, style: _title),
         if (reference != null && reference.isNotEmpty) ...[
@@ -1213,10 +1568,7 @@ class _OpeningBalanceRow extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          'Date: ${SelloFormatters.date(item.recognizedAt)}',
-          style: _meta,
-        ),
+        Text('Date: ${SelloFormatters.date(item.recognizedAt)}', style: _meta),
         if (onCorrect != null) ...[
           const SizedBox(height: 8),
           Align(
@@ -1301,11 +1653,15 @@ class _ProfileField extends StatelessWidget {
     required this.label,
     required this.value,
     this.mutedEmpty = false,
+    this.statusLabel,
+    this.statusTone,
   });
 
   final String label;
   final String value;
   final bool mutedEmpty;
+  final String? statusLabel;
+  final SelloStatusTone? statusTone;
 
   @override
   Widget build(BuildContext context) {
@@ -1314,16 +1670,112 @@ class _ProfileField extends StatelessWidget {
       children: [
         Text(label, style: _CustomerDetailType.label),
         const SizedBox(height: 6),
-        Text(
-          value,
-          style: mutedEmpty
-              ? _CustomerDetailType.value.copyWith(
-                  color: AppColors.textFaint.withValues(alpha: 0.72),
-                  fontWeight: FontWeight.w500,
-                )
-              : _CustomerDetailType.value,
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              value,
+              style: mutedEmpty
+                  ? _CustomerDetailType.value.copyWith(
+                      color: AppColors.textFaint.withValues(alpha: 0.72),
+                      fontWeight: FontWeight.w500,
+                    )
+                  : _CustomerDetailType.value,
+            ),
+            if (statusLabel != null)
+              SelloStatusBadge(
+                label: statusLabel!,
+                tone: statusTone ?? SelloStatusTone.neutral,
+              ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _OpeningBalanceSummaryField extends ConsumerStatefulWidget {
+  const _OpeningBalanceSummaryField({
+    required this.customerId,
+    required this.amount,
+    required this.currencySymbol,
+    required this.epoch,
+  });
+
+  final String customerId;
+  final num amount;
+  final String currencySymbol;
+  final int epoch;
+
+  @override
+  ConsumerState<_OpeningBalanceSummaryField> createState() =>
+      _OpeningBalanceSummaryFieldState();
+}
+
+class _OpeningBalanceSummaryFieldState
+    extends ConsumerState<_OpeningBalanceSummaryField> {
+  String? _statusLabel;
+  SelloStatusTone? _statusTone;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant _OpeningBalanceSummaryField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.customerId != widget.customerId ||
+        oldWidget.epoch != widget.epoch) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await ref
+          .read(customerRepositoryProvider)
+          .fetchOpeningBalanceAdjustments(widget.customerId);
+      if (!mounted) return;
+      final original = items.fold<num>(0, (total, item) => total + item.amount);
+      final remaining = items.fold<num>(
+        0,
+        (total, item) => total + item.remaining,
+      );
+      setState(() {
+        if (original <= 0.001 || remaining + 0.001 >= original) {
+          _statusLabel = null;
+          _statusTone = null;
+        } else if (remaining <= 0.001) {
+          _statusLabel = 'Collected';
+          _statusTone = SelloStatusTone.success;
+        } else {
+          _statusLabel = 'Partially collected';
+          _statusTone = SelloStatusTone.warning;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _statusLabel = null;
+        _statusTone = null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _ProfileField(
+      label: 'Opening balance recorded',
+      value: SelloFormatters.currency(
+        widget.amount,
+        symbol: widget.currencySymbol,
+      ),
+      statusLabel: _statusLabel,
+      statusTone: _statusTone,
     );
   }
 }

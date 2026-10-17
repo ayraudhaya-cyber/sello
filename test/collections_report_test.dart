@@ -21,6 +21,7 @@ CollectionsReportInvoice? _consider({
   String orderNumber = 'SO-1',
   List<CollectionsReportAllocation> allocations = const [],
   List<String> selectedEmployeeIds = const [],
+  int dueDays = 0,
 }) {
   return CollectionsReportMath.considerOrder(
     orderId: orderId,
@@ -37,6 +38,7 @@ CollectionsReportInvoice? _consider({
     allocations: allocations,
     asOfDate: asOf,
     selectedEmployeeIds: selectedEmployeeIds,
+    dueDays: dueDays,
   );
 }
 
@@ -64,20 +66,23 @@ void main() {
       );
     });
 
-    test('payments received after the as-of date do not reduce the balance', () {
-      final invoice = _consider(
-        asOf: asOf,
-        allocations: [
-          CollectionsReportAllocation(
-            amount: 100,
-            receivedAt: DateTime(2026, 9, 16, 9),
-            completed: true,
-          ),
-        ],
-      );
-      expect(invoice, isNotNull);
-      expect(invoice!.openBalance, 100);
-    });
+    test(
+      'payments received after the as-of date do not reduce the balance',
+      () {
+        final invoice = _consider(
+          asOf: asOf,
+          allocations: [
+            CollectionsReportAllocation(
+              amount: 100,
+              receivedAt: DateTime(2026, 9, 16, 9),
+              completed: true,
+            ),
+          ],
+        );
+        expect(invoice, isNotNull);
+        expect(invoice!.openBalance, 100);
+      },
+    );
 
     test('completed payments on or before as-of reduce the balance', () {
       final invoice = _consider(
@@ -110,10 +115,7 @@ void main() {
     });
 
     test('unapplied cheques do not reduce the balance', () {
-      expect(
-        _consider(asOf: asOf, allocations: const [])!.openBalance,
-        100,
-      );
+      expect(_consider(asOf: asOf, allocations: const [])!.openBalance, 100);
     });
 
     test('fully paid orders as of the date are excluded', () {
@@ -143,11 +145,19 @@ void main() {
   group('sales-rep filter', () {
     test('all reps includes every seller', () {
       expect(
-        _consider(asOf: asOf, salesRepId: 'rep-a', selectedEmployeeIds: const []),
+        _consider(
+          asOf: asOf,
+          salesRepId: 'rep-a',
+          selectedEmployeeIds: const [],
+        ),
         isNotNull,
       );
       expect(
-        _consider(asOf: asOf, salesRepId: 'rep-b', selectedEmployeeIds: const []),
+        _consider(
+          asOf: asOf,
+          salesRepId: 'rep-b',
+          selectedEmployeeIds: const [],
+        ),
         isNotNull,
       );
     });
@@ -249,10 +259,10 @@ void main() {
         'Alpha Traders',
         'Beta Hardware',
       ]);
-      expect(
-        snapshot.groups.first.invoices.map((i) => i.orderNumber),
-        ['SO-1', 'SO-3'],
-      );
+      expect(snapshot.groups.first.invoices.map((i) => i.orderNumber), [
+        'SO-1',
+        'SO-3',
+      ]);
     });
 
     test('customer subtotals are the sum of open invoices', () {
@@ -294,6 +304,7 @@ void main() {
           salesRepName: 'Nimal',
           openBalance: 75.5,
           agingDays: 14,
+          daysRemaining: -14,
         ),
       ],
     );
@@ -307,6 +318,7 @@ void main() {
         'Document No.',
         'Old invoice / reference',
         'Date',
+        'Due',
         'Aging (days)',
         'Open Balance',
       ]);
@@ -319,6 +331,8 @@ void main() {
       expect(xml, contains('Document Type'));
       expect(xml, contains('Document No.'));
       expect(xml, contains('Old invoice / reference'));
+      expect(xml, contains('Due'));
+      expect(xml, contains('Overdue by 14 days - Nimal'));
       expect(xml, contains('Aging (days)'));
       expect(xml, contains('Open Balance'));
       expect(xml, isNot(contains('P.O.')));
@@ -347,4 +361,45 @@ void main() {
       expect(ascii.decode(pdf.take(4).toList()), '%PDF');
     });
   });
+
+  test(
+    'due days count from the recorded day, and overdue names the follow-up',
+    () {
+      final asOf = DateTime(2026, 9, 15);
+      final recorded = DateTime(2026, 9, 10, 18);
+
+      expect(
+        CollectionsReportMath.daysRemaining(
+          recordedAt: recorded,
+          asOfDate: asOf,
+          dueDays: 7,
+        ),
+        2,
+      );
+
+      final withinGrace = _consider(
+        asOf: asOf,
+        orderedAt: recorded,
+        dueDays: 5,
+      );
+      expect(withinGrace!.dueLabel, 'Due today');
+
+      final overdue = _consider(asOf: asOf, orderedAt: DateTime(2026, 9, 1));
+      expect(overdue!.dueLabel, 'Overdue by 14 days - Nimal');
+      expect(overdue.isOverdue, isTrue);
+
+      final opening = CollectionsReportMath.considerOpeningBalance(
+        adjustmentId: 'adj-1',
+        adjustmentNumber: 'OB-1',
+        recognizedAt: DateTime(2026, 9, 1),
+        amount: 40,
+        customerId: 'c1',
+        customerName: 'Alpha Traders',
+        allocations: const [],
+        asOfDate: asOf,
+      );
+      expect(opening!.followUpName, 'Owner');
+      expect(opening.dueLabel, 'Overdue by 14 days - Owner');
+    },
+  );
 }

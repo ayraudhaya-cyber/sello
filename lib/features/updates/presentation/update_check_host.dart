@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +51,12 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
   double? _downloadFraction;
   String? _downloadError;
 
+  double _whatsNewWidth(BuildContext context, bool isMobile) {
+    final available = MediaQuery.sizeOf(context).width - (isMobile ? 32 : 48);
+    if (isMobile) return math.max(0, available);
+    return math.min(380, math.max(0, available));
+  }
+
   bool _downloadsInApp(UpdateCheckSnapshot? snapshot) {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) {
       return false;
@@ -75,26 +82,29 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
     final snapshot = async.valueOrNull;
     final isMobile = context.isMobile;
 
-    ref.listen<AsyncValue<UpdateCheckSnapshot>>(
-      updateCheckControllerProvider,
-      (previous, next) {
-        final data = next.valueOrNull;
-        if (data == null) return;
-        _maybeShowOptional(data);
-        _maybeShowHighlights(data);
-      },
-    );
+    ref.listen<AsyncValue<UpdateCheckSnapshot>>(updateCheckControllerProvider, (
+      previous,
+      next,
+    ) {
+      final data = next.valueOrNull;
+      if (data == null) return;
+      _maybeShowOptional(data);
+      _maybeShowHighlights(data);
+    });
 
-    final showOptional = _optionalVisible &&
+    final showOptional =
+        _optionalVisible &&
         snapshot?.status == UpdateCheckStatus.updateAvailable;
     final inAppDownload = _downloadsInApp(snapshot);
     final useWhatsNew =
         showOptional && _optionalStyle == UpdatePresentationStyle.whatsNew;
-    final useModal = showOptional &&
+    final useModal =
+        showOptional &&
         _optionalStyle == UpdatePresentationStyle.updateModal &&
         !inAppDownload;
     final useInstallerCard = showOptional && inAppDownload;
-    final showHighlights = _highlightsVisible &&
+    final showHighlights =
+        _highlightsVisible &&
         snapshot != null &&
         snapshot.status == UpdateCheckStatus.upToDate &&
         !showOptional;
@@ -155,24 +165,11 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
         else if (useWhatsNew)
           Positioned(
             right: isMobile ? 16 : 24,
-            left: isMobile ? 16 : null,
             bottom: 16 + MediaQuery.paddingOf(context).bottom,
-            child: SafeArea(
-              top: false,
-              left: false,
-              right: false,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: isMobile ? double.infinity : 360,
-                ),
-                child: WhatsNewShortcuts(
-                  onDismiss: _postpone,
-                  child: WhatsNewBanner(
-                    snapshot: snapshot!,
-                    onDismiss: _postpone,
-                  ),
-                ),
-              ),
+            width: _whatsNewWidth(context, isMobile),
+            child: WhatsNewShortcuts(
+              onDismiss: _postpone,
+              child: WhatsNewBanner(snapshot: snapshot!, onDismiss: _postpone),
             ),
           )
         else if (showHighlights)
@@ -287,9 +284,9 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
     if (snapshot != null) {
       _dismissedHighlightsIdentity = _highlightsKey(snapshot.installed);
       final app = ref.read(releaseAppKindProvider);
-      await ReleaseHighlightsStore(appKey: app?.jsonKey).markSeen(
-        installed: snapshot.installed,
-      );
+      await ReleaseHighlightsStore(
+        appKey: app?.jsonKey,
+      ).markSeen(installed: snapshot.installed);
     }
     if (!mounted) return;
     setState(() => _highlightsVisible = false);
@@ -332,10 +329,7 @@ class _UpdateCheckHostState extends ConsumerState<UpdateCheckHost> {
     }
     final ok = await launchUrl(parsed, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      SelloSnackbars.info(
-        context,
-        'Unable to open the update destination.',
-      );
+      SelloSnackbars.info(context, 'Unable to open the update destination.');
     }
   }
 

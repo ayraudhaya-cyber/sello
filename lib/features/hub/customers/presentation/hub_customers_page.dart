@@ -14,6 +14,7 @@ import 'package:sello/features/customers/presentation/add_opening_balance_dialog
 import 'package:sello/features/customers/presentation/customer_details_dialog.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/payments/presentation/add_existing_cheque_dialog.dart';
+import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/quick_actions/quick_actions_launcher.dart';
 import 'package:sello/services/session/session_provider.dart';
@@ -22,6 +23,7 @@ import 'package:sello/shared/models/customer_receivable_adjustment.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
+import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/role_permission_profile.dart';
 import 'package:sello/shared/utils/browser_file_download.dart';
 import 'package:sello/shared/utils/formatters.dart';
@@ -277,6 +279,17 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
                   context,
                   ref,
                   customer: customer,
+                );
+              },
+        onReceiveOrderPayment: !canCollect
+            ? null
+            : (order) async {
+                Navigator.of(dialogContext).pop();
+                await QuickActionsLauncher.receivePayment(
+                  context,
+                  ref,
+                  customer: customer,
+                  preferredOrderId: order.id,
                 );
               },
         onAddExistingCheque: () async {
@@ -1581,6 +1594,7 @@ class _HubCustomerDetailsHost extends ConsumerStatefulWidget {
     this.assignedRepresentativeName,
     this.onNewOrder,
     this.onReceivePayment,
+    this.onReceiveOrderPayment,
     this.onAddExistingCheque,
     this.onEdit,
     this.onToggleArchive,
@@ -1594,6 +1608,7 @@ class _HubCustomerDetailsHost extends ConsumerStatefulWidget {
   final Future<String?>? assignedRepresentativeName;
   final VoidCallback? onNewOrder;
   final VoidCallback? onReceivePayment;
+  final void Function(OrderSummary order)? onReceiveOrderPayment;
   final VoidCallback? onAddExistingCheque;
   final VoidCallback? onEdit;
   final VoidCallback? onToggleArchive;
@@ -1674,6 +1689,31 @@ class _HubCustomerDetailsHostState
     SelloSnackbars.success(context, 'Opening balance corrected.');
   }
 
+  Future<void> _viewOrder(OrderSummary order) async {
+    try {
+      final detail = await ref
+          .read(orderRepositoryProvider)
+          .fetchById(order.id);
+      if (!mounted) return;
+      if (detail == null) {
+        SelloSnackbars.error(context, 'Unable to load that order.');
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => OrderDetailsDialog(
+          detail: detail,
+          currencySymbol: widget.currencySymbol,
+          readOnly: true,
+        ),
+      );
+    } on AppFailure catch (failure) {
+      if (mounted) SelloSnackbars.error(context, failure.message);
+    } catch (_) {
+      if (mounted) SelloSnackbars.error(context, 'Unable to load that order.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final canAdd =
@@ -1694,6 +1734,8 @@ class _HubCustomerDetailsHostState
           : null,
       onNewOrder: widget.onNewOrder,
       onReceivePayment: widget.onReceivePayment,
+      onViewOrder: _viewOrder,
+      onReceiveOrderPayment: widget.onReceiveOrderPayment,
       onAddExistingCheque: widget.onAddExistingCheque,
       onEdit: widget.onEdit,
       onToggleArchive: widget.onToggleArchive,

@@ -559,6 +559,7 @@ class PaymentRepository {
             )
             .eq('customer_id', customerId)
             .eq('kind', 'opening_balance')
+            .isFilter('reversed_at', null)
             .order('recognized_at'),
       ]);
       final rows = base[0] as List;

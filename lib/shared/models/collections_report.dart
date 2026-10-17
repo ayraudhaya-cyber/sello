@@ -51,6 +51,7 @@ class CollectionsReportInvoice extends Equatable {
     required this.salesRepName,
     required this.openBalance,
     required this.agingDays,
+    this.daysRemaining = 0,
     this.customerPhone,
     this.documentType = kCollectionsDocumentType,
     this.referenceNumber,
@@ -66,26 +67,48 @@ class CollectionsReportInvoice extends Equatable {
   final String salesRepName;
   final num openBalance;
   final int agingDays;
+
+  /// Days from the as-of date until this row is due. Negative means overdue.
+  final int daysRemaining;
   final String documentType;
 
   /// Pre-Sello invoice / reference. Never replaces [orderNumber].
   final String? referenceNumber;
 
+  /// Sales rep on an order. Opening balances have no rep, so the owner follows up.
+  String get followUpName {
+    final name = salesRepName.trim();
+    if (name.isEmpty || name == '—') return 'Owner';
+    return name;
+  }
+
+  bool get isOverdue => daysRemaining < 0;
+
+  String get dueLabel {
+    if (daysRemaining > 1) return 'Due in $daysRemaining days';
+    if (daysRemaining == 1) return 'Due in 1 day';
+    if (daysRemaining == 0) return 'Due today';
+    final overdue = -daysRemaining;
+    final when = overdue == 1 ? 'Overdue by 1 day' : 'Overdue by $overdue days';
+    return '$when - $followUpName';
+  }
+
   @override
   List<Object?> get props => [
-        orderId,
-        orderNumber,
-        orderedAt,
-        customerId,
-        customerName,
-        customerPhone,
-        salesRepId,
-        salesRepName,
-        openBalance,
-        agingDays,
-        documentType,
-        referenceNumber,
-      ];
+    orderId,
+    orderNumber,
+    orderedAt,
+    customerId,
+    customerName,
+    customerPhone,
+    salesRepId,
+    salesRepName,
+    openBalance,
+    agingDays,
+    daysRemaining,
+    documentType,
+    referenceNumber,
+  ];
 }
 
 /// Invoices belonging to one customer.
@@ -108,8 +131,7 @@ class CollectionsReportCustomerGroup extends Equatable {
   /// Header sales-rep label. Mixed sellers on one customer become explicit.
   String get salesRepLabel {
     final names = <String>{
-      for (final invoice in invoices)
-        if (invoice.salesRepName.trim().isNotEmpty) invoice.salesRepName.trim(),
+      for (final invoice in invoices) invoice.followUpName,
     };
     if (names.isEmpty) return '—';
     if (names.length == 1) return names.first;
@@ -117,8 +139,12 @@ class CollectionsReportCustomerGroup extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [customerId, customerName, customerPhone, invoices];
+  List<Object?> get props => [
+    customerId,
+    customerName,
+    customerPhone,
+    invoices,
+  ];
 }
 
 /// Shared snapshot used by preview, Excel, and PDF.
@@ -136,13 +162,15 @@ class CollectionsReportSnapshot extends Equatable {
   final String currencySymbol;
 
   List<CollectionsReportInvoice> get invoices => [
-        for (final group in groups) ...group.invoices,
-      ];
+    for (final group in groups) ...group.invoices,
+  ];
 
   num get grandTotal =>
       groups.fold<num>(0, (sum, group) => sum + group.subtotal);
 
   bool get isEmpty => invoices.isEmpty;
+
+  int get overdueCount => invoices.where((invoice) => invoice.isOverdue).length;
 
   @override
   List<Object?> get props => [asOfDate, salesRepsLabel, groups, currencySymbol];
@@ -177,13 +205,26 @@ abstract final class CollectionsReportMath {
       orderedAt.toLocal().month,
       orderedAt.toLocal().day,
     );
-    final asOfDay = DateTime(
-      asOfDate.year,
-      asOfDate.month,
-      asOfDate.day,
-    );
+    final asOfDay = DateTime(asOfDate.year, asOfDate.month, asOfDate.day);
     final days = asOfDay.difference(orderDay).inDays;
     return days < 0 ? 0 : days;
+  }
+
+  /// Days still left before [recordedAt] plus [dueDays]. Negative means overdue
+  /// as of [asOfDate].
+  static int daysRemaining({
+    required DateTime recordedAt,
+    required DateTime asOfDate,
+    required int dueDays,
+  }) {
+    final start = DateTime(
+      recordedAt.toLocal().year,
+      recordedAt.toLocal().month,
+      recordedAt.toLocal().day,
+    );
+    final asOf = DateTime(asOfDate.year, asOfDate.month, asOfDate.day);
+    final due = start.add(Duration(days: dueDays < 0 ? 0 : dueDays));
+    return due.difference(asOf).inDays;
   }
 
   static String salesRepsLabel({
@@ -236,10 +277,12 @@ abstract final class CollectionsReportMath {
     required DateTime asOfEndUtc,
   }) {
     final remaining =
-        (total - completedAllocatedAsOf(
-          allocations: allocations,
-          asOfEndUtc: asOfEndUtc,
-        )).clamp(0, double.infinity);
+        (total -
+                completedAllocatedAsOf(
+                  allocations: allocations,
+                  asOfEndUtc: asOfEndUtc,
+                ))
+            .clamp(0, double.infinity);
     if (remaining <= kCollectionsOpenBalanceEpsilon) return null;
     return remaining;
   }
@@ -260,6 +303,7 @@ abstract final class CollectionsReportMath {
     required List<CollectionsReportAllocation> allocations,
     required DateTime asOfDate,
     List<String> selectedEmployeeIds = const [],
+    int dueDays = 0,
   }) {
     final cutoff = asOfEndUtc(asOfDate);
     if (!isEligibleOrder(
@@ -293,6 +337,11 @@ abstract final class CollectionsReportMath {
       salesRepName: salesRepName,
       openBalance: open,
       agingDays: agingDays(orderedAt: orderedAt, asOfDate: asOfDate),
+      daysRemaining: daysRemaining(
+        recordedAt: orderedAt,
+        asOfDate: asOfDate,
+        dueDays: dueDays,
+      ),
     );
   }
 
@@ -314,6 +363,7 @@ abstract final class CollectionsReportMath {
     required DateTime asOfDate,
     List<String> selectedEmployeeIds = const [],
     String? referenceNumber,
+    int dueDays = 0,
   }) {
     if (!includeOpeningBalanceForSalesReps(selectedEmployeeIds)) {
       return null;
@@ -337,6 +387,11 @@ abstract final class CollectionsReportMath {
       salesRepName: '—',
       openBalance: open,
       agingDays: agingDays(orderedAt: recognizedAt, asOfDate: asOfDate),
+      daysRemaining: daysRemaining(
+        recordedAt: recognizedAt,
+        asOfDate: asOfDate,
+        dueDays: dueDays,
+      ),
       documentType: kCollectionsOpeningBalanceDocumentType,
       referenceNumber: referenceNumber,
     );
@@ -353,25 +408,25 @@ abstract final class CollectionsReportMath {
       byCustomer.putIfAbsent(invoice.customerId, () => []).add(invoice);
     }
 
-    final groups = byCustomer.entries.map((entry) {
-      final rows = [...entry.value]
-        ..sort((a, b) {
-          final byDate = a.orderedAt.compareTo(b.orderedAt);
-          if (byDate != 0) return byDate;
-          return a.orderNumber.compareTo(b.orderNumber);
-        });
-      return CollectionsReportCustomerGroup(
-        customerId: entry.key,
-        customerName: rows.first.customerName,
-        customerPhone: rows.first.customerPhone,
-        invoices: rows,
-      );
-    }).toList()
-      ..sort(
-        (a, b) => a.customerName.toLowerCase().compareTo(
-              b.customerName.toLowerCase(),
-            ),
-      );
+    final groups =
+        byCustomer.entries.map((entry) {
+          final rows = [...entry.value]
+            ..sort((a, b) {
+              final byDate = a.orderedAt.compareTo(b.orderedAt);
+              if (byDate != 0) return byDate;
+              return a.orderNumber.compareTo(b.orderNumber);
+            });
+          return CollectionsReportCustomerGroup(
+            customerId: entry.key,
+            customerName: rows.first.customerName,
+            customerPhone: rows.first.customerPhone,
+            invoices: rows,
+          );
+        }).toList()..sort(
+          (a, b) => a.customerName.toLowerCase().compareTo(
+            b.customerName.toLowerCase(),
+          ),
+        );
 
     return CollectionsReportSnapshot(
       asOfDate: DateTime(asOfDate.year, asOfDate.month, asOfDate.day),

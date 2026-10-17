@@ -76,9 +76,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '${RoutePaths.orderDocument}/:token',
         name: 'orderDocument',
-        builder: (context, state) => OrderDocumentPage(
-          token: state.pathParameters['token'] ?? '',
-        ),
+        builder: (context, state) =>
+            OrderDocumentPage(token: state.pathParameters['token'] ?? ''),
       ),
       GoRoute(
         path: RoutePaths.selloVisit,
@@ -86,6 +85,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final q = state.uri.queryParameters;
           return CustomerVisitWorkspacePage(
+            key: ValueKey(
+              '${q['customer']}|${q['scheduled']}|${q['walkin']}|${q['name']}',
+            ),
             customerId: q['customer'],
             scheduledVisitId: q['scheduled'],
             customerName: q['name'],
@@ -166,10 +168,8 @@ StatefulShellBranch _branch(String path, Widget child) {
     routes: [
       GoRoute(
         path: path,
-        pageBuilder: (context, state) => NoTransitionPage(
-          key: state.pageKey,
-          child: child,
-        ),
+        pageBuilder: (context, state) =>
+            NoTransitionPage(key: state.pageKey, child: child),
       ),
     ],
   );

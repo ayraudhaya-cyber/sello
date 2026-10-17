@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.15",
-        "build": 16,
-        "released_at": "2026-10-11",
-        "notes": "Pull down to refresh Home, Customers, Products, and Orders, and keep scrolling to load more\nHome and My collections update as soon as a payment is recorded\nPaid today selects the order you just placed at that customer\nProduct photos you have already opened stay on the phone\nA visit stays on this phone when you are offline. Orders and payments need a connection\nInvoice and receipt links in messages are shorter\nPrinted invoices use the compact layout when your business turns it on\nCompact invoices show the sales rep name and mobile number together\nClear filters in one tap on Customers, Products, and Orders\nInvoice links open on iPhone\nApply wallet credit when recording a collection, then take the rest in cash, card, bank, or cheque\nWhat's new shows the notes for this version\nPrinted invoices leave out the browser date, title, and page count"
+        "version": "1.0.16",
+        "build": 17,
+        "released_at": "2026-10-17",
+        "notes": "See the total value of today’s orders alongside order and visit counts\nMove directly to an in-progress visit, or close it and continue to another customer\nMobile invoice links use a cleaner compact header and address layout\nRecord collections against specific unpaid orders or opening balances\nSee when an opening balance is partially collected or fully collected\nDelivery updates can automatically text the buyer and, when configured, the Owner or Manager\nOrder delivery messages can include the secure invoice link"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.15",
-        "build": 16,
-        "released_at": "2026-10-11",
-        "notes": "Approve or reject a collection from the Payments list, or approve several at once\nFilter customers who owe money, sort the list, and start an order or record a payment from their details\nExport the current Orders or Customers list to Excel\nCorrect a payment, an opening balance, or cheque details, and reassign an order to another sales rep\nThe dashboard Year range is this calendar year. Outstanding and Low stock open the matching list\nOn a computer, Alt+O starts an order, Alt+M records a payment, Alt+C adds a customer, and Alt+P adds a product\nChoose a compact invoice that fits more items on a page, in solid black for dot-matrix printers\nPrint the logo in black, and put an authorized signature on every compact invoice\nInvoice and receipt links in messages are shorter\nCompact invoices show the sales rep name and mobile number, and a Discount column on every line\nCorrect a placed, delivered, or completed invoice. The same invoice link shows the change\nChoose whether a corrected invoice texts the buyer again\nClear filters in one click on lists, Schedule, and Reports\nInvoice links open on iPhone\nApply wallet credit on Record collection, then take the rest in cash, card, bank, or cheque\nWhat's new shows the notes for this version\nPrinted invoices leave out the browser date, title, and page count"
+        "version": "1.0.16",
+        "build": 17,
+        "released_at": "2026-10-17",
+        "notes": "Customer details now include an Orders tab with status, view, and receive-payment actions\nOpening balances stay separate from wallet credit and show partially collected or collected status\nCollections must be allocated to unpaid orders or opening balances before any excess becomes wallet credit\nConfigure automatic delivery SMS messages for buyers and Owners or Managers\nRecord when a customer cheque is given to another person and when it is returned\nExport collection reports with the improved PDF and Excel layouts\nMobile invoice links use a cleaner compact header and address layout"
       },
       "minimum": {
         "version": "1.0.0",

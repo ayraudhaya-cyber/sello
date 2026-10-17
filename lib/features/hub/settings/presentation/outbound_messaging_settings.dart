@@ -243,6 +243,12 @@ const _eventGroups = <_EventGroup>[
     ],
   ),
   _EventGroup(
+    title: 'When a delivery is recorded',
+    subtitle:
+        'Automatically text the buyer or your team after a partial or full delivery.',
+    types: [OutboundNotificationType.orderDelivery],
+  ),
+  _EventGroup(
     title: 'When a collection is recorded',
     subtitle:
         'Tell your team what was collected, and the buyer when a collection '
@@ -531,6 +537,8 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
     );
 
     final toBuyer = widget.type.audienceHeading == 'Message to the buyer';
+    final deliverySmsOnly =
+        widget.type == OutboundNotificationType.orderDelivery;
     final whatsappOn = policy.whatsapp && widget.masterWhatsapp;
     final smsOn = policy.sms && widget.masterSms;
     return _SettingsPanel(
@@ -692,22 +700,24 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
               panel: true,
               icon: Icons.tune_rounded,
               title: 'Channels for this message',
-              subtitle:
-                  'WhatsApp ${whatsappOn ? 'on' : 'off'} · '
-                  'SMS ${smsOn ? 'on' : 'off'}',
+              subtitle: deliverySmsOnly
+                  ? 'SMS ${smsOn ? 'on' : 'off'}'
+                  : 'WhatsApp ${whatsappOn ? 'on' : 'off'} · '
+                        'SMS ${smsOn ? 'on' : 'off'}',
               child: SettingsTwoUp(
                 children: [
-                  SelloStatusToggle(
-                    value: policy.whatsapp && widget.masterWhatsapp,
-                    label: 'WhatsApp',
-                    helper: widget.masterWhatsapp
-                        ? 'Uses the company WhatsApp channel.'
-                        : 'Enable WhatsApp under Channels first.',
-                    onChanged: widget.masterWhatsapp
-                        ? (value) =>
-                              _patchPolicy(policy.copyWith(whatsapp: value))
-                        : (_) {},
-                  ),
+                  if (!deliverySmsOnly)
+                    SelloStatusToggle(
+                      value: policy.whatsapp && widget.masterWhatsapp,
+                      label: 'WhatsApp',
+                      helper: widget.masterWhatsapp
+                          ? 'Uses the company WhatsApp channel.'
+                          : 'Enable WhatsApp under Channels first.',
+                      onChanged: widget.masterWhatsapp
+                          ? (value) =>
+                                _patchPolicy(policy.copyWith(whatsapp: value))
+                          : (_) {},
+                    ),
                   SelloStatusToggle(
                     value: policy.sms && widget.masterSms,
                     label: 'SMS',
@@ -750,6 +760,10 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
       OutboundNotificationType.orderConfirmation ||
       OutboundNotificationType.orderNotification =>
         OutboundRecipientTarget.values,
+      OutboundNotificationType.orderDelivery => const [
+        OutboundRecipientTarget.customer,
+        OutboundRecipientTarget.hub,
+      ],
       OutboundNotificationType.collectionAcknowledgement ||
       OutboundNotificationType.collectionSubmitted => const [
         OutboundRecipientTarget.customer,

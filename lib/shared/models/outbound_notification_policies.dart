@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 enum OutboundNotificationType {
   orderConfirmation,
   orderNotification,
+  orderDelivery,
   collectionAcknowledgement,
   collectionSubmitted,
   invoice,
@@ -12,6 +13,7 @@ enum OutboundNotificationType {
   String get dbKey => switch (this) {
     OutboundNotificationType.orderConfirmation => 'order_confirmation',
     OutboundNotificationType.orderNotification => 'new_order_notification',
+    OutboundNotificationType.orderDelivery => 'order_delivery',
     OutboundNotificationType.collectionAcknowledgement =>
       'collection_acknowledgement',
     OutboundNotificationType.collectionSubmitted => 'collection_submitted',
@@ -22,6 +24,7 @@ enum OutboundNotificationType {
   String get label => switch (this) {
     OutboundNotificationType.orderConfirmation => 'Order confirmation',
     OutboundNotificationType.orderNotification => 'New order',
+    OutboundNotificationType.orderDelivery => 'Order delivered',
     OutboundNotificationType.collectionAcknowledgement =>
       'Collection acknowledgement',
     OutboundNotificationType.collectionSubmitted => 'Collection notice',
@@ -31,6 +34,7 @@ enum OutboundNotificationType {
 
   /// Short heading used inside an event group in Settings.
   String get audienceHeading => switch (this) {
+    OutboundNotificationType.orderDelivery => 'Delivery update',
     OutboundNotificationType.orderConfirmation ||
     OutboundNotificationType.collectionAcknowledgement ||
     OutboundNotificationType.invoice ||
@@ -42,6 +46,7 @@ enum OutboundNotificationType {
   String get audienceLabel => switch (this) {
     OutboundNotificationType.orderConfirmation => 'Buyer',
     OutboundNotificationType.orderNotification => 'Owner / Manager',
+    OutboundNotificationType.orderDelivery => 'Buyer / Owner / Manager',
     OutboundNotificationType.collectionAcknowledgement => 'Buyer',
     OutboundNotificationType.collectionSubmitted => 'Owner / Manager',
     OutboundNotificationType.invoice => 'Buyer',
@@ -53,6 +58,8 @@ enum OutboundNotificationType {
       'Sent to the buyer when an order is completed. Keep it short — the invoice link opens the full item list.',
     OutboundNotificationType.orderNotification =>
       'Sent to the configured Owner / Manager when a new order is completed.',
+    OutboundNotificationType.orderDelivery =>
+      'Sent automatically to the selected recipients whenever an authorised user records a partial or full delivery.',
     OutboundNotificationType.collectionAcknowledgement =>
       'Sent when a Sales Rep submits a collection that needs approval. Balances do not change until an Owner / Manager approves.',
     OutboundNotificationType.collectionSubmitted =>
@@ -66,6 +73,7 @@ enum OutboundNotificationType {
   bool get isOrderFamily => switch (this) {
     OutboundNotificationType.orderConfirmation ||
     OutboundNotificationType.orderNotification ||
+    OutboundNotificationType.orderDelivery ||
     OutboundNotificationType.invoice => true,
     _ => false,
   };
@@ -76,6 +84,7 @@ enum OutboundNotificationType {
     return switch (key) {
       'order_confirmation' => OutboundNotificationType.orderConfirmation,
       'new_order_notification' => OutboundNotificationType.orderNotification,
+      'order_delivery' => OutboundNotificationType.orderDelivery,
       'collection_acknowledgement' =>
         OutboundNotificationType.collectionAcknowledgement,
       'collection_submitted' => OutboundNotificationType.collectionSubmitted,
@@ -89,6 +98,7 @@ enum OutboundNotificationType {
   static const List<OutboundNotificationType> settingsOrder = [
     OutboundNotificationType.orderConfirmation,
     OutboundNotificationType.orderNotification,
+    OutboundNotificationType.orderDelivery,
     OutboundNotificationType.collectionAcknowledgement,
     OutboundNotificationType.collectionSubmitted,
   ];
@@ -257,6 +267,13 @@ class OutboundNotificationPolicies extends Equatable {
         sms: true,
         includeDocumentLink: true,
         recipients: [OutboundRecipientTarget.hub],
+      ),
+      OutboundNotificationType.orderDelivery: OutboundTypePolicy(
+        enabled: true,
+        whatsapp: false,
+        sms: true,
+        includeDocumentLink: true,
+        recipients: [OutboundRecipientTarget.customer],
       ),
       OutboundNotificationType.collectionAcknowledgement: OutboundTypePolicy(
         enabled: true,

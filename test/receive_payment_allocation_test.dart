@@ -96,5 +96,27 @@ void main() {
         isNull,
       );
     });
+
+    test(
+      'payment must cover listed receivables before creating wallet credit',
+      () {
+        expect(
+          ReceivePaymentAllocation.validate(
+            paymentAmount: 640,
+            allocations: const {},
+            receivables: [small, mid],
+          ),
+          contains('Allocate the payment'),
+        );
+        expect(
+          ReceivePaymentAllocation.validate(
+            paymentAmount: 1500,
+            allocations: {'so-1': 640, 'so-2': 480},
+            receivables: [small, mid],
+          ),
+          isNull,
+        );
+      },
+    );
   });
 }

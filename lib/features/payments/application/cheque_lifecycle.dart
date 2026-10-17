@@ -35,6 +35,18 @@ const chequeBounceActionHint =
 
 const chequeCancelActionHint = 'Use this if this cheque will not be used.';
 
+const chequeGiveActionHint =
+    'Use this when you hand this customer’s cheque to someone else, such as a distributor.';
+
+const chequeRecallGivenHint =
+    'Use this when that person gives the paper cheque back. What the customer owes does not change.';
+
+const chequeReturnToCustomerHint =
+    'Use this when you give the cheque back to the customer. What they owe goes back up.';
+
+const chequeEditGivenHint =
+    'Use this to correct who received the cheque, or the date.';
+
 const chequeBatchDepositHint =
     'Use this after you take the selected cheques to your bank.';
 
@@ -269,3 +281,17 @@ String defaultChequeHolderName({
 }
 
 bool chequeEligibleForBatchDeposit(ChequeSummary cheque) => cheque.canDeposit;
+
+bool chequeShowsGive({
+  required ChequeSummary cheque,
+  required bool canManageClearance,
+}) {
+  return canManageClearance && cheque.canGive;
+}
+
+bool chequeShowsGivenFollowUp({
+  required ChequeSummary cheque,
+  required bool canManageClearance,
+}) {
+  return canManageClearance && cheque.status == ChequeStatus.given;
+}

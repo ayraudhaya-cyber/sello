@@ -5,6 +5,7 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/payments/application/cheque_lifecycle.dart';
+import 'package:sello/features/payments/presentation/give_cheque_dialog.dart';
 import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/payment_summary.dart';
@@ -21,6 +22,10 @@ class ChequeDetailsDialog extends ConsumerStatefulWidget {
     this.canManageClearance = false,
     this.onCollect,
     this.onApprove,
+    this.onGive,
+    this.onEditGiven,
+    this.onRecallGiven,
+    this.onReturnToCustomer,
     this.onDeposit,
     this.onClear,
     this.onBounce,
@@ -34,6 +39,10 @@ class ChequeDetailsDialog extends ConsumerStatefulWidget {
   final bool canManageClearance;
   final Future<String?> Function(CollectChequeInput input)? onCollect;
   final Future<String?> Function()? onApprove;
+  final Future<String?> Function(GiveChequeInput input)? onGive;
+  final Future<String?> Function(GiveChequeInput input)? onEditGiven;
+  final Future<String?> Function()? onRecallGiven;
+  final Future<String?> Function(String? reason)? onReturnToCustomer;
   final Future<String?> Function()? onDeposit;
   final Future<String?> Function()? onClear;
   final Future<String?> Function(String? reason)? onBounce;
@@ -208,6 +217,71 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
     );
   }
 
+  Future<void> _editGiven() async {
+    final action = widget.onEditGiven;
+    if (action == null) return;
+    final input = await showDialog<GiveChequeInput>(
+      context: context,
+      builder: (context) => GiveChequeDialog(cheque: _cheque, editing: true),
+    );
+    if (!mounted || input == null) return;
+    await _run(() => action(input));
+  }
+
+  Future<void> _recallGiven() async {
+    final action = widget.onRecallGiven;
+    if (action == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => SelloFormDialog(
+        title: 'Bring this cheque back?',
+        subtitle:
+            'You have the paper again. What the customer owes does not change. '
+            'You can take it to your bank, or give it to someone else.',
+        maxWidth: 440,
+        body: const SizedBox.shrink(),
+        footer: SelloDialogFooter(
+          cancelLabel: 'Back',
+          cancelVariant: SelloButtonVariant.outline,
+          onCancel: () => Navigator.of(context).pop(false),
+          primaryLabel: 'I have it back',
+          onPrimary: () => Navigator.of(context).pop(true),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _run(action);
+  }
+
+  Future<void> _returnToCustomer() async {
+    final historical = _cheque.isTrackingOnly;
+    final result = await showDialog<_ReasonResult>(
+      context: context,
+      builder: (context) => _ReasonDialog(
+        title: 'Return this cheque to the customer?',
+        subtitle: historical
+            ? 'This is an old record. What the customer owes will not change.'
+            : 'What the customer owes will go back up. The payment record stays.',
+        confirmLabel: 'Return to customer',
+      ),
+    );
+    if (!mounted || result == null || !result.submitted) return;
+    final action = widget.onReturnToCustomer;
+    if (action == null) return;
+    await _run(() => action(result.reason));
+  }
+
+  Future<void> _give() async {
+    final action = widget.onGive;
+    if (action == null) return;
+    final input = await showDialog<GiveChequeInput>(
+      context: context,
+      builder: (context) => GiveChequeDialog(cheque: _cheque),
+    );
+    if (!mounted || input == null) return;
+    await _run(() => action(input));
+  }
+
   Future<void> _runForward(ChequeForwardAction action) {
     return switch (action) {
       ChequeForwardAction.collect => _collect(),
@@ -271,6 +345,18 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
           canManageClearance: widget.canManageClearance,
         ) &&
         widget.onBounce != null;
+    final showGivenFollowUp =
+        chequeShowsGivenFollowUp(
+          cheque: cheque,
+          canManageClearance: widget.canManageClearance,
+        ) &&
+        widget.onRecallGiven != null;
+    final showGive =
+        chequeShowsGive(
+          cheque: cheque,
+          canManageClearance: widget.canManageClearance,
+        ) &&
+        widget.onGive != null;
     final showCancel =
         chequeShowsCancel(
           cheque: cheque,
@@ -308,6 +394,8 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
                     SelloStatusTone.warning,
                   ChequeStatus.collected ||
                   ChequeStatus.deposited => SelloStatusTone.info,
+                  ChequeStatus.given => SelloStatusTone.neutral,
+                  ChequeStatus.returnedToCustomer => SelloStatusTone.warning,
                   ChequeStatus.cleared => SelloStatusTone.success,
                   ChequeStatus.bounced ||
                   ChequeStatus.cancelled => SelloStatusTone.danger,
@@ -326,8 +414,20 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
               cheque.status == ChequeStatus.collected)
             const _ChequeNotice(
               text:
-                  'What the customer owes already includes this cheque. Next, take '
-                  'it to your bank. That does not take more money from the customer.',
+                  'What the customer owes already includes this cheque. Take it '
+                  'to your bank, or give it to someone else. Neither takes more '
+                  'money from the customer.',
+            )
+          else if (status == ChequeStatus.given)
+            _ChequeNotice(
+              text: cheque.givenToName == null
+                  ? 'You gave this cheque to someone else. Bring it back if you have the paper again, or return it to the customer if they should owe this amount.'
+                  : 'You gave this cheque to ${cheque.givenToName}. Bring it back if you have the paper again, or return it to the customer if they should owe this amount.',
+            )
+          else if (status == ChequeStatus.returnedToCustomer)
+            const _ChequeNotice(
+              text:
+                  'This cheque was given back to the customer. What they owe includes this amount again.',
             )
           else if (status == ChequeStatus.deposited)
             const _ChequeNotice(
@@ -363,6 +463,19 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
                   SelloFormatters.date(cheque.chequeDate),
                 ),
               ),
+              if (cheque.givenToName != null) ...[
+                const SizedBox(height: 14),
+                SelloFormRow(
+                  left: _field('Given to', cheque.givenToName!),
+                  right: _field(
+                    'Date given',
+                    cheque.givenOn == null
+                        ? dash
+                        : SelloFormatters.date(cheque.givenOn),
+                    muted: cheque.givenOn == null,
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               SelloFormRow(
                 left: _field(
@@ -424,6 +537,22 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
                 ),
               ],
             ),
+          if (cheque.givenNote != null)
+            SelloDialogSection(
+              title: 'Note when given',
+              bottomSpacing: 16,
+              children: [
+                Text(
+                  cheque.givenNote!,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 14,
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           if (cheque.notes != null)
             SelloDialogSection(
               title: 'Notes',
@@ -440,16 +569,23 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
                 ),
               ],
             ),
-          if (cheque.bounceReason != null || cheque.cancelReason != null)
+          if (cheque.bounceReason != null ||
+              cheque.cancelReason != null ||
+              cheque.returnReason != null)
             SelloDialogSection(
               title: 'Reason',
               bottomSpacing: 16,
               children: [
                 _field(
-                  cheque.bounceReason != null
+                  cheque.returnReason != null
+                      ? 'Why it was returned to the customer'
+                      : cheque.bounceReason != null
                       ? 'Why the bank returned it'
                       : 'Why it was cancelled',
-                  cheque.bounceReason ?? cheque.cancelReason ?? dash,
+                  cheque.returnReason ??
+                      cheque.bounceReason ??
+                      cheque.cancelReason ??
+                      dash,
                 ),
               ],
             ),
@@ -504,6 +640,33 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
               variant: SelloButtonVariant.ghost,
               tooltip: chequeCancelActionHint,
               onPressed: _busy ? null : _cancelCheque,
+            ),
+          if (showGivenFollowUp) ...[
+            SelloButton(
+              label: 'Edit who received it',
+              variant: SelloButtonVariant.ghost,
+              tooltip: chequeEditGivenHint,
+              onPressed: _busy ? null : _editGiven,
+            ),
+            SelloButton(
+              label: 'I have it back',
+              variant: SelloButtonVariant.outline,
+              tooltip: chequeRecallGivenHint,
+              onPressed: _busy ? null : _recallGiven,
+            ),
+            SelloButton(
+              label: 'Return to customer',
+              variant: SelloButtonVariant.outline,
+              tooltip: chequeReturnToCustomerHint,
+              onPressed: _busy ? null : _returnToCustomer,
+            ),
+          ],
+          if (showGive)
+            SelloButton(
+              label: 'Give to someone',
+              variant: SelloButtonVariant.outline,
+              tooltip: chequeGiveActionHint,
+              onPressed: _busy ? null : _give,
             ),
           if (next != null)
             SelloButton(

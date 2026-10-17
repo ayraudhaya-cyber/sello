@@ -13,6 +13,7 @@ abstract final class CollectionsReportExcelExporter {
     'Document No.',
     'Old invoice / reference',
     'Date',
+    'Due',
     'Aging (days)',
     'Open Balance',
   ];
@@ -38,11 +39,12 @@ abstract final class CollectionsReportExcelExporter {
       buffer.write('<Row>');
       _stringCell(buffer, invoice.customerName);
       _stringCell(buffer, invoice.customerPhone ?? '');
-      _stringCell(buffer, invoice.salesRepName);
+      _stringCell(buffer, invoice.followUpName);
       _stringCell(buffer, invoice.documentType);
       _stringCell(buffer, invoice.orderNumber);
       _stringCell(buffer, invoice.referenceNumber ?? '');
       _stringCell(buffer, SelloFormatters.date(invoice.orderedAt));
+      _stringCell(buffer, invoice.dueLabel);
       _numberCell(buffer, invoice.agingDays);
       _numberCell(buffer, invoice.openBalance);
       buffer.writeln('</Row>');

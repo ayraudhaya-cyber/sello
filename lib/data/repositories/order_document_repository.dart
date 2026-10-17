@@ -1,5 +1,6 @@
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
+import 'package:sello/services/notifications/order_delivery_dispatcher.dart';
 import 'package:sello/services/notifications/outbound/document_link_factory.dart';
 import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
@@ -129,6 +130,32 @@ class OrderDocumentRepository {
       throw ValidationFailure(
         error.message.trim().isEmpty
             ? 'Unable to prepare collection acknowledgement.'
+            : error.message,
+      );
+    }
+  }
+
+  Future<OrderDeliveryPrepareResult> prepareOrderDelivery(
+    String orderId,
+  ) async {
+    try {
+      final result = await _client.rpc(
+        'prepare_order_delivery_notification',
+        params: {'p_order_id': orderId},
+      );
+      if (result is Map<String, dynamic>) {
+        return OrderDeliveryPrepareResult.fromJson(result);
+      }
+      if (result is Map) {
+        return OrderDeliveryPrepareResult.fromJson(
+          Map<String, dynamic>.from(result),
+        );
+      }
+      throw const UnexpectedFailure('Unable to prepare delivery notification.');
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(
+        error.message.trim().isEmpty
+            ? 'Unable to prepare delivery notification.'
             : error.message,
       );
     }

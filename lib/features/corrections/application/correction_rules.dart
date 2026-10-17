@@ -68,7 +68,10 @@ abstract final class ChequeCorrectionRules {
     required bool isHubFinancialRole,
     required bool isOwnCheque,
   }) {
-    if (status == ChequeStatus.cancelled || status == ChequeStatus.bounced) {
+    if (status == ChequeStatus.cancelled ||
+        status == ChequeStatus.bounced ||
+        status == ChequeStatus.given ||
+        status == ChequeStatus.returnedToCustomer) {
       return false;
     }
     if (isHubFinancialRole) return true;

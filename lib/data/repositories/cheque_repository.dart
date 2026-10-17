@@ -60,6 +60,12 @@ class ChequeRepository {
     cleared_at,
     bounced_at,
     cancelled_at,
+    given_to_name,
+    given_on,
+    given_at,
+    given_note,
+    returned_at,
+    return_reason,
     bounce_reason,
     cancel_reason,
     created_at,
@@ -404,6 +410,55 @@ class ChequeRepository {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  Future<ChequeSummary> giveCheque(GiveChequeInput input) async {
+    return _transition(
+      rpc: 'give_cheque',
+      params: {
+        'p_cheque_id': input.chequeId,
+        'p_given_to_name': input.givenToName,
+        'p_given_on': _dateOnly(input.givenOn),
+        'p_note': input.note,
+      },
+      chequeId: input.chequeId,
+      title: 'Cheque given to ${input.givenToName.trim()}',
+    );
+  }
+
+  Future<ChequeSummary> recallGivenCheque(String chequeId) async {
+    return _transition(
+      rpc: 'recall_given_cheque',
+      params: {'p_cheque_id': chequeId},
+      chequeId: chequeId,
+      title: 'Cheque back in hand',
+    );
+  }
+
+  Future<ChequeSummary> returnGivenChequeToCustomer(
+    String chequeId, {
+    String? reason,
+  }) async {
+    return _transition(
+      rpc: 'return_given_cheque_to_customer',
+      params: {'p_cheque_id': chequeId, 'p_reason': reason},
+      chequeId: chequeId,
+      title: 'Cheque returned to the customer',
+    );
+  }
+
+  Future<ChequeSummary> updateGivenCheque(GiveChequeInput input) async {
+    return _transition(
+      rpc: 'update_given_cheque',
+      params: {
+        'p_cheque_id': input.chequeId,
+        'p_given_to_name': input.givenToName,
+        'p_given_on': _dateOnly(input.givenOn),
+        'p_note': input.note,
+      },
+      chequeId: input.chequeId,
+      title: 'Cheque given to ${input.givenToName.trim()}',
+    );
   }
 
   Future<ChequeSummary> depositCheque(String chequeId) async {

@@ -59,6 +59,14 @@ abstract final class OutboundPlaceholders {
     token: 'receipt_link',
     label: 'Receipt link',
   );
+  static const deliveryStatus = OutboundPlaceholder(
+    token: 'delivery_status',
+    label: 'Delivery status',
+  );
+  static const deliveredQuantity = OutboundPlaceholder(
+    token: 'delivered_quantity',
+    label: 'Delivered quantity',
+  );
 
   static const orderFields = <OutboundPlaceholder>[
     customerName,
@@ -80,16 +88,25 @@ abstract final class OutboundPlaceholders {
     receiptLink,
   ];
 
+  static const deliveryFields = <OutboundPlaceholder>[
+    customerName,
+    orderNumber,
+    businessName,
+    salesRep,
+    deliveryStatus,
+    deliveredQuantity,
+    invoiceLink,
+  ];
+
   static List<OutboundPlaceholder> forType(OutboundNotificationType type) {
     return switch (type) {
       OutboundNotificationType.orderConfirmation ||
       OutboundNotificationType.orderNotification ||
-      OutboundNotificationType.invoice =>
-        orderFields,
+      OutboundNotificationType.invoice => orderFields,
+      OutboundNotificationType.orderDelivery => deliveryFields,
       OutboundNotificationType.collectionAcknowledgement ||
       OutboundNotificationType.collectionSubmitted ||
-      OutboundNotificationType.receipt =>
-        collectionFields,
+      OutboundNotificationType.receipt => collectionFields,
     };
   }
 
@@ -98,7 +115,9 @@ abstract final class OutboundPlaceholders {
     OutboundNotificationType type, {
     bool includeDocumentLink = true,
   }) {
-    final link = includeDocumentLink ? 'https://app.sello.example/d/preview' : null;
+    final link = includeDocumentLink
+        ? 'https://app.sello.example/d/preview'
+        : null;
     final shared = <String, String?>{
       'customer_name': 'City Mart',
       'business_name': 'Your business',
@@ -115,6 +134,10 @@ abstract final class OutboundPlaceholders {
         'discount_amount': 'Rs 500.00',
         'invoice_link': link,
         'document_link': link,
+        if (type == OutboundNotificationType.orderDelivery) ...{
+          'delivery_status': 'fully delivered',
+          'delivered_quantity': '12',
+        },
       };
     }
     return {

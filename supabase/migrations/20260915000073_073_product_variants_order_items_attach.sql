@@ -1,8 +1,10 @@
 -- =============================================================================
 -- 073 — Product variants Phase D: order_items variant_id + historical snapshots
 --
--- Attaches every order_item to its product's non-deleted default variant and
--- stores product_name / variant_label / sku snapshots for stable documents.
+-- Fills order_items that have no variant yet from the product's non-deleted
+-- default variant, and stores product_name / variant_label / sku snapshots.
+-- Lines that already point at a live variant (including a size or colour)
+-- keep that variant.
 -- Does NOT change quantities, prices, discounts, fulfillment fields, RPCs,
 -- inventory, stock_movements, products, or Flutter.
 -- =============================================================================
@@ -185,11 +187,11 @@ begin
   select count(*)::int into not_default
   from public.order_items oi
   join public.product_variants v on v.id = oi.variant_id
-  where not (v.is_default = true and v.deleted_at is null);
+  where v.deleted_at is not null;
 
   if not_default > 0 then
     raise exception
-      'Phase D aborted: % order_item row(s) do not map to a live default variant',
+      'Phase D aborted: % order_item row(s) point at an archived variant',
       not_default;
   end if;
 

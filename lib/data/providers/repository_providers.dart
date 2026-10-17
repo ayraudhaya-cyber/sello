@@ -18,6 +18,7 @@ import 'package:sello/services/iam/audit_service.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/notifications/notification_service.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
+import 'package:sello/services/notifications/order_delivery_dispatcher.dart';
 import 'package:sello/services/notifications/outbound/outbound_channel.dart';
 import 'package:sello/services/notifications/outbound/outbound_sms.dart';
 import 'package:sello/services/notifications/outbound/supabase_outbound_sms_sender.dart';
@@ -32,33 +33,30 @@ final notificationServiceProvider = Provider<NotificationService>(
   (ref) => NotificationService(),
 );
 
-final businessEventBusProvider = Provider<BusinessEventBus>(
-  (ref) {
-    final bus = BusinessEventBus(
-      notifications: ref.watch(notificationServiceProvider),
+final businessEventBusProvider = Provider<BusinessEventBus>((ref) {
+  final bus = BusinessEventBus(
+    notifications: ref.watch(notificationServiceProvider),
+  );
+  final audit = AuditService();
+  bus.addSubscriber((event) async {
+    // Best-effort audit mirror of domain events.
+    final companyId = ref.read(currentSessionProvider)?.company.id;
+    if (companyId == null) return;
+    await audit.log(
+      companyId: companyId,
+      actorEmployeeId: ref.read(currentSessionProvider)?.employee.id,
+      actorName: ref.read(currentSessionProvider)?.displayName,
+      input: AuditLogInput(
+        action: event.type,
+        summary: event.summary,
+        moduleKey: event.category.name,
+        referenceType: event.referenceType,
+        referenceId: event.referenceId,
+      ),
     );
-    final audit = AuditService();
-    bus.addSubscriber((event) async {
-      // Best-effort audit mirror of domain events.
-      final companyId = ref.read(currentSessionProvider)?.company.id;
-      if (companyId == null) return;
-      await audit.log(
-        companyId: companyId,
-        actorEmployeeId: ref.read(currentSessionProvider)?.employee.id,
-        actorName: ref.read(currentSessionProvider)?.displayName,
-        input: AuditLogInput(
-          action: event.type,
-          summary: event.summary,
-          moduleKey: event.category.name,
-          referenceType: event.referenceType,
-          referenceId: event.referenceId,
-        ),
-      );
-    });
-    return bus;
-  },
-);
-
+  });
+  return bus;
+});
 
 final productRepositoryProvider = Provider<ProductRepository>(
   (ref) => ProductRepository(events: ref.watch(businessEventBusProvider)),
@@ -78,90 +76,121 @@ final outboundSmsSenderProvider = Provider<OutboundSmsSender>(
 );
 
 final orderConfirmationDispatcherProvider =
-    Provider<OrderConfirmationDispatcher>(
-  (ref) {
-    final repo = ref.watch(orderDocumentRepositoryProvider);
-    return OrderConfirmationDispatcher(
-      gateway: SupabaseOrderConfirmationGateway(repo),
-      policiesResolver: () => repo.fetchOutboundPolicies(),
-      smsSender: ref.watch(outboundSmsSenderProvider),
-    );
-  },
-);
+    Provider<OrderConfirmationDispatcher>((ref) {
+      final repo = ref.watch(orderDocumentRepositoryProvider);
+      return OrderConfirmationDispatcher(
+        gateway: SupabaseOrderConfirmationGateway(repo),
+        policiesResolver: () => repo.fetchOutboundPolicies(),
+        smsSender: ref.watch(outboundSmsSenderProvider),
+      );
+    });
+
+final orderDeliveryDispatcherProvider = Provider<OrderDeliveryDispatcher>((
+  ref,
+) {
+  final repo = ref.watch(orderDocumentRepositoryProvider);
+  return OrderDeliveryDispatcher(
+    prepare: repo.prepareOrderDelivery,
+    recordDispatch:
+        ({
+          required String eventId,
+          required OutboundChannel channel,
+          required OutboundRecipientKind recipientKind,
+          required String recipientKey,
+          String? address,
+          OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
+          String? skipReason,
+        }) {
+          return repo.recordDispatch(
+            eventId: eventId,
+            channel: channel,
+            recipientKind: recipientKind,
+            recipientKey: recipientKey,
+            address: address,
+            status: status,
+            skipReason: skipReason,
+          );
+        },
+    policiesResolver: repo.fetchOutboundPolicies,
+    smsSender: ref.watch(outboundSmsSenderProvider),
+  );
+});
 
 final collectionAcknowledgementDispatcherProvider =
-    Provider<CollectionAcknowledgementDispatcher>(
-  (ref) {
-    final repo = ref.watch(orderDocumentRepositoryProvider);
-    return CollectionAcknowledgementDispatcher(
-      prepare: repo.prepareCollectionAcknowledgement,
-      recordDispatch: ({
-        required String eventId,
-        required OutboundChannel channel,
-        required OutboundRecipientKind recipientKind,
-        required String recipientKey,
-        String? address,
-        OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
-        String? skipReason,
-      }) {
-        return repo.recordDispatch(
-          eventId: eventId,
-          channel: channel,
-          recipientKind: recipientKind,
-          recipientKey: recipientKey,
-          address: address,
-          status: status,
-          skipReason: skipReason,
-        );
-      },
-      policiesResolver: () => repo.fetchOutboundPolicies(),
-      smsSender: ref.watch(outboundSmsSenderProvider),
-    );
-  },
-);
+    Provider<CollectionAcknowledgementDispatcher>((ref) {
+      final repo = ref.watch(orderDocumentRepositoryProvider);
+      return CollectionAcknowledgementDispatcher(
+        prepare: repo.prepareCollectionAcknowledgement,
+        recordDispatch:
+            ({
+              required String eventId,
+              required OutboundChannel channel,
+              required OutboundRecipientKind recipientKind,
+              required String recipientKey,
+              String? address,
+              OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
+              String? skipReason,
+            }) {
+              return repo.recordDispatch(
+                eventId: eventId,
+                channel: channel,
+                recipientKind: recipientKind,
+                recipientKey: recipientKey,
+                address: address,
+                status: status,
+                skipReason: skipReason,
+              );
+            },
+        policiesResolver: () => repo.fetchOutboundPolicies(),
+        smsSender: ref.watch(outboundSmsSenderProvider),
+      );
+    });
 
-final paymentReceivedDispatcherProvider = Provider<PaymentReceivedDispatcher>(
-  (ref) {
-    final repo = ref.watch(orderDocumentRepositoryProvider);
-    return PaymentReceivedDispatcher(
-      prepare: repo.preparePaymentReceipt,
-      recordDispatch: ({
-        required String eventId,
-        required OutboundChannel channel,
-        required OutboundRecipientKind recipientKind,
-        required String recipientKey,
-        String? address,
-        OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
-        String? skipReason,
-      }) {
-        return repo.recordDispatch(
-          eventId: eventId,
-          channel: channel,
-          recipientKind: recipientKind,
-          recipientKey: recipientKey,
-          address: address,
-          status: status,
-          skipReason: skipReason,
-        );
-      },
-      policiesResolver: () => repo.fetchOutboundPolicies(),
-      smsSender: ref.watch(outboundSmsSenderProvider),
-    );
-  },
-);
+final paymentReceivedDispatcherProvider = Provider<PaymentReceivedDispatcher>((
+  ref,
+) {
+  final repo = ref.watch(orderDocumentRepositoryProvider);
+  return PaymentReceivedDispatcher(
+    prepare: repo.preparePaymentReceipt,
+    recordDispatch:
+        ({
+          required String eventId,
+          required OutboundChannel channel,
+          required OutboundRecipientKind recipientKind,
+          required String recipientKey,
+          String? address,
+          OutboundDispatchStatus status = OutboundDispatchStatus.prepared,
+          String? skipReason,
+        }) {
+          return repo.recordDispatch(
+            eventId: eventId,
+            channel: channel,
+            recipientKind: recipientKind,
+            recipientKey: recipientKey,
+            address: address,
+            status: status,
+            skipReason: skipReason,
+          );
+        },
+    policiesResolver: () => repo.fetchOutboundPolicies(),
+    smsSender: ref.watch(outboundSmsSenderProvider),
+  );
+});
 
 final orderRepositoryProvider = Provider<OrderRepository>(
   (ref) => OrderRepository(
     events: ref.watch(businessEventBusProvider),
     confirmations: ref.watch(orderConfirmationDispatcherProvider),
+    deliveries: ref.watch(orderDeliveryDispatcherProvider),
   ),
 );
 
 final paymentRepositoryProvider = Provider<PaymentRepository>(
   (ref) => PaymentRepository(
     events: ref.watch(businessEventBusProvider),
-    collectionAcknowledgements:
-        ref.watch(collectionAcknowledgementDispatcherProvider),
+    collectionAcknowledgements: ref.watch(
+      collectionAcknowledgementDispatcherProvider,
+    ),
     paymentReceived: ref.watch(paymentReceivedDispatcherProvider),
   ),
 );

@@ -290,6 +290,7 @@ class ReportRepository {
     List<String> employeeIds = const [],
     required String salesRepsLabel,
     required String currencySymbol,
+    int collectionDueDays = 0,
   }) async {
     final cutoff = CollectionsReportMath.asOfEndUtc(asOfDate);
     try {
@@ -319,6 +320,11 @@ class ReportRepository {
             agingDays: CollectionsReportMath.agingDays(
               orderedAt: orderedAt,
               asOfDate: asOfDate,
+            ),
+            daysRemaining: CollectionsReportMath.daysRemaining(
+              recordedAt: orderedAt,
+              asOfDate: asOfDate,
+              dueDays: collectionDueDays,
             ),
             documentType:
                 _asString(map['document_type']) ?? kCollectionsDocumentType,

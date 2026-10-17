@@ -68,6 +68,12 @@ class ChequeSummary extends Equatable {
     this.clearedAt,
     this.bouncedAt,
     this.cancelledAt,
+    this.givenToName,
+    this.givenOn,
+    this.givenAt,
+    this.givenNote,
+    this.returnedAt,
+    this.returnReason,
     this.bounceReason,
     this.cancelReason,
     this.source = ChequeSource.sello,
@@ -102,6 +108,12 @@ class ChequeSummary extends Equatable {
   final DateTime? clearedAt;
   final DateTime? bouncedAt;
   final DateTime? cancelledAt;
+  final String? givenToName;
+  final DateTime? givenOn;
+  final DateTime? givenAt;
+  final String? givenNote;
+  final DateTime? returnedAt;
+  final String? returnReason;
   final String? bounceReason;
   final String? cancelReason;
   final DateTime createdAt;
@@ -125,10 +137,22 @@ class ChequeSummary extends Equatable {
       balanceReversedAt == null &&
       (status == ChequeStatus.collected ||
           status == ChequeStatus.deposited ||
-          status == ChequeStatus.cleared);
+          status == ChequeStatus.cleared ||
+          status == ChequeStatus.given);
 
   bool get canDeposit =>
       status == ChequeStatus.collected && balanceAppliedAt != null;
+
+  /// In hand, and already applied or an old tracking-only record.
+  bool get canGive =>
+      status == ChequeStatus.collected &&
+      (balanceAppliedAt != null || isTrackingOnly);
+
+  bool get canRecallGiven => status == ChequeStatus.given;
+
+  bool get canReturnGivenToCustomer => status == ChequeStatus.given;
+
+  bool get canEditGivenTo => status == ChequeStatus.given;
 
   bool get canApproveCollection => isPendingApproval;
 
@@ -195,6 +219,12 @@ class ChequeSummary extends Equatable {
       clearedAt: _dateValue(json['cleared_at']),
       bouncedAt: _dateValue(json['bounced_at']),
       cancelledAt: _dateValue(json['cancelled_at']),
+      givenToName: _stringValue(json['given_to_name']),
+      givenOn: _dateOnly(json['given_on']),
+      givenAt: _dateValue(json['given_at']),
+      givenNote: _stringValue(json['given_note']),
+      returnedAt: _dateValue(json['returned_at']),
+      returnReason: _stringValue(json['return_reason']),
       bounceReason: _stringValue(json['bounce_reason']),
       cancelReason: _stringValue(json['cancel_reason']),
       createdAt: _dateValue(json['created_at']) ?? DateTime.now().toUtc(),
@@ -208,7 +238,10 @@ class ChequeSummary extends Equatable {
       '${balanceAppliedAt?.millisecondsSinceEpoch}-'
       '${balanceReversedAt?.millisecondsSinceEpoch}-'
       '${status.dbValue}-'
-      '${source.dbValue}';
+      '${source.dbValue}-'
+      '${givenToName ?? ''}-'
+      '${givenOn?.millisecondsSinceEpoch ?? 0}-'
+      '${returnReason ?? ''}';
 }
 
 class ChequeDashboardStats extends Equatable {
@@ -339,4 +372,18 @@ class CreateExistingChequeInput {
   final DateTime? clearanceDate;
   final String? photoPath;
   final String? notes;
+}
+
+class GiveChequeInput {
+  const GiveChequeInput({
+    required this.chequeId,
+    required this.givenToName,
+    required this.givenOn,
+    this.note,
+  });
+
+  final String chequeId;
+  final String givenToName;
+  final DateTime givenOn;
+  final String? note;
 }

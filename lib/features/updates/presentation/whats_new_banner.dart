@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sello/core/responsive/responsive.dart';
@@ -26,7 +28,8 @@ class _WhatsNewBannerState extends State<WhatsNewBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final version = widget.snapshot.latest?.versionName ??
+    final version =
+        widget.snapshot.latest?.versionName ??
         widget.snapshot.installed.versionName;
     final bullets = ReleaseNotesFormatter.bullets(widget.snapshot.notes);
     final isMobile = context.isMobile;
@@ -42,12 +45,7 @@ class _WhatsNewBannerState extends State<WhatsNewBanner> {
           child: SelloCard(
             enableHoverLift: false,
             elevation: SelloCardElevation.soft,
-            padding: EdgeInsets.fromLTRB(
-              16,
-              14,
-              8,
-              _expanded ? 14 : 12,
-            ),
+            padding: EdgeInsets.fromLTRB(16, 14, 8, _expanded ? 14 : 12),
             borderRadius: AppRadius.panelAll,
             borderColor: AppColors.outlinePanel,
             child: Column(
@@ -78,7 +76,9 @@ class _WhatsNewBannerState extends State<WhatsNewBanner> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _expanded ? 'What’s new' : 'What’s new — tap to expand',
+                                _expanded
+                                    ? 'What’s new'
+                                    : 'What’s new — tap to expand',
                                 style: const TextStyle(
                                   fontFamily: AppTypography.fontFamily,
                                   fontSize: 12.5,
@@ -113,46 +113,7 @@ class _WhatsNewBannerState extends State<WhatsNewBanner> {
                 ),
                 if (_expanded) ...[
                   const SizedBox(height: 10),
-                  if (bullets.isEmpty)
-                    const Text(
-                      'Sello has been updated with the latest improvements.',
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 13,
-                        height: 1.4,
-                        color: AppColors.textSecondary,
-                      ),
-                    )
-                  else
-                    for (final line in bullets)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              '•  ',
-                              style: TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 13,
-                                height: 1.4,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                line,
-                                style: const TextStyle(
-                                  fontFamily: AppTypography.fontFamily,
-                                  fontSize: 13,
-                                  height: 1.4,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                  _WhatsNewNotes(bullets: bullets),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -175,6 +136,44 @@ class _WhatsNewBannerState extends State<WhatsNewBanner> {
 }
 
 /// Optional Shortcuts wrapper for Escape-to-dismiss on web.
+class _WhatsNewNotes extends StatelessWidget {
+  const _WhatsNewNotes({required this.bullets});
+
+  final List<String> bullets;
+
+  static const _style = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 13,
+    height: 1.4,
+    color: AppColors.textSecondary,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = math.min(320.0, MediaQuery.sizeOf(context).height * 0.46);
+    final body = bullets.isEmpty
+        ? const Text(
+            'Sello has been updated with the latest improvements.',
+            style: _style,
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final line in bullets)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('•  $line', style: _style),
+                ),
+            ],
+          );
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: SingleChildScrollView(child: body),
+    );
+  }
+}
+
 class WhatsNewShortcuts extends StatelessWidget {
   const WhatsNewShortcuts({
     super.key,

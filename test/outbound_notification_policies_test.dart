@@ -5,7 +5,7 @@ import 'package:sello/shared/models/outbound_notification_policies.dart';
 
 void main() {
   group('OutboundNotificationPolicies', () {
-    test('defaults enable the four V1 messages and disable invoice + receipt', () {
+    test('defaults enable operational messages and disable invoice + receipt', () {
       const policies = OutboundNotificationPolicies.defaults;
       expect(
         policies.isActive(OutboundNotificationType.orderConfirmation),
@@ -13,6 +13,10 @@ void main() {
       );
       expect(
         policies.isActive(OutboundNotificationType.orderNotification),
+        isTrue,
+      );
+      expect(
+        policies.isActive(OutboundNotificationType.orderDelivery),
         isTrue,
       );
       expect(

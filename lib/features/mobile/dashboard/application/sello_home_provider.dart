@@ -171,6 +171,7 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
       num outstanding = 0;
       num collectedToday = 0;
       var ordersToday = 0;
+      num ordersValue = 0;
       final statsFutures = <Future<void>>[];
       if (settings.enableLowStockAlert) {
         statsFutures.add(() async {
@@ -211,9 +212,17 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
         try {
           final now = DateTime.now();
           final start = DateTime(now.year, now.month, now.day);
-          ordersToday = await ref
-              .read(orderRepositoryProvider)
-              .countOrders(employeeId: session.employee.id, orderedFrom: start);
+          final orders = ref.read(orderRepositoryProvider);
+          final counted = orders.countOrders(
+            employeeId: session.employee.id,
+            orderedFrom: start,
+          );
+          final valued = orders.sumOrderTotals(
+            employeeId: session.employee.id,
+            orderedFrom: start,
+          );
+          ordersToday = await counted;
+          ordersValue = await valued;
         } catch (_) {}
       }());
       await Future.wait(statsFutures);
@@ -237,6 +246,7 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
         activity: SalesDayActivity(
           customersVisited: completedToday,
           ordersCreated: ordersToday,
+          ordersValue: ordersValue,
         ),
         insights: SalesDayInsights(
           customerVisitsLeft: visitsLeft,
@@ -301,6 +311,7 @@ class SelloHomeDayNotifier extends Notifier<SalesDaySnapshot> {
         customersVisited:
             state.activity.customersVisited + (stop.isComplete ? 1 : 0),
         ordersCreated: state.activity.ordersCreated,
+        ordersValue: state.activity.ordersValue,
         paymentsCollected: state.activity.paymentsCollected,
       ),
     );
@@ -339,6 +350,7 @@ abstract final class SalesDaySnapshots {
       activity: const SalesDayActivity(
         customersVisited: 4,
         ordersCreated: 2,
+        ordersValue: 43000,
         paymentsCollected: 1,
       ),
       intelligenceHints: const [],

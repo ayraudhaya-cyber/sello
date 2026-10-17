@@ -27,6 +27,15 @@ abstract final class OutboundMessageTemplate {
       'Total: {{order_total}}'
       '{{#invoice_link}}\n\nView invoice: {{invoice_link}}{{/invoice_link}}';
 
+  static const orderDeliveryDefault =
+      '{{business_name}}\n'
+      'Delivery update for {{order_number}}\n'
+      '\n'
+      'Hi {{customer_name}}, your order has been {{delivery_status}}.'
+      '{{#delivered_quantity}}\nQuantity delivered: {{delivered_quantity}}{{/delivered_quantity}}'
+      '{{#sales_rep_name}}\nRecorded by: {{sales_rep_name}}{{/sales_rep_name}}'
+      '{{#invoice_link}}\n\nView invoice: {{invoice_link}}{{/invoice_link}}';
+
   static const collectionAcknowledgementDefault =
       '{{business_name}}\n'
       'Collection {{collection_number}} received\n'
@@ -79,6 +88,7 @@ abstract final class OutboundMessageTemplate {
   static String defaultFor(OutboundNotificationType type) => switch (type) {
     OutboundNotificationType.orderConfirmation => orderConfirmationDefault,
     OutboundNotificationType.orderNotification => orderNotificationDefault,
+    OutboundNotificationType.orderDelivery => orderDeliveryDefault,
     OutboundNotificationType.collectionAcknowledgement =>
       collectionAcknowledgementDefault,
     OutboundNotificationType.collectionSubmitted => collectionSubmittedDefault,

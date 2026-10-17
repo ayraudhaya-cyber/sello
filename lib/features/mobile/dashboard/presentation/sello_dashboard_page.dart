@@ -361,6 +361,7 @@ class _HomeHero extends StatelessWidget {
     );
     final ordersLabel = '$orders ${orders == 1 ? 'Order' : 'Orders'}';
     final visitsLabel = '$visits ${visits == 1 ? 'Visit' : 'Visits'}';
+    final orderValue = _wholeMoney(day.activity.ordersValue, currencySymbol);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
@@ -391,11 +392,18 @@ class _HomeHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _HeroPill(label: '$ordersLabel | $visitsLabel'),
+          _HeroPill(label: '$orderValue | $ordersLabel | $visitsLabel'),
         ],
       ),
     );
   }
+}
+
+/// Pill money stays whole when there are no cents: `Rs 43,000`.
+String _wholeMoney(num value, String symbol) {
+  final text = SelloFormatters.currency(value, symbol: symbol);
+  if (text.endsWith('.00')) return text.substring(0, text.length - 3);
+  return text;
 }
 
 class _HeroPill extends StatelessWidget {
@@ -413,6 +421,7 @@ class _HeroPill extends StatelessWidget {
       ),
       child: Text(
         label,
+        textAlign: TextAlign.center,
         style: const TextStyle(
           fontFamily: AppTypography.fontFamily,
           fontSize: 12.5,

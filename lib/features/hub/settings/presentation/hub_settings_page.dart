@@ -1939,6 +1939,17 @@ class _OrdersInvoicesSection extends StatelessWidget {
             const Divider(height: 1, color: AppColors.outlinePanel),
             const SizedBox(height: 22),
             SettingsSubgroup(
+              title: 'Payment due',
+              child: _CollectionDueDaysField(
+                days: draft.collectionDueDays,
+                onChanged: (days) =>
+                    onChanged((c) => c.copyWith(collectionDueDays: days)),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const Divider(height: 1, color: AppColors.outlinePanel),
+            const SizedBox(height: 22),
+            SettingsSubgroup(
               title: 'Delivery',
               child: SelloStatusToggle(
                 value: draft.salesRepsCanRecordDelivery,
@@ -1953,6 +1964,65 @@ class _OrdersInvoicesSection extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CollectionDueDaysField extends StatefulWidget {
+  const _CollectionDueDaysField({required this.days, required this.onChanged});
+
+  final int days;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_CollectionDueDaysField> createState() =>
+      _CollectionDueDaysFieldState();
+}
+
+class _CollectionDueDaysFieldState extends State<_CollectionDueDaysField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.days.toString());
+  }
+
+  @override
+  void didUpdateWidget(covariant _CollectionDueDaysField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.days.toString();
+    if (oldWidget.days != widget.days && _controller.text != text) {
+      _controller.text = text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsCompactField(
+      label: 'Default due days',
+      helper:
+          'Grace days after an order or opening balance is recorded. '
+          '0 means payment is due the same day. The still-to-collect report '
+          'uses this to show how many days are left, and who should follow up '
+          'once it is overdue.',
+      child: SelloTextField(
+        controller: _controller,
+        hint: '0',
+        keyboardType: TextInputType.number,
+        inputFormatters: const [NonNegativeIntegerFormatter()],
+        onChanged: (value) {
+          final parsed = int.tryParse(value.trim());
+          if (parsed == null || parsed > 365) return;
+          widget.onChanged(parsed);
+        },
       ),
     );
   }

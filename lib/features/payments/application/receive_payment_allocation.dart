@@ -62,6 +62,15 @@ abstract final class ReceivePaymentAllocation {
     if (total > paymentAmount + 0.001) {
       return 'Selected outstanding is more than the payment amount.';
     }
+    final available = receivables.fold<num>(
+      0,
+      (sum, row) => sum + (row.remaining > 0 ? row.remaining : 0),
+    );
+    final required = paymentAmount < available ? paymentAmount : available;
+    if (required > 0 && total + 0.001 < required) {
+      return 'Allocate the payment across the listed outstanding balances. '
+          'Only an amount above all outstanding becomes Wallet credit.';
+    }
     return null;
   }
 }

@@ -115,6 +115,7 @@ abstract final class QuickActionsLauncher {
     BuildContext context,
     WidgetRef ref, {
     CustomerSummary? customer,
+    String? preferredOrderId,
   }) async {
     final role = ref.read(currentSessionProvider)?.appRole;
     if (role == null) return;
@@ -124,6 +125,7 @@ abstract final class QuickActionsLauncher {
       builder: (context) => ReceivePaymentDialog(
         currencySymbol: _currency(ref, role),
         initialCustomer: customer,
+        preferredOrderId: preferredOrderId,
       ),
     );
     if (input == null || !context.mounted) return;

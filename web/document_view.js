@@ -105,12 +105,14 @@
     style.textContent =
       "html,body{margin:0;background:#fff;color:#111;font:15px/1.4 -apple-system,BlinkMacSystemFont,sans-serif}" +
       ".sheet{max-width:720px;margin:0 auto;padding:20px 16px 40px}" +
-      ".top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}" +
-      ".logo{max-width:140px;max-height:48px;object-fit:contain}" +
-      "h1{font-size:18px;margin:0 0 4px}" +
-      ".muted{color:#444;font-size:13px;margin:0}" +
-      ".kind{text-align:right}" +
-      ".kind strong{font-size:18px;letter-spacing:.04em}" +
+      ".top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:8px;border-bottom:1px solid #e4e4ea;margin-bottom:6px}" +
+      ".logo{max-width:108px;max-height:36px;object-fit:contain;display:block}" +
+      "h1{font-size:16px;line-height:1.15;margin:0}" +
+      ".muted{color:#444;font-size:12px;line-height:1.2;margin:0}" +
+      ".contact{color:#444;font-size:12px;line-height:1.2;margin:0 0 8px;text-align:center}" +
+      ".kind{text-align:right;flex:0 0 auto}" +
+      ".kind strong{display:block;font-size:14px;letter-spacing:.06em;line-height:1.1}" +
+      ".kind .num{font-size:12px;line-height:1.15;margin:2px 0 0;white-space:nowrap}" +
       "table{width:100%;border-collapse:collapse;margin-top:16px}" +
       "th,td{border-bottom:1px solid #ddd;padding:8px 4px;text-align:left;vertical-align:top}" +
       "th{font-size:12px;color:#333}" +
@@ -162,26 +164,28 @@
     else if (rep) repLine = "Sales Rep: " + rep;
     else if (phone) repLine = "Sales Rep: " + phone;
 
-    var contact = [doc.document_address, doc.document_phone, doc.document_email]
-      .filter(Boolean)
-      .join(" · ");
+    var contactLines = [
+      doc.document_address,
+      doc.document_phone,
+      doc.document_email,
+    ].filter(Boolean);
     var logo = doc.document_logo_url || doc.logo_url;
     var discount = Number(doc.discount_amount || 0);
     var tax = Number(doc.tax_amount || 0);
     var when = dateLabel(doc.ordered_at || doc.completed_at);
 
     show(
-      '<div class="top"><div>' +
+      '<div class="top"><div class="brand">' +
         (logo ? '<img class="logo" alt="" src="' + esc(logo) + '">' : "") +
-        "<h1>" +
-        esc(doc.company_name || "") +
-        "</h1>" +
-        (contact ? '<p class="muted">' + esc(contact) + "</p>" : "") +
-        "</div><div class=\"kind\"><strong>INVOICE</strong><p class=\"muted\">" +
+        (logo ? "" : "<h1>" + esc(doc.company_name || "") + "</h1>") +
+        '</div><div class="kind"><strong>INVOICE</strong><p class="num">' +
         esc(doc.order_number || "") +
         "</p>" +
         (when ? '<p class="muted">' + esc(when) + "</p>" : "") +
         "</div></div>" +
+        (contactLines.length
+          ? '<p class="contact">' + contactLines.map(esc).join("<br>") + "</p>"
+          : "") +
         "<h2 style=\"font-size:13px;margin:18px 0 4px\">Bill to</h2>" +
         "<div><strong>" +
         esc(doc.customer_name || "") +

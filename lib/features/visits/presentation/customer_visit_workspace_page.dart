@@ -44,6 +44,8 @@ import 'package:sello/shared/widgets/widgets.dart';
 
 enum _VisitStage { catalog, checkout }
 
+enum _ActiveVisitChoice { open, ignore }
+
 /// Field sales visit — catalog, then checkout.
 ///
 /// Reuses [OrderEditorDialog] basket/pricing, [selloOrdersProvider],
@@ -154,18 +156,14 @@ class _CustomerVisitWorkspacePageState
       _bootError = null;
     });
     try {
-      final active = ref.read(activeCustomerVisitProvider).valueOrNull;
+      final active = await ref.read(activeCustomerVisitProvider.future);
 
       // Walk-in: open catalog immediately — no visit or customer row yet.
       if (_isWalkIn &&
           (widget.customerId == null || widget.customerId!.isEmpty)) {
         if (active != null) {
-          setState(() {
-            _booting = false;
-            _bootError =
-                'Finish or leave your current visit before starting a walk-in.';
-          });
-          return;
+          final proceed = await _resolveOtherActiveVisit(active);
+          if (!proceed || !mounted) return;
         }
         if (!mounted) return;
         setState(() {
@@ -189,7 +187,12 @@ class _CustomerVisitWorkspacePageState
       final customerFuture = ref
           .read(customerRepositoryProvider)
           .fetchById(customerId);
-      if (active == null || active.customerId != customerId) {
+      if (active != null && active.customerId != customerId) {
+        final proceed = await _resolveOtherActiveVisit(active);
+        if (!proceed || !mounted) return;
+      }
+      final stillActive = ref.read(activeCustomerVisitProvider).valueOrNull;
+      if (stillActive == null || stillActive.customerId != customerId) {
         await ref
             .read(activeCustomerVisitProvider.notifier)
             .startVisit(
@@ -220,6 +223,86 @@ class _CustomerVisitWorkspacePageState
         _bootError = 'Unable to open this visit. Try again from Customers.';
       });
     }
+  }
+
+  /// Returns true when the other visit was closed and this one may open.
+  Future<bool> _resolveOtherActiveVisit(CustomerVisit active) async {
+    final choice = await _askAboutActiveVisit(active);
+    if (!mounted) return false;
+    if (choice == _ActiveVisitChoice.open) {
+      final name = (active.customerName ?? '').trim();
+      final scheduled = active.scheduledVisitId;
+      context.go(
+        '${RoutePaths.selloVisit}'
+        '?customer=${active.customerId}'
+        '${scheduled != null && scheduled.isNotEmpty ? '&scheduled=$scheduled' : ''}'
+        '&name=${Uri.encodeComponent(name.isEmpty ? 'Customer' : name)}',
+      );
+      return false;
+    }
+    if (choice == _ActiveVisitChoice.ignore) {
+      setState(() => _booting = true);
+      await ref
+          .read(activeCustomerVisitProvider.notifier)
+          .cancelVisit(notes: 'Closed to start another visit.');
+      return true;
+    }
+    context.go(RoutePaths.selloCustomers);
+    return false;
+  }
+
+  Future<_ActiveVisitChoice?> _askAboutActiveVisit(CustomerVisit active) {
+    final shop = (active.customerName ?? '').trim();
+    final where = shop.isEmpty ? 'another shop' : shop;
+    return showDialog<_ActiveVisitChoice>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Visit in progress'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Text(
+              'You are still at $where. Open that visit, or ignore it and continue here.',
+            ),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.sm,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          actionsPadding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          actions: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SelloButton(
+                  label: 'Open that visit',
+                  expanded: true,
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(_ActiveVisitChoice.open),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                SelloButton(
+                  label: 'Ignore visit',
+                  variant: SelloButtonVariant.outline,
+                  expanded: true,
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_ActiveVisitChoice.ignore),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String? _branchIdFor(AppSession session) =>

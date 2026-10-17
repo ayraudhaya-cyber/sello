@@ -57,10 +57,7 @@ void main() {
     );
   }
 
-  ReceivableOrder order({
-    required String id,
-    required num remaining,
-  }) {
+  ReceivableOrder order({required String id, required num remaining}) {
     return ReceivableOrder(
       id: id,
       orderNumber: 'ORD-$id',
@@ -206,6 +203,7 @@ void main() {
       expect(ChequeStatus.deposited.shortLabel, 'At the bank');
       expect(ChequeStatus.cleared.shortLabel, 'Bank paid');
       expect(ChequeStatus.bounced.shortLabel, 'Bank returned');
+      expect(ChequeStatus.given.shortLabel, 'Given');
     });
 
     test('status hover hints say when each status applies', () {
@@ -273,6 +271,39 @@ void main() {
       );
       expect(pending.canDeposit, isFalse);
       expect(next, ChequeForwardAction.approve);
+    });
+
+    test('in-hand cheque can be given, and a pending one cannot', () {
+      final applied = cheque(
+        status: ChequeStatus.collected,
+        balanceAppliedAt: DateTime.utc(2026, 9, 13),
+      );
+      final pending = cheque(status: ChequeStatus.collected);
+      final historical = cheque(
+        status: ChequeStatus.collected,
+        source: ChequeSource.existing,
+      );
+      final given = cheque(status: ChequeStatus.given);
+
+      expect(applied.canGive, isTrue);
+      expect(
+        chequeShowsGive(cheque: applied, canManageClearance: true),
+        isTrue,
+      );
+      expect(pending.canGive, isFalse);
+      expect(historical.canGive, isTrue);
+      expect(given.canGive, isFalse);
+      expect(given.canRecallGiven, isTrue);
+      expect(given.canReturnGivenToCustomer, isTrue);
+      expect(given.canEditGivenTo, isTrue);
+      expect(
+        chequeShowsGivenFollowUp(cheque: given, canManageClearance: true),
+        isTrue,
+      );
+      expect(given.canDeposit, isFalse);
+      expect(given.status.canClear, isFalse);
+      expect(given.status.canCancel, isFalse);
+      expect(applied.canDeposit, isTrue);
     });
 
     test('collected and applied shows Send to bank', () {
@@ -414,9 +445,7 @@ void main() {
     test('shows related order number when allocation exists', () {
       final related = chequeRelatedDocuments(
         paymentNumber: 'PAY-20260930-0004',
-        allocations: [
-          alloc(orderId: 'o1', orderNumber: 'INV-20260930-0012'),
-        ],
+        allocations: [alloc(orderId: 'o1', orderNumber: 'INV-20260930-0012')],
       );
       expect(related.orderNumbers, ['INV-20260930-0012']);
       expect(related.paymentNumber, 'PAY-20260930-0004');
@@ -470,9 +499,7 @@ void main() {
       expect(pending.appliedArAmount, 0);
       final related = chequeRelatedDocuments(
         paymentNumber: 'PAY-20260930-0008',
-        allocations: [
-          alloc(orderId: 'o1', orderNumber: 'INV-20260930-0012'),
-        ],
+        allocations: [alloc(orderId: 'o1', orderNumber: 'INV-20260930-0012')],
       );
       expect(related.paymentNumber, 'PAY-20260930-0008');
       expect(related.orderNumbers, ['INV-20260930-0012']);
@@ -565,10 +592,7 @@ void main() {
         clampChequeOrderAllocation(amount: 10000, remaining: 31640),
         10000,
       );
-      expect(
-        clampChequeOrderAllocation(amount: 0, remaining: 31640),
-        0,
-      );
+      expect(clampChequeOrderAllocation(amount: 0, remaining: 31640), 0);
     });
 
     test('rejects allocations that exceed the cheque amount', () {
@@ -613,7 +637,10 @@ void main() {
 
   group('existing order-collection cheque flow', () {
     test('still allocates only to the selected order', () {
-      const selected = PaymentAllocationInput(orderId: 'ord-existing', amount: 18000);
+      const selected = PaymentAllocationInput(
+        orderId: 'ord-existing',
+        amount: 18000,
+      );
       final input = CreateChequeInput(
         customerId: 'cu1',
         amount: 18000,

@@ -104,14 +104,28 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                             Expanded(
                               child: _DocumentIssuerHeader(
                                 identity: doc.issuerIdentity,
+                                compact: compact,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Flexible(child: _KindHeader(doc: doc)),
+                            SizedBox(width: compact ? 10 : 16),
+                            Flexible(
+                              child: _KindHeader(doc: doc, compact: compact),
+                            ),
                           ],
                         ),
+                        if (compact) ...[
+                          const SizedBox(height: 10),
+                          OverflowBox(
+                            maxWidth: MediaQuery.sizeOf(context).width,
+                            child: const Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: AppColors.outlinePanel,
+                            ),
+                          ),
+                        ],
                         if (doc.issuerIdentity.hasContactBlock) ...[
-                          const SizedBox(height: 14),
+                          SizedBox(height: compact ? 8 : 14),
                           _ContactStrip(identity: doc.issuerIdentity),
                         ],
                         const SizedBox(height: 16),
@@ -203,9 +217,10 @@ class _PrintToolbar extends StatelessWidget {
 }
 
 class _DocumentIssuerHeader extends StatelessWidget {
-  const _DocumentIssuerHeader({required this.identity});
+  const _DocumentIssuerHeader({required this.identity, this.compact = false});
 
   final DocumentIssuerIdentity identity;
+  final bool compact;
 
   static const _nameStyle = TextStyle(
     fontFamily: AppTypography.fontFamily,
@@ -223,7 +238,9 @@ class _DocumentIssuerHeader extends StatelessWidget {
       children: [
         if (identity.showLogo && identity.logoUrl != null)
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180, maxHeight: 56),
+            constraints: compact
+                ? const BoxConstraints(maxWidth: 120, maxHeight: 40)
+                : const BoxConstraints(maxWidth: 180, maxHeight: 56),
             child: Image.network(
               identity.logoUrl!,
               fit: BoxFit.contain,
@@ -247,43 +264,59 @@ class _DocumentIssuerHeader extends StatelessWidget {
 }
 
 class _KindHeader extends StatelessWidget {
-  const _KindHeader({required this.doc});
+  const _KindHeader({required this.doc, this.compact = false});
 
   final OrderDocument doc;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
+    final titleSize = compact ? 15.0 : 22.0;
+    final numberSize = compact ? 12.5 : 18.0;
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          doc.kindLabel.toUpperCase(),
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: titleSize,
+            fontWeight: FontWeight.w800,
+            letterSpacing: compact ? 0.8 : 1.6,
+            height: 1.1,
+            color: AppColors.primary,
+          ),
+        ),
+        if (doc.kindNumber.isNotEmpty) ...[
+          const SizedBox(height: 2),
           Text(
-            doc.kindLabel.toUpperCase(),
-            style: const TextStyle(
+            doc.kindNumber,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
               fontFamily: AppTypography.fontFamily,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.6,
-              height: 1.15,
-              color: AppColors.primary,
+              fontSize: numberSize,
+              fontWeight: FontWeight.w600,
+              height: 1.1,
+              color: AppColors.textPrimary,
             ),
           ),
-          if (doc.kindNumber.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              doc.kindNumber,
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                height: 1.15,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
         ],
-      ),
+      ],
+    );
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: compact
+          ? FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: header,
+            )
+          : header,
     );
   }
 }
@@ -303,17 +336,17 @@ class _ContactStrip extends StatelessWidget {
     if (parts.isEmpty) return const SizedBox.shrink();
 
     final compact = context.isMobile;
-    const style = TextStyle(
+    final style = TextStyle(
       fontFamily: AppTypography.fontFamily,
-      fontSize: 12,
-      height: 1.4,
+      fontSize: compact ? 11.5 : 12,
+      height: compact ? 1.2 : 1.4,
       fontWeight: FontWeight.w500,
       color: AppColors.textSecondary,
     );
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: compact ? 4 : 8),
       decoration: BoxDecoration(
         color: AppColors.primaryContainer.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -368,21 +401,23 @@ class _BillToCard extends StatelessWidget {
             color: AppColors.textTertiary,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: compact ? 2 : 6),
         Text(
           doc.customerName,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: AppTypography.fontFamily,
-            fontSize: 16,
+            fontSize: compact ? 15 : 16,
             fontWeight: FontWeight.w700,
-            height: 1.25,
+            height: compact ? 1.15 : 1.25,
             color: AppColors.textPrimary,
           ),
         ),
-        if (doc.customerPhone != null) _PartyLine(doc.customerPhone!),
-        if (doc.customerAddress != null) _PartyLine(doc.customerAddress!),
+        if (doc.customerPhone != null)
+          _PartyLine(doc.customerPhone!, compact: compact),
+        if (doc.customerAddress != null)
+          _PartyLine(doc.customerAddress!, compact: compact),
         if (doc.salesRepName != null)
-          _PartyLine('Sales Rep: ${doc.salesRepName}'),
+          _PartyLine('Sales Rep: ${doc.salesRepName}', compact: compact),
       ],
     );
 
@@ -401,7 +436,7 @@ class _BillToCard extends StatelessWidget {
             color: AppColors.textTertiary,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: compact ? 2 : 6),
         Text(
           date,
           style: const TextStyle(
@@ -449,20 +484,21 @@ class _BillToCard extends StatelessWidget {
 }
 
 class _PartyLine extends StatelessWidget {
-  const _PartyLine(this.text);
+  const _PartyLine(this.text, {this.compact = false});
 
   final String text;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 3),
+      padding: EdgeInsets.only(top: compact ? 1 : 3),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: AppTypography.fontFamily,
-          fontSize: 13,
-          height: 1.35,
+          fontSize: compact ? 12.5 : 13,
+          height: compact ? 1.2 : 1.35,
           color: AppColors.textSecondary,
         ),
       ),
@@ -898,8 +934,14 @@ class _PaymentDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = context.isMobile;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        compact ? 10 : 14,
+        16,
+        compact ? 10 : 14,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -910,10 +952,11 @@ class _PaymentDetails extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.4,
+              height: 1.15,
               color: AppColors.textTertiary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: compact ? 4 : 8),
           if (doc.collectionPaymentNumber != null)
             _MetaLine(label: 'Payment', value: doc.collectionPaymentNumber!),
           if (doc.collectionMethodLabel != null)
@@ -954,8 +997,9 @@ class _MetaLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = warning ? AppColors.warning : AppColors.textPrimary;
+    final compact = context.isMobile;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
+      padding: EdgeInsets.only(bottom: compact ? 2 : 5),
       child: Row(
         children: [
           Expanded(
@@ -964,6 +1008,7 @@ class _MetaLine extends StatelessWidget {
               style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 13,
+                height: compact ? 1.15 : 1.3,
                 color: warning ? AppColors.warning : AppColors.textSecondary,
               ),
             ),

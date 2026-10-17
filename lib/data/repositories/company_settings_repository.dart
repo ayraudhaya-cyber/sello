@@ -33,6 +33,7 @@ class CompanySettingsRepository {
     financial_visibility_policies,
     collection_approval_required,
     sales_reps_can_record_delivery,
+    collection_due_days,
     outbound_notification_policies,
     sms_sender_id,
     sms_sender_id_editable,
@@ -125,6 +126,7 @@ class CompanySettingsRepository {
                 CompanySettings.defaults.salesRepsCanViewOutstandingBalances,
             'sales_reps_can_record_delivery':
                 CompanySettings.defaults.salesRepsCanRecordDelivery,
+            'collection_due_days': CompanySettings.defaults.collectionDueDays,
             'financial_visibility_policies': CompanySettings
                 .defaults
                 .financialVisibility

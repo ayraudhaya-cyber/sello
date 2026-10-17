@@ -98,6 +98,7 @@ class CompanySettings extends Equatable {
     required this.financialVisibility,
     this.collectionApprovalRequired = false,
     this.salesRepsCanRecordDelivery = true,
+    this.collectionDueDays = 0,
     this.outboundNotificationPolicies = OutboundNotificationPolicies.defaults,
     this.smsSenderId,
     this.smsSenderIdEditable = false,
@@ -145,6 +146,10 @@ class CompanySettings extends Equatable {
 
   /// When false, only Owner/Manager can record delivery and complete orders.
   final bool salesRepsCanRecordDelivery;
+
+  /// Days after an order or opening balance is recorded before payment is due.
+  /// 0 means due the same day.
+  final int collectionDueDays;
 
   /// Tenant outbound messaging (SMS / WhatsApp + document links).
   final OutboundNotificationPolicies outboundNotificationPolicies;
@@ -226,6 +231,7 @@ class CompanySettings extends Equatable {
     financialVisibility: FinancialVisibilityPolicies.defaults,
     collectionApprovalRequired: false,
     salesRepsCanRecordDelivery: true,
+    collectionDueDays: 0,
     outboundNotificationPolicies: OutboundNotificationPolicies.defaults,
     smsSenderId: null,
     smsSenderIdEditable: false,
@@ -277,6 +283,7 @@ class CompanySettings extends Equatable {
     FinancialVisibilityPolicies? financialVisibility,
     bool? collectionApprovalRequired,
     bool? salesRepsCanRecordDelivery,
+    int? collectionDueDays,
     OutboundNotificationPolicies? outboundNotificationPolicies,
     String? smsSenderId,
     bool clearSmsSenderId = false,
@@ -330,6 +337,7 @@ class CompanySettings extends Equatable {
           collectionApprovalRequired ?? this.collectionApprovalRequired,
       salesRepsCanRecordDelivery:
           salesRepsCanRecordDelivery ?? this.salesRepsCanRecordDelivery,
+      collectionDueDays: collectionDueDays ?? this.collectionDueDays,
       outboundNotificationPolicies:
           outboundNotificationPolicies ?? this.outboundNotificationPolicies,
       smsSenderId: smsSenderIdEditable
@@ -419,6 +427,7 @@ class CompanySettings extends Equatable {
           json['collection_approval_required'] as bool? ?? false,
       salesRepsCanRecordDelivery:
           json['sales_reps_can_record_delivery'] as bool? ?? true,
+      collectionDueDays: (json['collection_due_days'] as num?)?.toInt() ?? 0,
       outboundNotificationPolicies: OutboundNotificationPolicies.fromJson(
         json['outbound_notification_policies'],
       ),
@@ -473,6 +482,7 @@ class CompanySettings extends Equatable {
       'financial_visibility_policies': financialVisibility.toJson(),
       'collection_approval_required': collectionApprovalRequired,
       'sales_reps_can_record_delivery': salesRepsCanRecordDelivery,
+      'collection_due_days': collectionDueDays,
       'outbound_notification_policies': outboundNotificationPolicies.toJson(),
       if (smsSenderIdEditable) 'sms_sender_id': smsSenderId,
       'updated_by': employeeId,
@@ -496,6 +506,7 @@ class CompanySettings extends Equatable {
     financialVisibility,
     collectionApprovalRequired,
     salesRepsCanRecordDelivery,
+    collectionDueDays,
     outboundNotificationPolicies,
     smsSenderId,
     smsSenderIdEditable,

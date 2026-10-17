@@ -1,6 +1,7 @@
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/notifications/order_confirmation_dispatcher.dart';
+import 'package:sello/services/notifications/order_delivery_dispatcher.dart';
 import 'package:sello/services/supabase/supabase_service.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
@@ -30,12 +31,14 @@ class OrderRepository {
     SupabaseClient? client,
     BusinessEventBus? events,
     this.confirmations,
+    this.deliveries,
   }) : _client = client ?? SupabaseService.client,
        _events = events ?? BusinessEventBus();
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
   final OrderConfirmationDispatcher? confirmations;
+  final OrderDeliveryDispatcher? deliveries;
 
   static const _listSelect = '''
     id,
@@ -282,6 +285,41 @@ class OrderRepository {
         completed: counts[2],
         cancelled: counts[3],
       );
+    } on PostgrestException catch (error) {
+      throw ProvisioningFailure(error.message);
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Sum of `orders.total` for the same set [countOrders] counts.
+  Future<num> sumOrderTotals({
+    String? employeeId,
+    DateTime? orderedFrom,
+  }) async {
+    try {
+      var query = _client
+          .from('orders')
+          .select('total')
+          .isFilter('deleted_at', null);
+      if (employeeId != null && employeeId.isNotEmpty) {
+        query = query.eq('employee_id', employeeId);
+      }
+      if (orderedFrom != null) {
+        query = query.gte('ordered_at', orderedFrom.toUtc().toIso8601String());
+      }
+      final rows = await query;
+      num sum = 0;
+      for (final row in rows) {
+        final value = row['total'];
+        if (value is num) {
+          sum += value;
+        } else {
+          sum += num.tryParse('$value') ?? 0;
+        }
+      }
+      return sum;
     } on PostgrestException catch (error) {
       throw ProvisioningFailure(error.message);
     } catch (error) {
@@ -1043,6 +1081,9 @@ class OrderRepository {
         ),
       );
     }
+    if (publishedCompletion) {
+      await _dispatchDelivery(orderId);
+    }
 
     return _dispatchConfirmation(orderId, detail: detail);
   }
@@ -1102,12 +1143,23 @@ class OrderRepository {
           ],
         },
       );
+      final delivered = lines.fold<num>(0, (sum, line) => sum + line.quantity);
+      await _dispatchDelivery(orderId, deliveredQuantity: delivered);
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapOrderError(error.message));
     } catch (error) {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  Future<void> _dispatchDelivery(
+    String orderId, {
+    num? deliveredQuantity,
+  }) async {
+    final dispatcher = deliveries;
+    if (dispatcher == null) return;
+    await dispatcher.dispatch(orderId, deliveredQuantity: deliveredQuantity);
   }
 
   /// Cancel outstanding remaining quantity (no inventory impact).

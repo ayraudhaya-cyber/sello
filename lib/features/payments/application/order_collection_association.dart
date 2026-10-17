@@ -267,8 +267,7 @@ abstract final class OrderCollectionAssociation {
       PaymentMethod.cash ||
       PaymentMethod.card ||
       PaymentMethod.bankTransfer ||
-      PaymentMethod.cheque =>
-        orderMethod!,
+      PaymentMethod.cheque => orderMethod!,
       _ => defaultNewCollectionMethod,
     };
   }
@@ -345,7 +344,8 @@ abstract final class OrderCollectionAssociation {
 
   static bool _isUsableInstrument(ChequeSummary cheque) {
     if (cheque.status == ChequeStatus.bounced ||
-        cheque.status == ChequeStatus.cancelled) {
+        cheque.status == ChequeStatus.cancelled ||
+        cheque.status == ChequeStatus.returnedToCustomer) {
       return false;
     }
     if (cheque.source == ChequeSource.existing && cheque.paymentId == null) {

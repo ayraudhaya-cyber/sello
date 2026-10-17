@@ -12,6 +12,8 @@ enum ChequeStatusFilter {
   awaitingCollection,
   pendingApproval,
   collected,
+  given,
+  returnedToCustomer,
   deposited,
   cleared,
   bounced,
@@ -22,6 +24,8 @@ enum ChequeStatusFilter {
     ChequeStatusFilter.awaitingCollection => 'Waiting to receive',
     ChequeStatusFilter.pendingApproval => 'Needs approval',
     ChequeStatusFilter.collected => 'In hand',
+    ChequeStatusFilter.given => 'Given',
+    ChequeStatusFilter.returnedToCustomer => 'Returned to customer',
     ChequeStatusFilter.deposited => 'At the bank',
     ChequeStatusFilter.cleared => 'Bank paid',
     ChequeStatusFilter.bounced => 'Bank returned',
@@ -150,6 +154,9 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
           ChequeStatusFilter.awaitingCollection =>
             ChequeStatus.awaitingCollection,
           ChequeStatusFilter.collected => null,
+          ChequeStatusFilter.given => ChequeStatus.given,
+          ChequeStatusFilter.returnedToCustomer =>
+            ChequeStatus.returnedToCustomer,
           ChequeStatusFilter.deposited => ChequeStatus.deposited,
           ChequeStatusFilter.cleared => ChequeStatus.cleared,
           ChequeStatusFilter.bounced => ChequeStatus.bounced,
@@ -270,6 +277,61 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     state = state.copyWith(isSaving: true, clearError: true);
     try {
       await _repo.approveChequeCollection(chequeId);
+      await loadCheques(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> giveCheque(GiveChequeInput input) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.giveCheque(input);
+      await loadCheques(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> recallGivenCheque(String chequeId) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.recallGivenCheque(chequeId);
+      await loadCheques(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> returnGivenChequeToCustomer(
+    String chequeId, {
+    String? reason,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.returnGivenChequeToCustomer(chequeId, reason: reason);
+      await loadCheques(showLoading: false);
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> updateGivenCheque(GiveChequeInput input) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.updateGivenCheque(input);
       await loadCheques(showLoading: false);
       state = state.copyWith(isSaving: false, clearError: true);
       return null;

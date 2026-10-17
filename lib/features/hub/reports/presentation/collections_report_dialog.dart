@@ -5,6 +5,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/reports/application/collections_report_excel.dart';
 import 'package:sello/features/hub/reports/application/collections_report_pdf.dart';
+import 'package:sello/features/hub/reports/application/report_pdf_chrome.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/collections_report.dart';
@@ -119,6 +120,9 @@ class _CollectionsReportDialogState
             employeeIds: _selectedRepIds.toList(),
             salesRepsLabel: _salesRepsLabel,
             currencySymbol: _currencySymbol,
+            collectionDueDays: ref
+                .read(companySettingsProvider)
+                .collectionDueDays,
           );
       if (!mounted) return;
       setState(() {
@@ -200,7 +204,18 @@ class _CollectionsReportDialogState
     if (snapshot == null || _exportingPdf) return;
     setState(() => _exportingPdf = true);
     try {
-      final bytes = await CollectionsReportPdf.buildBytes(snapshot);
+      final session = ref.read(currentSessionProvider);
+      final settings = ref.read(companySettingsProvider);
+      final name = session?.company.name.trim() ?? '';
+      final bytes = await CollectionsReportPdf.buildBytes(
+        snapshot,
+        company: ReportPdfCompany(
+          name: name.isEmpty ? 'Company' : name,
+          address: settings.documentAddress,
+          phone: settings.documentPhone,
+          email: settings.documentEmail,
+        ),
+      );
       downloadBrowserFile(
         bytes: bytes,
         filename: CollectionsReportPdf.filename(asOf: snapshot.asOfDate),
@@ -284,6 +299,20 @@ class _CollectionsReportDialogState
                 color: AppColors.textSecondary,
               ),
             ),
+            if (snapshot.overdueCount > 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                snapshot.overdueCount == 1
+                    ? '1 is overdue. Follow up with the sales rep, or the owner when no sales rep is set.'
+                    : '${snapshot.overdueCount} are overdue. Follow up with the sales rep, or the owner when no sales rep is set.',
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.error,
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             if (snapshot.isEmpty)
               const SelloEmptyState(
@@ -559,8 +588,9 @@ class _InvoiceTable extends StatelessWidget {
         1: FlexColumnWidth(1.4),
         2: FlexColumnWidth(1.3),
         3: FlexColumnWidth(1.2),
-        4: FlexColumnWidth(1.0),
-        5: FlexColumnWidth(1.3),
+        4: FlexColumnWidth(1.6),
+        5: FlexColumnWidth(0.8),
+        6: FlexColumnWidth(1.2),
       },
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
@@ -581,6 +611,10 @@ class _InvoiceTable extends StatelessWidget {
             Padding(
               padding: EdgeInsets.only(bottom: 8),
               child: Text('Date', style: headerStyle),
+            ),
+            Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('Due', style: headerStyle),
             ),
             Padding(
               padding: EdgeInsets.only(bottom: 8),
@@ -618,6 +652,20 @@ class _InvoiceTable extends StatelessWidget {
                 child: Text(
                   SelloFormatters.date(invoice.orderedAt),
                   style: cellStyle,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  invoice.dueLabel,
+                  style: cellStyle.copyWith(
+                    color: invoice.isOverdue
+                        ? AppColors.error
+                        : AppColors.textSecondary,
+                    fontWeight: invoice.isOverdue
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                  ),
                 ),
               ),
               Padding(

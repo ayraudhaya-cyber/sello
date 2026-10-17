@@ -16,26 +16,12 @@ enum SalesDayMode {
 }
 
 /// Whether a stop was on the morning plan or added in the field.
-enum VisitOrigin {
-  planned,
-  unplanned,
-}
+enum VisitOrigin { planned, unplanned }
 
-enum VisitStopStatus {
-  pending,
-  inProgress,
-  completed,
-  skipped,
-}
+enum VisitStopStatus { pending, inProgress, completed, skipped }
 
 /// Field badge vocabulary for visit rows.
-enum VisitBadgeKind {
-  priority,
-  scheduled,
-  followUp,
-  completed,
-  unplanned,
-}
+enum VisitBadgeKind { priority, scheduled, followUp, completed, unplanned }
 
 /// One customer stop in today's field work (planned or spontaneous).
 class FieldVisitStop extends Equatable {
@@ -58,6 +44,7 @@ class FieldVisitStop extends Equatable {
 
   final String id;
   final String? customerId;
+
   /// Active operational [customer_visits] id when a visit is in progress.
   final String? customerVisitId;
   final String customerName;
@@ -67,6 +54,7 @@ class FieldVisitStop extends Equatable {
   final bool standingOrder;
   final bool isNewCustomer;
   final String? distanceLabel;
+
   /// Locality / coverage area from the schedule (e.g. Colombo).
   final String? area;
   final String? lastVisitLabel;
@@ -125,21 +113,21 @@ class FieldVisitStop extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        customerId,
-        customerVisitId,
-        customerName,
-        origin,
-        status,
-        badge,
-        standingOrder,
-        isNewCustomer,
-        distanceLabel,
-        area,
-        lastVisitLabel,
-        outstandingLabel,
-        sortOrder,
-      ];
+    id,
+    customerId,
+    customerVisitId,
+    customerName,
+    origin,
+    status,
+    badge,
+    standingOrder,
+    isNewCustomer,
+    distanceLabel,
+    area,
+    lastVisitLabel,
+    outstandingLabel,
+    sortOrder,
+  ];
 }
 
 /// Lightweight day totals when there is no visit plan (dynamic day).
@@ -147,19 +135,27 @@ class SalesDayActivity extends Equatable {
   const SalesDayActivity({
     this.customersVisited = 0,
     this.ordersCreated = 0,
+    this.ordersValue = 0,
     this.paymentsCollected = 0,
   });
 
   final int customersVisited;
   final int ordersCreated;
+
+  /// Sum of today's order totals for this rep (same orders as [ordersCreated]).
+  final num ordersValue;
   final int paymentsCollected;
 
   bool get isEmpty =>
       customersVisited == 0 && ordersCreated == 0 && paymentsCollected == 0;
 
   @override
-  List<Object?> get props =>
-      [customersVisited, ordersCreated, paymentsCollected];
+  List<Object?> get props => [
+    customersVisited,
+    ordersCreated,
+    ordersValue,
+    paymentsCollected,
+  ];
 }
 
 /// Actionable operational insights for Home summary cards (not analytics KPIs).
@@ -195,18 +191,18 @@ class SalesDayInsights extends Equatable {
 
   @override
   List<Object?> get props => [
-        customerCount,
-        customerVisitsLeft,
-        openOrders,
-        ordersDueToday,
-        productCount,
-        lowStockCount,
-        outstandingTotal,
-        outstandingDueToday,
-        todaysSales,
-        followUpsDue,
-        pendingDeliveries,
-      ];
+    customerCount,
+    customerVisitsLeft,
+    openOrders,
+    ordersDueToday,
+    productCount,
+    lowStockCount,
+    outstandingTotal,
+    outstandingDueToday,
+    todaysSales,
+    followUpsDue,
+    pendingDeliveries,
+  ];
 }
 
 /// Optional Sello Intelligence suggestions for today's visit list.
@@ -257,8 +253,7 @@ class SalesDaySnapshot extends Equatable {
   int get plannedCompletedCount =>
       plannedVisits.where((v) => v.isComplete).length;
 
-  int get plannedRemainingCount =>
-      plannedCount - plannedCompletedCount;
+  int get plannedRemainingCount => plannedCount - plannedCompletedCount;
 
   int get unplannedCount => unplannedVisits.length;
 
@@ -332,14 +327,12 @@ class SalesDaySnapshot extends Equatable {
   List<FieldVisitStop> homePlanPreview({int maxItems = 3}) {
     final inProgress = visits.where((v) => v.isInProgress).toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final pendingPlanned = plannedVisits
-        .where((v) => v.status == VisitStopStatus.pending)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final skipped = plannedVisits
-        .where((v) => v.status == VisitStopStatus.skipped)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final pendingPlanned =
+        plannedVisits.where((v) => v.status == VisitStopStatus.pending).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final skipped =
+        plannedVisits.where((v) => v.status == VisitStopStatus.skipped).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
     final out = <FieldVisitStop>[];
     void addUnique(FieldVisitStop stop) {
@@ -361,14 +354,16 @@ class SalesDaySnapshot extends Equatable {
   /// How many open planned stops are not shown in [homePlanPreview].
   int homePlanHiddenCount({int maxItems = 3}) {
     final openPlanned = plannedVisits
-        .where((v) =>
-            v.status == VisitStopStatus.pending ||
-            v.status == VisitStopStatus.inProgress ||
-            v.status == VisitStopStatus.skipped)
+        .where(
+          (v) =>
+              v.status == VisitStopStatus.pending ||
+              v.status == VisitStopStatus.inProgress ||
+              v.status == VisitStopStatus.skipped,
+        )
         .length;
-    final shown = homePlanPreview(maxItems: maxItems)
-        .where((v) => v.isPlanned)
-        .length;
+    final shown = homePlanPreview(
+      maxItems: maxItems,
+    ).where((v) => v.isPlanned).length;
     final hidden = openPlanned - shown;
     return hidden < 0 ? 0 : hidden;
   }
@@ -381,34 +376,41 @@ class SalesDaySnapshot extends Equatable {
   List<FieldVisitStop> get todaysRoute {
     final planned = [...plannedVisits]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final extras = unplannedVisits
-        .where((v) =>
-            v.isInProgress ||
-            v.isComplete ||
-            v.status == VisitStopStatus.pending)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final extras =
+        unplannedVisits
+            .where(
+              (v) =>
+                  v.isInProgress ||
+                  v.isComplete ||
+                  v.status == VisitStopStatus.pending,
+            )
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return [...planned, ...extras];
   }
 
   /// Stops to surface on Home: in-progress first, then pending planned, then unplanned.
   List<FieldVisitStop> get homeVisitQueue {
-    final inProgress = visits
-        .where((v) => v.status == VisitStopStatus.inProgress)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final pendingPlanned = plannedVisits
-        .where((v) => v.status == VisitStopStatus.pending)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final unplanned = unplannedVisits
-        .where((v) =>
-            v.status == VisitStopStatus.pending ||
-            v.status == VisitStopStatus.inProgress)
-        .where((v) => v.status != VisitStopStatus.inProgress ||
-            !inProgress.any((p) => p.id == v.id))
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final inProgress =
+        visits.where((v) => v.status == VisitStopStatus.inProgress).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final pendingPlanned =
+        plannedVisits.where((v) => v.status == VisitStopStatus.pending).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final unplanned =
+        unplannedVisits
+            .where(
+              (v) =>
+                  v.status == VisitStopStatus.pending ||
+                  v.status == VisitStopStatus.inProgress,
+            )
+            .where(
+              (v) =>
+                  v.status != VisitStopStatus.inProgress ||
+                  !inProgress.any((p) => p.id == v.id),
+            )
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     // Avoid duplicating in-progress stops already listed.
     final unplannedPending = unplanned
         .where((v) => v.status == VisitStopStatus.pending)
@@ -488,12 +490,12 @@ class SalesDaySnapshot extends Equatable {
 
   @override
   List<Object?> get props => [
-        mode,
-        visits,
-        activity,
-        insights,
-        assignedArea,
-        showOutstandingBalances,
-        intelligenceHints,
-      ];
+    mode,
+    visits,
+    activity,
+    insights,
+    assignedArea,
+    showOutstandingBalances,
+    intelligenceHints,
+  ];
 }

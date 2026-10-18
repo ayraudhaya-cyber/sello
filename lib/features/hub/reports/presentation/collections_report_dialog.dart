@@ -176,7 +176,7 @@ class _CollectionsReportDialogState
     if (snapshot == null || _exportingExcel) return;
     setState(() => _exportingExcel = true);
     try {
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: CollectionsReportExcelExporter.buildBytes(snapshot),
         filename: CollectionsReportExcelExporter.filename(
           asOf: snapshot.asOfDate,
@@ -184,12 +184,17 @@ class _CollectionsReportDialogState
         mimeType: 'application/vnd.ms-excel',
       );
       if (!mounted) return;
-      SelloSnackbars.success(context, 'Excel export downloaded.');
-    } on UnsupportedError {
+      SelloSnackbars.success(
+        context,
+        saved
+            ? 'Export saved to your Downloads folder.'
+            : 'Excel export downloaded.',
+      );
+    } on UnsupportedError catch (error) {
       if (!mounted) return;
       SelloSnackbars.warning(
         context,
-        'Export download is available in the web app.',
+        error.message ?? 'Unable to save this export.',
       );
     } catch (_) {
       if (!mounted) return;
@@ -216,18 +221,23 @@ class _CollectionsReportDialogState
           email: settings.documentEmail,
         ),
       );
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: bytes,
         filename: CollectionsReportPdf.filename(asOf: snapshot.asOfDate),
         mimeType: 'application/pdf',
       );
       if (!mounted) return;
-      SelloSnackbars.success(context, 'PDF export downloaded.');
-    } on UnsupportedError {
+      SelloSnackbars.success(
+        context,
+        saved
+            ? 'Export saved to your Downloads folder.'
+            : 'PDF export downloaded.',
+      );
+    } on UnsupportedError catch (error) {
       if (!mounted) return;
       SelloSnackbars.warning(
         context,
-        'Export download is available in the web app.',
+        error.message ?? 'Unable to save this export.',
       );
     } catch (_) {
       if (!mounted) return;

@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.16",
-        "build": 17,
-        "released_at": "2026-10-17",
-        "notes": "See the total value of today’s orders alongside order and visit counts\nMove directly to an in-progress visit, or close it and continue to another customer\nMobile invoice links use a cleaner compact header and address layout\nRecord collections against specific unpaid orders or opening balances\nSee when an opening balance is partially collected or fully collected\nDelivery updates can automatically text the buyer and, when configured, the Owner or Manager\nOrder delivery messages can include the secure invoice link"
+        "version": "1.0.17",
+        "build": 18,
+        "released_at": "2026-10-18",
+        "notes": "My collections keeps showing the payments you recorded\nExcel and PDF exports save on this phone"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.16",
-        "build": 17,
-        "released_at": "2026-10-17",
-        "notes": "Customer details now include an Orders tab with status, view, and receive-payment actions\nOpening balances stay separate from wallet credit and show partially collected or collected status\nCollections must be allocated to unpaid orders or opening balances before any excess becomes wallet credit\nConfigure automatic delivery SMS messages for buyers and Owners or Managers\nRecord when a customer cheque is given to another person and when it is returned\nExport collection reports with the improved PDF and Excel layouts\nMobile invoice links use a cleaner compact header and address layout"
+        "version": "1.0.17",
+        "build": 18,
+        "released_at": "2026-10-18",
+        "notes": "The Payments list shows collections in the web app\nStill to collect can be exported for a from and to date\nExcel and PDF exports save on Windows and Android"
       },
       "minimum": {
         "version": "1.0.0",

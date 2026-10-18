@@ -94,6 +94,30 @@ class PaymentRepository {
     )
   ''';
 
+  /// Same payment columns without nested rows. The nested select can come
+  /// back empty in the browser even when these rows exist.
+  static const _plainListSelect = '''
+    id,
+    company_id,
+    customer_id,
+    employee_id,
+    payment_number,
+    amount,
+    method,
+    status,
+    reference,
+    notes,
+    received_at,
+    refunded_at,
+    cancelled_at,
+    reviewed_by,
+    reviewed_at,
+    rejection_reason,
+    corrects_payment_id,
+    corrected_by_payment_id,
+    correction_reason
+  ''';
+
   static const _detailSelect = '''
     id,
     company_id,
@@ -197,7 +221,7 @@ class PaymentRepository {
       pageSize: pageSize,
     );
     try {
-      return await run(_listSelect);
+      return await _loadPaymentPage(run, _listSelect);
     } on ProvisioningFailure catch (failure) {
       // `_fetchPaymentsPage` wraps Postgrest errors; retry for old databases.
       final text = failure.message.toLowerCase();
@@ -206,8 +230,139 @@ class PaymentRepository {
               text.contains('could not find')) &&
           _correctionColumns.any(text.contains);
       if (!missing) rethrow;
-      return run(_withoutCorrectionColumns(_listSelect));
+      return _loadPaymentPage(run, _withoutCorrectionColumns(_listSelect));
     }
+  }
+
+  /// Prefer the detailed list. If that shape returns nothing, or the nested
+  /// relationships fail, load the same page from the payments table itself.
+  Future<PaymentPageResult> _loadPaymentPage(
+    Future<PaymentPageResult> Function(String select) run,
+    String select,
+  ) async {
+    try {
+      final detailed = await run(select);
+      if (detailed.items.isNotEmpty) return detailed;
+    } on ProvisioningFailure {
+      // Fall through. A relationship error must not hide the payment rows.
+    }
+    final plainSelect = _correctionColumns.any(select.contains)
+        ? _plainListSelect
+        : _withoutCorrectionColumns(_plainListSelect);
+    final plain = await run(plainSelect);
+    if (plain.items.isEmpty) return plain;
+    return _attachPaymentRelations(plain);
+  }
+
+  Future<PaymentPageResult> _attachPaymentRelations(
+    PaymentPageResult page,
+  ) async {
+    final rows = page.items;
+    final customerIds = rows.map((row) => row.customerId).toSet().toList();
+    final employeeIds = rows
+        .expand((row) => [row.employeeId, row.reviewedBy])
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    final paymentIds = rows.map((row) => row.id).toList();
+
+    final customers = <String, Map<String, dynamic>>{};
+    final employees = <String, Map<String, dynamic>>{};
+    final allocations = <String, List<Map<String, dynamic>>>{};
+
+    if (customerIds.isNotEmpty) {
+      final data = await _client
+          .from('customers')
+          .select('id, name, phone')
+          .inFilter('id', customerIds);
+      for (final raw in data as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final id = map['id'] as String?;
+        if (id != null) customers[id] = map;
+      }
+    }
+    if (employeeIds.isNotEmpty) {
+      final data = await _client
+          .from('employees')
+          .select('id, full_name')
+          .inFilter('id', employeeIds);
+      for (final raw in data as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final id = map['id'] as String?;
+        if (id != null) employees[id] = map;
+      }
+    }
+    try {
+      final data = await _client
+          .from('payment_allocations')
+          .select(
+            'id, payment_id, order_id, receivable_adjustment_id, amount, '
+            'orders(id, order_number), '
+            'customer_receivable_adjustments(id, adjustment_number, reference_number)',
+          )
+          .inFilter('payment_id', paymentIds);
+      for (final raw in data as List) {
+        final map = Map<String, dynamic>.from(raw as Map);
+        final paymentId = map['payment_id'] as String?;
+        if (paymentId == null) continue;
+        allocations.putIfAbsent(paymentId, () => []).add(map);
+      }
+    } catch (_) {
+      // The payment itself is still useful when the paid-for link cannot load.
+    }
+
+    return PaymentPageResult(
+      items: [
+        for (final row in rows)
+          () {
+            final rowAllocations = [
+              for (final raw
+                  in allocations[row.id] ?? const <Map<String, dynamic>>[])
+                PaymentAllocation.fromJson(raw),
+            ];
+            final firstOrder = rowAllocations
+                .map((allocation) => allocation.orderNumber)
+                .whereType<String>()
+                .where((number) => number.isNotEmpty)
+                .firstOrNull;
+            return PaymentSummary(
+              id: row.id,
+              companyId: row.companyId,
+              customerId: row.customerId,
+              employeeId: row.employeeId,
+              paymentNumber: row.paymentNumber,
+              amount: row.amount,
+              method: row.method,
+              status: row.status,
+              receivedAt: row.receivedAt,
+              customerName: customers[row.customerId]?['name'] as String?,
+              customerPhone: customers[row.customerId]?['phone'] as String?,
+              employeeName: employees[row.employeeId]?['full_name'] as String?,
+              reference: row.reference,
+              notes: row.notes,
+              relatedOrderNumber: firstOrder == null
+                  ? null
+                  : rowAllocations.length > 1
+                  ? '$firstOrder +${rowAllocations.length - 1}'
+                  : firstOrder,
+              refundedAt: row.refundedAt,
+              cancelledAt: row.cancelledAt,
+              reviewedBy: row.reviewedBy,
+              reviewedAt: row.reviewedAt,
+              reviewerName: row.reviewedBy == null
+                  ? null
+                  : employees[row.reviewedBy]?['full_name'] as String?,
+              rejectionReason: row.rejectionReason,
+              correctsPaymentId: row.correctsPaymentId,
+              correctedByPaymentId: row.correctedByPaymentId,
+              correctionReason: row.correctionReason,
+              allocations: rowAllocations,
+            );
+          }(),
+      ],
+      hasMore: page.hasMore,
+    );
   }
 
   Future<PaymentPageResult> _fetchPaymentsPage({

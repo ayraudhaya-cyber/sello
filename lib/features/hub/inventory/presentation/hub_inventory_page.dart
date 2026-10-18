@@ -49,20 +49,26 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           .read(hubInventoryProvider.notifier)
           .exportStockWorkbook();
       if (!mounted) return;
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: file.bytes,
         filename: file.filename,
         mimeType: 'application/vnd.ms-excel',
       );
-      SelloSnackbars.success(context, 'Inventory export downloaded.');
+      if (!mounted) return;
+      SelloSnackbars.success(
+        context,
+        saved
+            ? 'Export saved to your Downloads folder.'
+            : 'Inventory export downloaded.',
+      );
     } on AppFailure catch (failure) {
       if (!mounted) return;
       SelloSnackbars.error(context, failure.message);
-    } on UnsupportedError {
+    } on UnsupportedError catch (error) {
       if (!mounted) return;
       SelloSnackbars.warning(
         context,
-        'Export download is available in the web app.',
+        error.message ?? 'Unable to save this export.',
       );
     } catch (_) {
       if (!mounted) return;

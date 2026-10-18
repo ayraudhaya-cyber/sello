@@ -287,6 +287,7 @@ class ReportRepository {
   /// As-of open invoices grouped for the Collections Report.
   Future<CollectionsReportSnapshot> fetchCollectionsReport({
     required DateTime asOfDate,
+    DateTime? fromDate,
     List<String> employeeIds = const [],
     required String salesRepsLabel,
     required String currencySymbol,
@@ -306,6 +307,14 @@ class ReportRepository {
       for (final row in rows as List) {
         final map = Map<String, dynamic>.from(row as Map);
         final orderedAt = _asDate(map['ordered_at']) ?? cutoff;
+        if (fromDate != null &&
+            !CollectionsReportMath.recordedInPeriod(
+              recordedAt: orderedAt,
+              fromDate: fromDate,
+              toDate: asOfDate,
+            )) {
+          continue;
+        }
         invoices.add(
           CollectionsReportInvoice(
             orderId: map['order_id'] as String? ?? '',
@@ -335,6 +344,7 @@ class ReportRepository {
 
       return CollectionsReportMath.assemble(
         asOfDate: asOfDate,
+        fromDate: fromDate,
         salesRepsLabel: salesRepsLabel,
         currencySymbol: currencySymbol,
         invoices: invoices,

@@ -16,6 +16,9 @@ abstract final class CollectionsReportPdf {
     String money(num value) =>
         SelloFormatters.currency(value, symbol: snapshot.currencySymbol);
     final asOf = SelloFormatters.date(snapshot.asOfDate);
+    final period = snapshot.fromDate == null
+        ? 'As of $asOf'
+        : 'From ${SelloFormatters.date(snapshot.fromDate!)} to $asOf';
 
     final doc = pw.Document();
     doc.addPage(
@@ -26,7 +29,7 @@ abstract final class CollectionsReportPdf {
           company: identity,
           title: kCollectionsReportTitle,
           meta: [
-            'As of $asOf',
+            period,
             'Sales reps: ${snapshot.salesRepsLabel}',
             if (snapshot.overdueCount > 0)
               snapshot.overdueCount == 1

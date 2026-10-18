@@ -154,9 +154,13 @@ class CollectionsReportSnapshot extends Equatable {
     required this.salesRepsLabel,
     required this.groups,
     required this.currencySymbol,
+    this.fromDate,
   });
 
   final DateTime asOfDate;
+
+  /// First order/opening-balance date included. Null means no lower bound.
+  final DateTime? fromDate;
   final String salesRepsLabel;
   final List<CollectionsReportCustomerGroup> groups;
   final String currencySymbol;
@@ -173,7 +177,13 @@ class CollectionsReportSnapshot extends Equatable {
   int get overdueCount => invoices.where((invoice) => invoice.isOverdue).length;
 
   @override
-  List<Object?> get props => [asOfDate, salesRepsLabel, groups, currencySymbol];
+  List<Object?> get props => [
+    asOfDate,
+    fromDate,
+    salesRepsLabel,
+    groups,
+    currencySymbol,
+  ];
 }
 
 /// As-of receivable rules for the Collections Report.
@@ -182,6 +192,19 @@ class CollectionsReportSnapshot extends Equatable {
 /// with an as-of cutoff on [CollectionsReportAllocation.receivedAt].
 abstract final class CollectionsReportMath {
   /// Inclusive end of the selected local calendar day, in UTC.
+  /// True when [recordedAt] falls on a local day from [fromDate] through [toDate].
+  static bool recordedInPeriod({
+    required DateTime recordedAt,
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) {
+    final local = recordedAt.toLocal();
+    final day = DateTime(local.year, local.month, local.day);
+    final from = DateTime(fromDate.year, fromDate.month, fromDate.day);
+    final to = DateTime(toDate.year, toDate.month, toDate.day);
+    return !day.isBefore(from) && !day.isAfter(to);
+  }
+
   static DateTime asOfEndUtc(DateTime asOfLocalDate) {
     final local = DateTime(
       asOfLocalDate.year,
@@ -402,6 +425,7 @@ abstract final class CollectionsReportMath {
     required String salesRepsLabel,
     required String currencySymbol,
     required List<CollectionsReportInvoice> invoices,
+    DateTime? fromDate,
   }) {
     final byCustomer = <String, List<CollectionsReportInvoice>>{};
     for (final invoice in invoices) {
@@ -430,6 +454,9 @@ abstract final class CollectionsReportMath {
 
     return CollectionsReportSnapshot(
       asOfDate: DateTime(asOfDate.year, asOfDate.month, asOfDate.day),
+      fromDate: fromDate == null
+          ? null
+          : DateTime(fromDate.year, fromDate.month, fromDate.day),
       salesRepsLabel: salesRepsLabel,
       groups: groups,
       currencySymbol: currencySymbol,

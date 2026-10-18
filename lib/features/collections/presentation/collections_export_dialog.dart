@@ -35,7 +35,8 @@ class _CollectionsExportDialogState
   CollectionsPeriod? _period = CollectionsPeriod.thisMonth;
   late DateTime _from;
   late DateTime _to; // inclusive day
-  late DateTime _asOf;
+  late DateTime _stillFrom;
+  late DateTime _stillTo;
   String? _employeeId;
   _ExportFile? _exporting;
 
@@ -44,7 +45,8 @@ class _CollectionsExportDialogState
     super.initState();
     _employeeId = widget.initialEmployeeId;
     final today = DateTime.now();
-    _asOf = DateTime(today.year, today.month, today.day);
+    _stillTo = DateTime(today.year, today.month, today.day);
+    _stillFrom = DateTime(2020, 1, 1);
     _applyPeriod(CollectionsPeriod.thisMonth);
   }
 
@@ -100,11 +102,11 @@ class _CollectionsExportDialogState
     } on AppFailure catch (failure) {
       if (!mounted) return;
       SelloSnackbars.error(context, failure.message);
-    } on UnsupportedError {
+    } on UnsupportedError catch (error) {
       if (!mounted) return;
       SelloSnackbars.warning(
         context,
-        'Export download is available in the web app.',
+        error.message ?? 'Unable to save this export.',
       );
     } catch (_) {
       if (!mounted) return;
@@ -152,13 +154,15 @@ class _CollectionsExportDialogState
         company: _company(),
       );
       if (!mounted) return;
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: bytes,
         filename: CollectionsPdfExporter.filename(from: _from, to: _to),
         mimeType: 'application/pdf',
       );
+      if (!mounted) return;
+      _saved(saved, 'Collections export downloaded.');
     } else {
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: CollectionsExcelExporter.buildBytes(
           rows: rows,
           from: _from,
@@ -168,9 +172,9 @@ class _CollectionsExportDialogState
         filename: CollectionsExcelExporter.filename(from: _from, to: _to),
         mimeType: 'application/vnd.ms-excel',
       );
+      if (!mounted) return;
+      _saved(saved, 'Collections export downloaded.');
     }
-    SelloSnackbars.success(context, 'Collections export downloaded.');
-    Navigator.of(context).pop();
   }
 
   Future<void> _exportStillToCollect(_ExportFile file) async {
@@ -185,11 +189,12 @@ class _CollectionsExportDialogState
     final snapshot = await ref
         .read(reportRepositoryProvider)
         .fetchCollectionsReport(
-          asOfDate: _asOf,
+          asOfDate: _stillTo,
+          fromDate: _stillFrom,
           employeeIds: selectedId == null ? const [] : [selectedId],
           salesRepsLabel: CollectionsReportMath.salesRepsLabel(
             selectedIds: selectedId == null ? const [] : [selectedId],
-            selectedNames: [if (selectedName != null) selectedName],
+            selectedNames: [?selectedName],
           ),
           currencySymbol: SelloFormatters.currencySymbol(
             ref.read(companySettingsProvider).currency,
@@ -213,32 +218,49 @@ class _CollectionsExportDialogState
         company: _company(),
       );
       if (!mounted) return;
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: bytes,
-        filename: CollectionsReportPdf.filename(asOf: _asOf),
+        filename: CollectionsReportPdf.filename(asOf: _stillTo),
         mimeType: 'application/pdf',
       );
+      if (!mounted) return;
+      _saved(saved, 'Still to collect export downloaded.');
     } else {
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: CollectionsReportExcelExporter.buildBytes(snapshot),
-        filename: CollectionsReportExcelExporter.filename(asOf: _asOf),
+        filename: CollectionsReportExcelExporter.filename(asOf: _stillTo),
         mimeType: 'application/vnd.ms-excel',
       );
+      if (!mounted) return;
+      _saved(saved, 'Still to collect export downloaded.');
     }
-    SelloSnackbars.success(context, 'Still to collect export downloaded.');
+  }
+
+  void _saved(bool savedOnDevice, String downloaded) {
+    SelloSnackbars.success(
+      context,
+      savedOnDevice ? 'Export saved to your Downloads folder.' : downloaded,
+    );
     Navigator.of(context).pop();
   }
 
-  Future<void> _pickAsOf() async {
+  Future<void> _pickStill({required bool isFrom}) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _asOf,
+      initialDate: isFrom ? _stillFrom : _stillTo,
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
     if (picked == null) return;
     setState(() {
-      _asOf = DateTime(picked.year, picked.month, picked.day);
+      final day = DateTime(picked.year, picked.month, picked.day);
+      if (isFrom) {
+        _stillFrom = day;
+        if (_stillTo.isBefore(_stillFrom)) _stillTo = _stillFrom;
+      } else {
+        _stillTo = day;
+        if (_stillFrom.isAfter(_stillTo)) _stillFrom = _stillTo;
+      }
     });
   }
 
@@ -253,7 +275,7 @@ class _CollectionsExportDialogState
     return SelloFormDialog(
       title: 'Export collections',
       subtitle: stillToCollect
-          ? 'What customers still owe, as of the date you pick.'
+          ? 'What customers still owe for orders and opening balances in the period you pick.'
           : 'Money collected by your team, with a summary per sales rep.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
@@ -278,7 +300,25 @@ class _CollectionsExportDialogState
           ),
           const SizedBox(height: 16),
           if (stillToCollect) ...[
-            _DateField(label: 'As of', value: _asOf, onTap: _pickAsOf),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateField(
+                    label: 'From',
+                    value: _stillFrom,
+                    onTap: () => _pickStill(isFrom: true),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _DateField(
+                    label: 'To',
+                    value: _stillTo,
+                    onTap: () => _pickStill(isFrom: false),
+                  ),
+                ),
+              ],
+            ),
           ] else ...[
             const SelloFieldLabel(label: 'Period'),
             const SizedBox(height: 8),
@@ -336,10 +376,12 @@ class _CollectionsExportDialogState
           Text(
             stillToCollect
                 ? 'Unpaid placed, partly delivered, and completed orders, '
-                      'plus opening balances. Each row shows how many days are '
-                      'left, using the due days in Settings. After the due date, '
-                      'the row names the sales rep, or the owner when no sales '
-                      'rep is set. Opening balances are included only when All '
+                      'plus opening balances, recorded from the From date '
+                      'through the To date. The balance is what was still owed '
+                      'at the end of the To date. Each row shows how many days '
+                      'are left, using the due days in Settings. After the due '
+                      'date, the row names the sales rep, or the owner when '
+                      'none is set. Opening balances are included only when All '
                       'sales reps is selected.'
                 : 'Includes collected payments and payments awaiting approval '
                       '(listed separately, not counted as collected). '

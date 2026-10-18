@@ -115,7 +115,7 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         SelloSnackbars.info(context, 'No orders match these filters.');
         return;
       }
-      downloadBrowserFile(
+      final saved = await downloadBrowserFile(
         bytes: OrdersExcelExporter.buildBytes(
           orders: rows,
           filterLabel: _filterLabel(ref.read(hubOrdersProvider)),
@@ -123,19 +123,22 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         filename: OrdersExcelExporter.filename(),
         mimeType: 'application/vnd.ms-excel',
       );
+      if (!mounted) return;
       SelloSnackbars.success(
         context,
-        rows.length == 1
+        saved
+            ? 'Export saved to your Downloads folder.'
+            : rows.length == 1
             ? '1 order exported.'
             : '${rows.length} orders exported.',
       );
     } on AppFailure catch (failure) {
       if (mounted) SelloSnackbars.error(context, failure.message);
-    } on UnsupportedError {
+    } on UnsupportedError catch (error) {
       if (mounted) {
         SelloSnackbars.warning(
           context,
-          'Export download is available in the web app.',
+          error.message ?? 'Unable to save this export.',
         );
       }
     } catch (_) {

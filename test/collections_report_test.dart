@@ -402,4 +402,23 @@ void main() {
       expect(opening.dueLabel, 'Overdue by 14 days - Owner');
     },
   );
+
+  test('still to collect period keeps the local from and to days', () {
+    expect(
+      CollectionsReportMath.recordedInPeriod(
+        recordedAt: DateTime(2026, 10, 2, 9),
+        fromDate: DateTime(2026, 10, 2),
+        toDate: DateTime(2026, 10, 18),
+      ),
+      isTrue,
+    );
+    expect(
+      CollectionsReportMath.recordedInPeriod(
+        recordedAt: DateTime(2026, 9, 30),
+        fromDate: DateTime(2026, 10, 1),
+        toDate: DateTime(2026, 10, 18),
+      ),
+      isFalse,
+    );
+  });
 }

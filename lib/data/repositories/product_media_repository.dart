@@ -156,7 +156,7 @@ class ProductMediaRepository {
         onProgress?.call(
           MediaUploadProgress(
             phase: MediaUploadPhase.uploading,
-            message: 'Uploading photo ${i + 1} of ${normalized.length}...',
+            message: 'Uploading photo ${i + 1} of ${normalized.length}',
             fraction: (i + 0.15) / (normalized.length + 0.15),
           ),
         );

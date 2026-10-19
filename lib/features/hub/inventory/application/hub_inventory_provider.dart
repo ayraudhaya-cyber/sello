@@ -117,7 +117,10 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
   String? get _branchId => ref.read(currentSessionProvider)?.branch?.id;
 
   Future<void> _initialize() async {
-    await Future.wait([_loadCategories(), loadStock(resetPage: true)]);
+    await Future.wait([
+      _loadCategories(),
+      loadStock(resetPage: true, seedMissing: true),
+    ]);
   }
 
   Future<void> _loadCategories() async {
@@ -130,7 +133,10 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
   }
 
   Future<void> refresh() async {
-    await Future.wait([_loadCategories(), loadStock(resetPage: true)]);
+    await Future.wait([
+      _loadCategories(),
+      loadStock(resetPage: true, seedMissing: true),
+    ]);
   }
 
   int _loadGeneration = 0;
@@ -139,6 +145,7 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
     bool resetPage = false,
     bool showLoading = true,
     bool refreshStats = true,
+    bool seedMissing = false,
   }) async {
     final generation = ++_loadGeneration;
     final page = resetPage ? 0 : state.page;
@@ -148,6 +155,23 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
       page: page,
       initialized: true,
     );
+
+    if (seedMissing) {
+      final session = ref.read(currentSessionProvider);
+      final branchId = _branchId;
+      if (session != null && branchId != null && branchId.isNotEmpty) {
+        try {
+          await _repo.seedMissingVariantStock(
+            companyId: session.company.id,
+            branchId: branchId,
+            employeeId: session.employee.id,
+          );
+        } catch (_) {
+          // Stock already on hand still loads. Missing rows can be retried.
+        }
+      }
+      if (generation != _loadGeneration) return;
+    }
 
     try {
       final stockFuture = _repo.fetchStock(

@@ -366,6 +366,12 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
         saveProgress != null &&
         saveProgress.phase != MediaUploadPhase.idle &&
         saveProgress.phase != MediaUploadPhase.success;
+    final preparingCount = active.where((item) => item.processing).length;
+    final photosReady =
+        !readOnly &&
+        !showSaveProgress &&
+        preparingCount == 0 &&
+        active.any((item) => item.dirty && item.localBytes != null);
     final selectedIndex = selected == null
         ? 0
         : active
@@ -435,14 +441,18 @@ class _SelloProductMediaGalleryState extends State<SelloProductMediaGallery> {
           ),
           if (showSaveProgress) ...[
             const SizedBox(height: 8),
-            Text(
-              saveProgress.message ?? 'Saving photos…',
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12,
-                color: AppColors.textTertiary,
-              ),
+            _PhotoProgressLine(
+              message: saveProgress.message ?? 'Uploading photos',
+              fraction: saveProgress.fraction,
             ),
+          ] else if (preparingCount > 0) ...[
+            const SizedBox(height: 8),
+            const _PhotoProgressLine(
+              message: 'Preparing photos. You can save when this finishes.',
+            ),
+          ] else if (photosReady) ...[
+            const SizedBox(height: 8),
+            const _PhotoProgressLine(message: 'Photos ready'),
           ],
           if (showThumbs || (!readOnly && active.isNotEmpty)) ...[
             SizedBox(height: showcase ? 16 : 12),
@@ -855,6 +865,43 @@ class _StarBadge extends StatelessWidget {
         size: iconSize,
         color: context.brandAccent,
       ),
+    );
+  }
+}
+
+class _PhotoProgressLine extends StatelessWidget {
+  const _PhotoProgressLine({required this.message, this.fraction});
+
+  final String message;
+  final double? fraction;
+
+  @override
+  Widget build(BuildContext context) {
+    final showBar = fraction != null || message.startsWith('Uploading');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          message,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 12,
+            color: AppColors.textTertiary,
+          ),
+        ),
+        if (showBar) ...[
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              value: fraction,
+              backgroundColor: AppColors.outlineSubtle,
+              color: context.brandAccent,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -17,6 +17,7 @@ import 'package:sello/features/products/application/product_fields_provider.dart
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/product_field.dart';
+import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/models/product_image.dart';
 import 'package:sello/shared/models/product_summary.dart';
 import 'package:sello/shared/models/product_upsert_input.dart';
@@ -1308,6 +1309,7 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
   bool _galleryProcessing = false;
   bool _submitted = false;
   bool _saving = false;
+  MediaUploadProgress? _uploadProgress;
   String? _skuFieldError;
   String? _barcodeFieldError;
   late Map<String, String> _attributes;
@@ -1998,16 +2000,30 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
       variants: variantDrafts,
     );
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _uploadProgress = const MediaUploadProgress(
+        phase: MediaUploadPhase.preparing,
+        message: 'Saving product…',
+      );
+    });
     final error = await ref
         .read(hubProductsProvider.notifier)
-        .saveProduct(input: input, gallery: _gallery);
+        .saveProduct(
+          input: input,
+          gallery: _gallery,
+          onMediaProgress: (progress) {
+            if (!mounted) return;
+            setState(() => _uploadProgress = progress);
+          },
+        );
     if (!mounted) return;
 
     if (error != null) {
       final lower = error.toLowerCase();
       setState(() {
         _saving = false;
+        _uploadProgress = null;
         if (lower.contains('sku') ||
             lower.contains('item code') ||
             lower.contains('unique code') ||
@@ -2073,6 +2089,66 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
     _submit(fieldConfig);
   }
 
+  /// Quiet status beside Save. Hidden on the photo tab while preparing,
+  /// because the gallery already says the same thing there.
+  Widget? _photoStatusLine() {
+    if (!_showOptions || _tab == 0) return null;
+
+    final upload = _uploadProgress;
+    final uploading =
+        upload != null &&
+        upload.phase != MediaUploadPhase.idle &&
+        upload.phase != MediaUploadPhase.success;
+
+    final String? message;
+    double? fraction;
+    var showBar = false;
+    if (uploading) {
+      message = upload.message ?? 'Uploading photos';
+      fraction = upload.fraction;
+      showBar = true;
+    } else if (_galleryProcessing) {
+      message = 'Preparing photos. You can save when this finishes.';
+    } else {
+      final ready = _gallery.any(
+        (item) => !item.removed && item.dirty && item.localBytes != null,
+      );
+      message = ready ? 'Photos ready' : null;
+    }
+    if (message == null) return null;
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12,
+              height: 1.3,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          if (showBar) ...[
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                value: fraction,
+                backgroundColor: AppColors.outlineSubtle,
+                color: context.brandAccent,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final fieldConfigAsync = ref.watch(productFieldConfigProvider);
@@ -2111,6 +2187,7 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
         : widget.photoPanelBuilder?.call(context) ??
               SelloProductMediaGallery(
                 items: _gallery,
+                progress: _uploadProgress,
                 onChanged: (items) {
                   // Keep submit payload in sync without rebuilding the whole form
                   // (rebuilding freezes typing while images optimize on web).
@@ -2206,6 +2283,7 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
           hasVariants: _showOptions,
           readyCount: _readyVariantCount,
         ),
+        leading: _photoStatusLine(),
         primaryEnabled: !_galleryProcessing && !_saving,
         primaryLoading: _saving && !_needsMoreVariants,
         onPrimary: (_galleryProcessing || _saving)

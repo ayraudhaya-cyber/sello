@@ -142,56 +142,30 @@ class InventoryRepository {
       }
 
       final needle = search.trim();
+      // Search the catalog tables directly, then load those stock rows.
+      // Filtering the embedded product from inventory (`products.or`) does not
+      // narrow the stock list, so typing in Inventory looked like a no-op.
+      final List<dynamic> response;
       if (needle.isNotEmpty) {
-        query = query.or(
-          'name.ilike.%$needle%,sku.ilike.%$needle%,barcode.ilike.%$needle%,brand.ilike.%$needle%',
-          referencedTable: 'products',
-        );
+        final productIds = await _productIdsForSearch(needle);
+        if (productIds.isEmpty) {
+          return const InventoryPageResult(items: [], hasMore: false);
+        }
+        response = await _inventoryRowsForProducts(query, productIds);
+      } else {
+        // Load the matching catalog, then page by parent product so grouped
+        // option rows do not make page length jump around.
+        response = await query
+            .order('updated_at', ascending: false)
+            .range(0, 4999) as List;
       }
 
-      // Load the matching catalog, then page by parent product so grouped
-      // option rows do not make page length jump around.
-      final response = await query
-          .order('updated_at', ascending: false)
-          .range(0, 4999);
-
       final byId = <String, InventoryItem>{};
-      for (final row in response as List) {
+      for (final row in response) {
         final item = InventoryItem.fromQueryRow(
           Map<String, dynamic>.from(row as Map),
         );
         byId[item.inventoryId] = item;
-      }
-
-      // Also match sellable option SKU / barcode without a new RPC.
-      if (needle.isNotEmpty) {
-        try {
-          var variantQuery = _client
-              .from('inventory')
-              .select(_listSelect)
-              .isFilter('products.deleted_at', null)
-              .or(
-                'sku.ilike.%$needle%,barcode.ilike.%$needle%',
-                referencedTable: 'product_variants',
-              );
-          if (branchId != null && branchId.isNotEmpty) {
-            variantQuery = variantQuery.eq('branch_id', branchId);
-          }
-          if (categoryId != null && categoryId.isNotEmpty) {
-            variantQuery = variantQuery.eq('products.category_id', categoryId);
-          }
-          final variantRows = await variantQuery
-              .order('updated_at', ascending: false)
-              .range(0, 4999);
-          for (final row in variantRows as List) {
-            final item = InventoryItem.fromQueryRow(
-              Map<String, dynamic>.from(row as Map),
-            );
-            byId.putIfAbsent(item.inventoryId, () => item);
-          }
-        } catch (_) {
-          // Variant search is additive — product search still works.
-        }
       }
 
       var items = byId.values.toList()
@@ -244,6 +218,155 @@ class InventoryRepository {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  /// Parent products whose name, code, barcode, brand, or option label/code
+  /// matches [needle]. Uses the same top-level `or` filter as the Products list.
+  Future<List<String>> _productIdsForSearch(String needle) async {
+    final safe = needle.replaceAll(RegExp(r'[%_,()]'), ' ').trim();
+    if (safe.isEmpty) return const [];
+
+    final ids = <String>{};
+    final products = await _client
+        .from('products')
+        .select('id')
+        .isFilter('deleted_at', null)
+        .or(
+          'name.ilike.%$safe%,sku.ilike.%$safe%,barcode.ilike.%$safe%,brand.ilike.%$safe%',
+        )
+        .limit(300);
+    for (final row in products as List) {
+      final id = (row as Map)['id'];
+      if (id is String && id.isNotEmpty) ids.add(id);
+    }
+
+    try {
+      final variants = await _client
+          .from('product_variants')
+          .select('product_id')
+          .isFilter('deleted_at', null)
+          .or(
+            'label.ilike.%$safe%,sku.ilike.%$safe%,barcode.ilike.%$safe%',
+          )
+          .limit(300);
+      for (final row in variants as List) {
+        final id = (row as Map)['product_id'];
+        if (id is String && id.isNotEmpty) ids.add(id);
+      }
+    } catch (_) {
+      // Parent name/code search still stands if option search is unavailable.
+    }
+    return ids.toList();
+  }
+
+  Future<List<dynamic>> _inventoryRowsForProducts(
+    dynamic query,
+    List<String> productIds,
+  ) async {
+    final rows = <dynamic>[];
+    const chunkSize = 80;
+    for (var i = 0; i < productIds.length; i += chunkSize) {
+      final end = i + chunkSize > productIds.length
+          ? productIds.length
+          : i + chunkSize;
+      final chunk = await query
+          .inFilter('product_id', productIds.sublist(i, end))
+          .order('updated_at', ascending: false)
+          .limit(1000);
+      rows.addAll(chunk as List);
+    }
+    return rows;
+  }
+
+  /// Inserts a zero-quantity stock row for every sellable option at [branchId]
+  /// that does not have one yet. Existing quantities are left untouched.
+  Future<void> seedMissingVariantStock({
+    required String companyId,
+    required String branchId,
+    required String employeeId,
+  }) async {
+    final variants = await _rangeAll((from, to) {
+      return _client
+          .from('product_variants')
+          .select('id, product_id, is_default')
+          .eq('company_id', companyId)
+          .isFilter('deleted_at', null)
+          .range(from, to);
+    });
+    final existing = await _rangeAll((from, to) {
+      return _client
+          .from('inventory')
+          .select('variant_id')
+          .eq('company_id', companyId)
+          .eq('branch_id', branchId)
+          .range(from, to);
+    });
+    final have = <String>{
+      for (final row in existing)
+        if (row['variant_id'] is String) row['variant_id'] as String,
+    };
+
+    final missing = <Map<String, dynamic>>[];
+    final missingDefaults = <Map<String, dynamic>>[];
+    for (final row in variants) {
+      final variantId = row['id'];
+      final productId = row['product_id'];
+      if (variantId is! String || productId is! String) continue;
+      if (have.contains(variantId)) continue;
+      final payload = {
+        'company_id': companyId,
+        'branch_id': branchId,
+        'product_id': productId,
+        'variant_id': variantId,
+        'quantity': 0,
+        'is_default_variant': false,
+        'created_by': employeeId,
+        'updated_by': employeeId,
+      };
+      if (row['is_default'] == true) {
+        missingDefaults.add(payload);
+      } else {
+        missing.add(payload);
+      }
+    }
+
+    await _insertIgnoreDuplicates(missing);
+    await _insertIgnoreDuplicates(missingDefaults);
+  }
+
+  Future<void> _insertIgnoreDuplicates(List<Map<String, dynamic>> rows) async {
+    const size = 200;
+    for (var i = 0; i < rows.length; i += size) {
+      final end = i + size > rows.length ? rows.length : i + size;
+      try {
+        await _client.from('inventory').upsert(
+          rows.sublist(i, end),
+          onConflict: 'company_id,branch_id,variant_id',
+          ignoreDuplicates: true,
+        );
+      } catch (_) {
+        // One conflicting default-variant row must not drop the rest.
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _rangeAll(
+    Future<dynamic> Function(int from, int to) fetch,
+  ) async {
+    final rows = <Map<String, dynamic>>[];
+    const page = 1000;
+    var from = 0;
+    while (true) {
+      final chunk = await fetch(from, from + page - 1);
+      final list = chunk as List;
+      for (final row in list) {
+        rows.add(Map<String, dynamic>.from(row as Map));
+      }
+      if (list.length < page) break;
+      from += page;
+      if (from >= 50000) break;
+    }
+    return rows;
   }
 
   /// All branch stock rows for spreadsheet export (no image signing).

@@ -25,6 +25,7 @@ class HubInventoryPage extends ConsumerStatefulWidget {
 
 class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   Timer? _debounce;
   final Set<String> _expandedProductIds = {};
   var _exporting = false;
@@ -32,6 +33,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchFocus.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -412,7 +414,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
     ref.watch(hubSettingsProvider);
     final groups = groupInventoryItems(state.items);
 
-    if (_searchController.text != state.search) {
+    if (!_searchFocus.hasFocus && _searchController.text != state.search) {
       _searchController.value = TextEditingValue(
         text: state.search,
         selection: TextSelection.collapsed(offset: state.search.length),
@@ -430,6 +432,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
         children: [
           _Toolbar(
             searchController: _searchController,
+            searchFocus: _searchFocus,
             state: state,
             onSearchChanged: (value) {
               _debounce?.cancel();
@@ -727,6 +730,7 @@ Widget _statusBadgeForStatus(StockStatus status) {
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.searchController,
+    required this.searchFocus,
     required this.state,
     required this.onSearchChanged,
     required this.onStatusChanged,
@@ -739,6 +743,7 @@ class _Toolbar extends StatelessWidget {
   });
 
   final TextEditingController searchController;
+  final FocusNode searchFocus;
   final HubInventoryState state;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<StockStatusFilter?> onStatusChanged;
@@ -824,6 +829,7 @@ class _Toolbar extends StatelessWidget {
 
     final search = SelloSearchBar(
       controller: searchController,
+      focusNode: searchFocus,
       hint: 'Search products or SKU…',
       onChanged: onSearchChanged,
     );

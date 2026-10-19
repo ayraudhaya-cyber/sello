@@ -424,7 +424,7 @@ class ProductRepository {
           'reorder_level': input.reorderLevel,
           'created_by': employeeId,
           'updated_by': employeeId,
-        }, onConflict: 'company_id,branch_id,variant_id');
+        }, onConflict: 'company_id,branch_id,variant_id', ignoreDuplicates: true);
 
         // Simple create: parent opening stock lands on the default variant.
         // Multi-option create: per-option opening stock is applied in
@@ -954,6 +954,17 @@ class ProductRepository {
             .update(payload)
             .eq('id', draft.id!)
             .eq('product_id', productId);
+        // Editing an existing option used to skip the stock row. A save that
+        // was interrupted after the product insert then left the catalog
+        // item invisible in Inventory.
+        await _ensureVariantInventory(
+          companyId: companyId,
+          branchId: branchId,
+          productId: productId,
+          variantId: draft.id!,
+          employeeId: employeeId,
+          reorderLevel: reorderLevel,
+        );
         if (draft.isDefault || defaultVariantId == null) {
           defaultVariantId = draft.id;
         }
@@ -1043,16 +1054,21 @@ class ProductRepository {
     required String employeeId,
     required num reorderLevel,
   }) async {
-    await _client.from('inventory').upsert({
-      'company_id': companyId,
-      'branch_id': branchId,
-      'product_id': productId,
-      'variant_id': variantId,
-      'quantity': 0,
-      'reorder_level': reorderLevel,
-      'created_by': employeeId,
-      'updated_by': employeeId,
-    }, onConflict: 'company_id,branch_id,variant_id');
+    await _client.from('inventory').upsert(
+      {
+        'company_id': companyId,
+        'branch_id': branchId,
+        'product_id': productId,
+        'variant_id': variantId,
+        'quantity': 0,
+        'reorder_level': reorderLevel,
+        'created_by': employeeId,
+        'updated_by': employeeId,
+      },
+      onConflict: 'company_id,branch_id,variant_id',
+      // Never overwrite quantity on a row that already exists.
+      ignoreDuplicates: true,
+    );
   }
 
   Future<String?> _ensureCategory({

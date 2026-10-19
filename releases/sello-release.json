@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.17",
-        "build": 18,
-        "released_at": "2026-10-18",
-        "notes": "My collections keeps showing the payments you recorded\nExcel and PDF exports save on this phone"
+        "version": "1.0.18",
+        "build": 19,
+        "released_at": "2026-10-19",
+        "notes": "No change to the sales app in this update"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.17",
-        "build": 18,
-        "released_at": "2026-10-18",
-        "notes": "The Payments list shows collections in the web app\nStill to collect can be exported for a from and to date\nExcel and PDF exports save on Windows and Android"
+        "version": "1.0.18",
+        "build": 19,
+        "released_at": "2026-10-19",
+        "notes": "Saving a product no longer stays stuck after a slow save\nProduct photos show when they are ready and while they upload\nInventory lists products that were missing a stock row\nInventory search finds products and option codes"
       },
       "minimum": {
         "version": "1.0.0",

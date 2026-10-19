@@ -223,41 +223,56 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
     }
 
     state = state.copyWith(isSaving: true, clearError: true);
+    late final String productId;
     try {
-      final productId = await _repo.upsertProductRecord(
+      productId = await _repo.upsertProductRecord(
         input: input,
         companyId: session.company.id,
         employeeId: session.employee.id,
         branchId: branchId,
       );
+    } on AppFailure catch (failure) {
+      state = state.copyWith(errorMessage: failure.message);
+      return failure.message;
+    } catch (_) {
+      const message = 'Could not save this product. Please try again.';
+      state = state.copyWith(errorMessage: message);
+      return message;
+    } finally {
+      // Always release the lock. A dropped network call or a non-catalog
+      // error used to leave isSaving true for the rest of the session, so
+      // every later save showed "another product is still saving".
+      state = state.copyWith(isSaving: false);
+    }
+
+    try {
       await _loadCategories();
       await loadProducts(showLoading: false);
-      // Product upsert seeds/adjusts stock — keep Inventory valuation in sync.
-      unawaited(refreshHubInventoryQuietly(ref));
-      state = state.copyWith(isSaving: false, clearError: true);
-
-      final needsMediaSync = gallery.any(
-        (d) => d.dirty || d.removed || (d.isNew && d.localBytes != null),
-      );
-      if (needsMediaSync) {
-        unawaited(
-          _syncGalleryInBackground(
-            companyId: session.company.id,
-            employeeId: session.employee.id,
-            productId: productId,
-            gallery: gallery,
-            onMediaProgress: onMediaProgress,
-          ),
-        );
-      }
-      return null;
-    } on AppFailure catch (failure) {
-      state = state.copyWith(isSaving: false, errorMessage: failure.message);
-      return failure.message;
+    } catch (_) {
+      // The product row is already saved. A slow catalog reload must not
+      // look like a failed save or block the next one.
     }
+    unawaited(refreshHubInventoryQuietly(ref));
+
+    final needsMediaSync = gallery.any(
+      (d) => d.dirty || d.removed || (d.isNew && d.localBytes != null),
+    );
+    if (needsMediaSync) {
+      final photoError = await _syncGallery(
+        companyId: session.company.id,
+        employeeId: session.employee.id,
+        productId: productId,
+        gallery: gallery,
+        onMediaProgress: onMediaProgress,
+      );
+      if (photoError != null) return photoError;
+    }
+    return null;
   }
 
-  Future<void> _syncGalleryInBackground({
+  /// Uploads photos before the editor closes, so a slow connection shows
+  /// progress instead of looking like a failed save.
+  Future<String?> _syncGallery({
     required String companyId,
     required String employeeId,
     required String productId,
@@ -273,11 +288,11 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         onMediaProgress: onMediaProgress,
       );
       await loadProducts(showLoading: false);
+      return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        errorMessage:
-            'Product saved, but photos failed to upload: ${failure.message}',
-      );
+      return 'Product saved, but photos failed to upload: ${failure.message}';
+    } catch (_) {
+      return 'Product saved, but photos failed to upload. You can try again.';
     }
   }
 
@@ -296,11 +311,17 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         archived: archived,
       );
       await loadProducts(showLoading: false);
-      state = state.copyWith(isSaving: false, clearError: true);
+      state = state.copyWith(clearError: true);
       return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      state = state.copyWith(errorMessage: failure.message);
       return failure.message;
+    } catch (_) {
+      const message = 'Could not update this product. Please try again.';
+      state = state.copyWith(errorMessage: message);
+      return message;
+    } finally {
+      state = state.copyWith(isSaving: false);
     }
   }
 
@@ -319,11 +340,17 @@ class HubProductsNotifier extends Notifier<HubProductsState> {
         employeeId: session.employee.id,
       );
       await loadProducts(showLoading: false);
-      state = state.copyWith(isSaving: false, clearError: true);
+      state = state.copyWith(clearError: true);
       return null;
     } on AppFailure catch (failure) {
-      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      state = state.copyWith(errorMessage: failure.message);
       return failure.message;
+    } catch (_) {
+      const message = 'Could not delete this product. Please try again.';
+      state = state.copyWith(errorMessage: message);
+      return message;
+    } finally {
+      state = state.copyWith(isSaving: false);
     }
   }
 }

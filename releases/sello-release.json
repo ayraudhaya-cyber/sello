@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.20",
-        "build": 21,
+        "version": "1.0.21",
+        "build": 22,
         "released_at": "2026-10-21",
-        "notes": "A Saving indicator shows while a payment, order, or visit is still saving\nReceive payment separates what the customer owes now from unpaid orders\nAn applied order payment can text the customer a receipt that includes the discount"
+        "notes": "A Saving indicator shows while a payment, order, or visit is still saving\nReceive payment separates what the customer owes now from unpaid orders\nAn applied order payment can text the customer a receipt that includes the discount\nDeliver remaining stays off until part of the order was already delivered"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.20",
-        "build": 21,
+        "version": "1.0.21",
+        "build": 22,
         "released_at": "2026-10-21",
-        "notes": "New orders can be created without delivering, with a separate Create and deliver action\nThe order screen stays open until the order is saved, and a Saving indicator shows while other saves finish\nReceive payment separates Outstanding on delivered orders from unpaid orders\nAn applied order payment texts the customer a receipt, including any discount"
+        "notes": "New orders can be created without delivering, with a separate Create and deliver action\nThe order screen stays open until the order is saved, and a Saving indicator shows while other saves finish\nReceive payment separates Outstanding on delivered orders from unpaid orders\nAn applied order payment texts the customer a receipt, including any discount\nOutstanding, customers, and orders update after a delivery, payment, or cheque without pressing Refresh\nDeliver remaining stays off until part of the order was already delivered\nPaid for shows the first order, with a count for the rest. Hover to see the full list"
       },
       "minimum": {
         "version": "1.0.0",

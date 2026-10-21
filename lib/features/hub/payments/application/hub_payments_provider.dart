@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/payment_repository.dart';
+import 'package:sello/features/hub/customers/application/customers_cross_refresh.dart';
+import 'package:sello/features/hub/orders/application/orders_cross_refresh.dart';
 import 'package:sello/features/hub/payments/application/pending_collections_count_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/feedback/sello_activity.dart';
@@ -254,6 +258,7 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
     try {
       final result = await _repo.receivePayment(input);
       await loadPayments(showLoading: false);
+      _refreshRelated();
       state = state.copyWith(isSaving: false, clearError: true);
       return result;
     } on AppFailure catch (failure) {
@@ -267,6 +272,7 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
     try {
       await _repo.approveCollection(paymentId);
       await loadPayments(showLoading: false);
+      _refreshRelated();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -294,6 +300,7 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
       }
     }
     await loadPayments(showLoading: false);
+    _refreshRelated();
     state = state.copyWith(isSaving: false);
     return (approved: approved, error: error);
   }
@@ -303,12 +310,18 @@ class HubPaymentsNotifier extends Notifier<HubPaymentsState> {
     try {
       await _repo.rejectCollection(paymentId, reason: reason);
       await loadPayments(showLoading: false);
+      _refreshRelated();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
+  }
+
+  void _refreshRelated() {
+    unawaited(refreshHubCustomersQuietly(ref));
+    unawaited(refreshHubOrdersQuietly(ref));
   }
 }
 

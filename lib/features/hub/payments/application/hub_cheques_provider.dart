@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/hub/customers/application/customers_cross_refresh.dart';
+import 'package:sello/features/hub/orders/application/orders_cross_refresh.dart';
+import 'package:sello/features/hub/payments/application/payments_cross_refresh.dart';
 import 'package:sello/data/repositories/cheque_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/feedback/sello_activity.dart';
@@ -241,6 +246,7 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     try {
       final result = await _repo.createCheque(input);
       await loadCheques(showLoading: false);
+      _refreshLedgers();
       state = state.copyWith(isSaving: false, clearError: true);
       return result;
     } on AppFailure catch (failure) {
@@ -269,6 +275,7 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     try {
       final result = await _repo.collectCheque(input);
       await loadCheques(showLoading: false);
+      _refreshLedgers();
       state = state.copyWith(isSaving: false, clearError: true);
       return result;
     } on AppFailure catch (failure) {
@@ -282,6 +289,7 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     try {
       await _repo.approveChequeCollection(chequeId);
       await loadCheques(showLoading: false);
+      _refreshLedgers();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -381,6 +389,7 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     try {
       await _repo.clearCheque(chequeId);
       await loadCheques(showLoading: false);
+      _refreshLedgers();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -394,6 +403,7 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     try {
       await _repo.bounceCheque(chequeId, reason: reason);
       await loadCheques(showLoading: false);
+      _refreshLedgers();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -407,12 +417,19 @@ class HubChequesNotifier extends Notifier<HubChequesState> {
     try {
       await _repo.cancelCheque(chequeId, reason: reason);
       await loadCheques(showLoading: false);
+      _refreshLedgers();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
+  }
+
+  void _refreshLedgers() {
+    unawaited(refreshHubPaymentsQuietly(ref));
+    unawaited(refreshHubCustomersQuietly(ref));
+    unawaited(refreshHubOrdersQuietly(ref));
   }
 }
 

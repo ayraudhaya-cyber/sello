@@ -168,11 +168,22 @@ class PaymentSummary extends Equatable {
     return 'On account';
   }
 
+  List<String> get allocationLabels => [
+        for (final allocation in allocations)
+          if (allocation.displayLabel.trim().isNotEmpty)
+            allocation.displayLabel.trim(),
+      ];
+
   /// "SO-1001, Opening balance · OB-0003" — empty when nothing is allocated.
-  String get allocationSummary => allocations
-      .map((a) => a.displayLabel.trim())
-      .where((label) => label.isNotEmpty)
-      .join(', ');
+  String get allocationSummary => allocationLabels.join(', ');
+
+  /// First item, then how many more. "SO-1001 +3".
+  String get allocationCompactLabel {
+    final labels = allocationLabels;
+    if (labels.isEmpty) return '';
+    if (labels.length == 1) return labels.first;
+    return '${labels.first} +${labels.length - 1}';
+  }
 
   bool get isCorrected =>
       status == PaymentRecordStatus.cancelled &&

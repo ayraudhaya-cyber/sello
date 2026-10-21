@@ -1059,18 +1059,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
                               ],
                             ),
                           ),
-                          DataCell(
-                            SelloTableText(
-                          payment.allocationSummary.isNotEmpty
-                              ? payment.allocationSummary
-                              : (payment.relatedOrderNumber ?? '—'),
-                          tone:
-                              payment.allocationSummary.isEmpty &&
-                                  payment.relatedOrderNumber == null
-                                  ? SelloTableTone.muted
-                                  : SelloTableTone.normal,
-                            ),
-                          ),
+                          DataCell(_PaidForCell(payment: payment)),
                           DataCell(SelloTableText(payment.method.label)),
                           DataCell(
                             SelloTableText(
@@ -1529,6 +1518,44 @@ Widget _chequeStatusBadge(ChequeSummary cheque) {
       },
     ),
   );
+}
+
+class _PaidForCell extends StatelessWidget {
+  const _PaidForCell({required this.payment});
+
+  final PaymentSummary payment;
+
+  @override
+  Widget build(BuildContext context) {
+    final labels = payment.allocationLabels;
+    if (labels.isEmpty) {
+      return SelloTableText(
+        payment.relatedOrderNumber ?? '—',
+        tone: payment.relatedOrderNumber == null
+            ? SelloTableTone.muted
+            : SelloTableTone.normal,
+      );
+    }
+    final text = SelloTableText(labels.first);
+    if (labels.length < 2) return text;
+    return Tooltip(
+      message: labels.join('\n'),
+      waitDuration: const Duration(milliseconds: 280),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          text,
+          const SizedBox(width: 6),
+          SelloStatusBadge(
+            label: '+${labels.length - 1}',
+            tone: SelloStatusTone.brand,
+            showDot: false,
+            compact: true,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _WorkspaceTabBar extends StatelessWidget {

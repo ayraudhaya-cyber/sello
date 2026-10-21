@@ -53,6 +53,11 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
       .where((line) => line.remainingQuantity > 0)
       .toList(growable: false);
 
+  /// Some units were already delivered, and some are still open.
+  bool get _canDeliverRemaining =>
+      widget.detail.lines.any((line) => line.deliveredQuantity > 0) &&
+      _openLines.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -172,7 +177,10 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
                 label: 'Deliver remaining',
                 variant: SelloButtonVariant.outline,
                 size: SelloButtonSize.small,
-                onPressed: _fillAllRemaining,
+                tooltip: _canDeliverRemaining
+                    ? null
+                    : 'Available after part of this order has been delivered',
+                onPressed: _canDeliverRemaining ? _fillAllRemaining : null,
               ),
               const SizedBox(width: 8),
               SelloButton(

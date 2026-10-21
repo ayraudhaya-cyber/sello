@@ -8,6 +8,7 @@ import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/customers/application/hub_customers_provider.dart';
+import 'package:sello/features/hub/payments/application/hub_payments_provider.dart';
 import 'package:sello/features/corrections/presentation/correct_opening_balance_dialog.dart';
 import 'package:sello/features/customers/application/customers_excel_exporter.dart';
 import 'package:sello/features/customers/presentation/add_opening_balance_dialog.dart';
@@ -1660,6 +1661,7 @@ class _HubCustomerDetailsHostState
     await ref
         .read(hubCustomersProvider.notifier)
         .loadCustomers(showLoading: false);
+    _refreshPayments();
     if (!mounted) return;
     SelloSnackbars.success(context, 'Opening balance added.');
   }
@@ -1688,8 +1690,16 @@ class _HubCustomerDetailsHostState
     await ref
         .read(hubCustomersProvider.notifier)
         .loadCustomers(showLoading: false);
+    _refreshPayments();
     if (!mounted) return;
     SelloSnackbars.success(context, 'Opening balance corrected.');
+  }
+
+  void _refreshPayments() {
+    if (!ref.exists(hubPaymentsProvider)) return;
+    unawaited(
+      ref.read(hubPaymentsProvider.notifier).loadPayments(showLoading: false),
+    );
   }
 
   Future<void> _viewOrder(OrderSummary order) async {

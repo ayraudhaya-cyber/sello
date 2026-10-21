@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/order_repository.dart';
+import 'package:sello/features/hub/customers/application/customers_cross_refresh.dart';
 import 'package:sello/features/hub/inventory/application/inventory_cross_refresh.dart';
+import 'package:sello/features/hub/payments/application/payments_cross_refresh.dart';
 import 'package:sello/features/hub/products/application/products_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/feedback/sello_activity.dart';
@@ -347,6 +349,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
       unawaited(refreshHubProductsQuietly(ref));
+      _refreshBalances();
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(
         orderId: orderId,
@@ -389,6 +392,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         unawaited(refreshHubInventoryQuietly(ref));
         unawaited(refreshHubProductsQuietly(ref));
       }
+      if (complete) _refreshBalances();
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(
         confirmation: saved.confirmation,
@@ -431,6 +435,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
       unawaited(refreshHubProductsQuietly(ref));
+      _refreshBalances();
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {
@@ -449,6 +454,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
       unawaited(refreshHubProductsQuietly(ref));
+      _refreshBalances();
       state = state.copyWith(isSaving: false, clearError: true);
       return null;
     } on AppFailure catch (failure) {
@@ -465,6 +471,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       await loadOrders(showLoading: false);
       unawaited(refreshHubInventoryQuietly(ref));
       unawaited(refreshHubProductsQuietly(ref));
+      _refreshBalances();
       state = state.copyWith(isSaving: false, clearError: true);
       return OrderMutationResult.ok(confirmation: confirmation);
     } on AppFailure catch (failure) {
@@ -484,6 +491,11 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
+  }
+
+  void _refreshBalances() {
+    unawaited(refreshHubPaymentsQuietly(ref));
+    unawaited(refreshHubCustomersQuietly(ref));
   }
 
   Future<String?> archiveOrder(OrderSummary order) async {

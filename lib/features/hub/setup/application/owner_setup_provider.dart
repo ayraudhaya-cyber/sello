@@ -5,6 +5,7 @@ import 'package:sello/services/notifications/outbound/messaging_phone.dart';
 import 'package:sello/services/notifications/outbound/outbound_sms.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/services/setup/owner_setup_service.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/app_session.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/models/team_invite_result.dart';
@@ -19,7 +20,7 @@ class AddedSalesRep {
   final String email;
 }
 
-class OwnerSetupState {
+class OwnerSetupState implements SelloBusyState {
   const OwnerSetupState({
     this.step = OwnerSetupStep.welcome,
     this.isSaving = false,
@@ -34,6 +35,9 @@ class OwnerSetupState {
 
   final OwnerSetupStep step;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool customBrandingEnabled;
   final List<AddedSalesRep> addedReps;

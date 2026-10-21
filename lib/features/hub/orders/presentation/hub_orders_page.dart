@@ -154,36 +154,38 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     OrderDetail? existing,
     bool correcting = false,
   }) async {
-    final result = await showDialog<OrderEditorResult>(
+    await showDialog<OrderEditorResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) => OrderEditorDialog(
         existing: existing,
         correcting: correcting,
         currencySymbol: _currencySymbol(),
+        onSave: _saveEditorResult,
       ),
     );
-    if (result == null) return;
+  }
 
+  Future<OrderSaveFeedback> _saveEditorResult(OrderEditorResult result) async {
     if (result.correcting) {
       final saved = await ref
           .read(hubOrdersProvider.notifier)
           .correctInvoice(result.input);
-      if (!mounted) return;
       if (!saved.isOk) {
-        SelloSnackbars.error(context, saved.error!);
-      } else if (saved.correctionSmsSent) {
-        SelloSnackbars.success(
-          context,
-          'Invoice corrected. The buyer was sent an updated SMS.',
-        );
-      } else {
-        SelloSnackbars.success(
-          context,
-          'Invoice corrected. The invoice link already shows this change.',
-        );
+        return OrderSaveFeedback(error: saved.error);
       }
-      return;
+      final smsSent = saved.correctionSmsSent;
+      return OrderSaveFeedback(
+        onClosed: () async {
+          if (!mounted) return;
+          SelloSnackbars.success(
+            context,
+            smsSent
+                ? 'Invoice corrected. The buyer was sent an updated SMS.'
+                : 'Invoice corrected. The invoice link already shows this change.',
+          );
+        },
+      );
     }
 
     final saved = await ref
@@ -193,24 +195,29 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
           complete: result.complete,
           place: result.place,
         );
-    if (!mounted) return;
     if (!saved.isOk) {
-      SelloSnackbars.error(context, saved.error!);
-    } else if (result.complete) {
-      if (saved.confirmation != null) {
-        await presentOrderConfirmation(
-          context,
-          saved.confirmation,
-          completed: true,
-        );
-      } else {
-        SelloSnackbars.success(context, 'Order marked as delivered.');
-      }
-    } else if (result.place) {
-      SelloSnackbars.success(context, 'Order placed.');
-    } else {
-      SelloSnackbars.success(context, 'Saved for later.');
+      return OrderSaveFeedback(error: saved.error);
     }
+    return OrderSaveFeedback(
+      onClosed: () async {
+        if (!mounted) return;
+        if (result.complete) {
+          if (saved.confirmation != null) {
+            await presentOrderConfirmation(
+              context,
+              saved.confirmation,
+              completed: true,
+            );
+          } else {
+            SelloSnackbars.success(context, 'Order marked as delivered.');
+          }
+        } else if (result.place) {
+          SelloSnackbars.success(context, 'Order placed.');
+        } else {
+          SelloSnackbars.success(context, 'Saved for later.');
+        }
+      },
+    );
   }
 
   String? _busyRowKey;

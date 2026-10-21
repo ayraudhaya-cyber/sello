@@ -69,6 +69,7 @@ class OrderEditorDialog extends ConsumerStatefulWidget {
     this.hideCartBar = false,
     this.onBasketChanged,
     this.correcting = false,
+    this.onSave,
   });
 
   final OrderDetail? existing;
@@ -103,9 +104,26 @@ class OrderEditorDialog extends ConsumerStatefulWidget {
   /// Correct a placed or delivered invoice. One save, no place or complete.
   final bool correcting;
 
+  /// Saves before the dialog closes. A failure keeps the dialog open.
+  final Future<OrderSaveFeedback> Function(OrderEditorResult result)? onSave;
+
   @override
   ConsumerState<OrderEditorDialog> createState() => OrderEditorDialogState();
 }
+
+/// Result of saving an order while the editor is still open.
+class OrderSaveFeedback {
+  const OrderSaveFeedback({this.error, this.onClosed});
+
+  final String? error;
+
+  /// Runs after the dialog has closed. Use the caller's context for toasts.
+  final Future<void> Function()? onClosed;
+
+  bool get ok => error == null;
+}
+
+enum _OrderBusy { place, deliver, draft, correct }
 
 class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   CustomerSummary? _customer;
@@ -126,6 +144,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
   bool _customerSearching = false;
   bool _showCustomerResults = false;
   bool _loadingCustomer = false;
+  _OrderBusy? _busy;
 
   List<ProductSummary> _catalog = const [];
   List<ProductCategory> _categories = const [];
@@ -982,7 +1001,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     widget.onEmbeddedResult?.call(result);
   }
 
-  void _submit({bool complete = false, bool place = false}) {
+  Future<void> _submit({bool complete = false, bool place = false}) async {
+    if (_busy != null) return;
     if (_customer == null) {
       setState(() => _error = 'Select a customer to continue.');
       return;
@@ -1015,7 +1035,35 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       widget.onEmbeddedResult?.call(result);
       return;
     }
+    final save = widget.onSave;
+    if (save == null) {
+      Navigator.of(context).pop(result);
+      return;
+    }
+
+    final busy = widget.correcting
+        ? _OrderBusy.correct
+        : complete
+        ? _OrderBusy.deliver
+        : place
+        ? _OrderBusy.place
+        : _OrderBusy.draft;
+    setState(() {
+      _busy = busy;
+      _error = null;
+    });
+    final feedback = await save(result);
+    if (!mounted) return;
+    if (!feedback.ok) {
+      setState(() {
+        _busy = null;
+        _error = feedback.error ?? 'Unable to save this order.';
+      });
+      return;
+    }
+    final afterClose = feedback.onClosed;
     Navigator.of(context).pop(result);
+    await afterClose?.call();
   }
 
   void _goCheckout() {
@@ -1055,18 +1103,19 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final selling = !useSteps || _step == 0;
     final visitMode = widget.visitMode || widget.embedded;
     final correcting = widget.correcting;
+    final hubCreatesOrder = !correcting && !_isSalesWorkspace;
     final primaryActionLabel = correcting
         ? 'Save correction'
-        : (_isSalesWorkspace ? 'Submit order' : 'Mark as delivered');
+        : (_isSalesWorkspace ? 'Submit order' : 'Create order');
     void onPrimaryAction() {
       if (correcting) {
         _submit();
-      } else if (_isSalesWorkspace) {
-        _submit(place: true);
       } else {
-        _submit(complete: true);
+        _submit(place: true);
       }
     }
+
+    void onDeliverNow() => _submit(complete: true);
 
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1106,7 +1155,15 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
       return body;
     }
 
-    return SelloFormDialog(
+    final busy = _busy != null;
+    final placing = _busy == _OrderBusy.place || _busy == _OrderBusy.correct;
+    final delivering = _busy == _OrderBusy.deliver;
+    final drafting = _busy == _OrderBusy.draft;
+
+    return PopScope(
+      canPop: !busy,
+      child: SelloFormDialog(
+      onClose: busy ? () {} : null,
       title: correcting
           ? 'Correct invoice'
           : useSteps
@@ -1141,29 +1198,52 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
           ? SelloDialogFooter(
               cancelLabel: useSteps && _step > 0 ? 'Back' : 'Close',
               cancelVariant: SelloButtonVariant.outline,
+              cancelEnabled: !busy,
               onCancel: useSteps
                   ? _goBack
                   : () => Navigator.of(context).maybePop(),
               primaryLabel: useSteps && _step == 0
                   ? 'Review correction'
                   : 'Save correction',
+              primaryLoading: placing,
+              primaryEnabled: !busy,
               onPrimary: useSteps && _step == 0 ? _goCheckout : onPrimaryAction,
             )
           : useSteps
           ? SelloDialogFooter(
               cancelLabel: _step == 0 ? 'Close' : 'Back',
               cancelVariant: SelloButtonVariant.outline,
+              cancelEnabled: !busy,
               onCancel: _goBack,
+              leading: hubCreatesOrder && _step > 0
+                  ? SelloButton(
+                      label: 'Create and deliver',
+                      variant: SelloButtonVariant.outline,
+                      loading: delivering,
+                      onPressed: busy ? null : onDeliverNow,
+                    )
+                  : null,
               primaryLabel: _step == 0 ? 'Review order' : primaryActionLabel,
+              primaryLoading: placing,
+              primaryEnabled: !busy,
               onPrimary: _step == 0 ? _goCheckout : onPrimaryAction,
             )
           : SelloDialogFooter(
-              cancelLabel: 'Save for later',
+              cancelLabel: hubCreatesOrder
+                  ? 'Create and deliver'
+                  : 'Save for later',
               cancelVariant: SelloButtonVariant.outline,
-              onCancel: () => _submit(complete: false),
+              cancelLoading: hubCreatesOrder ? delivering : drafting,
+              cancelEnabled: !busy,
+              onCancel: hubCreatesOrder
+                  ? onDeliverNow
+                  : () => _submit(complete: false),
               primaryLabel: primaryActionLabel,
+              primaryLoading: placing,
+              primaryEnabled: !busy,
               onPrimary: onPrimaryAction,
             ),
+      ),
     );
   }
 
@@ -1733,7 +1813,8 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
               label: 'Save for later',
               variant: SelloButtonVariant.outline,
               size: SelloButtonSize.small,
-              onPressed: () => _submit(complete: false),
+              loading: _busy == _OrderBusy.draft,
+              onPressed: _busy != null ? null : () => _submit(complete: false),
             ),
           ),
           const SizedBox(height: 8),

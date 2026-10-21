@@ -7,12 +7,13 @@ import 'package:sello/data/repositories/inventory_repository.dart';
 import 'package:sello/features/hub/inventory/application/inventory_excel_exporter.dart';
 import 'package:sello/features/hub/products/application/products_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:sello/shared/utils/hub_table_paging.dart';
 
-class HubInventoryState {
+class HubInventoryState implements SelloBusyState {
   const HubInventoryState({
     this.items = const [],
     this.categories = const [],
@@ -47,6 +48,9 @@ class HubInventoryState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

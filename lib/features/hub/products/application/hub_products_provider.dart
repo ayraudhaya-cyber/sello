@@ -6,6 +6,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/features/hub/inventory/application/inventory_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/models/product_category.dart';
 import 'package:sello/shared/models/product_image.dart';
@@ -15,7 +16,7 @@ import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum ProductStatusFilter { all, active, inactive }
 
-class HubProductsState {
+class HubProductsState implements SelloBusyState {
   const HubProductsState({
     this.items = const [],
     this.categories = const [],
@@ -41,6 +42,9 @@ class HubProductsState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

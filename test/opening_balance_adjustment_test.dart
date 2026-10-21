@@ -407,7 +407,7 @@ void main() {
         ),
         [
           'OB-20261001-0001',
-          'Due Rs 50,000.00',
+          'Unpaid Rs 50,000.00',
           'Old invoice / reference: INV-4587',
         ],
       );
@@ -534,6 +534,19 @@ void main() {
         amountLabel: 'Rs 10.00',
       );
       expect(body, isNot(contains('Reference:')));
+      expect(body, isNot(contains('Order:')));
+    });
+
+    test('includes the order and discount on an applied order payment', () {
+      final body = OutboundMessageTemplate.openingBalancePaymentReceived(
+        amountLabel: 'Rs 4,200.00',
+        discountLabel: 'Rs 200.00',
+        orderNumbers: 'SO-20261021-0004',
+        businessName: 'Acme',
+      );
+      expect(body, contains('Payment received: Rs 4,200.00'));
+      expect(body, contains('Discount: Rs 200.00'));
+      expect(body, contains('Order: SO-20261021-0004'));
     });
 
     test('order collection acknowledgement copy is unchanged', () {

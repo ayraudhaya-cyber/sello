@@ -785,6 +785,7 @@ class SelloDialogFooter extends StatelessWidget {
     this.onCancel,
     this.cancelLabel = 'Cancel',
     this.primaryLoading = false,
+    this.cancelLoading = false,
     this.primaryEnabled = true,
     this.cancelEnabled = true,
     this.cancelVariant = SelloButtonVariant.outline,
@@ -801,6 +802,7 @@ class SelloDialogFooter extends StatelessWidget {
   final VoidCallback? onCancel;
   final String cancelLabel;
   final bool primaryLoading;
+  final bool cancelLoading;
   final bool primaryEnabled;
   final bool cancelEnabled;
   final SelloButtonVariant cancelVariant;
@@ -842,7 +844,8 @@ class SelloDialogFooter extends StatelessWidget {
           label: cancelLabel,
           variant: cancelVariant,
           expanded: fill,
-          onPressed: !cancelEnabled
+          loading: cancelLoading,
+          onPressed: !cancelEnabled || cancelLoading
               ? null
               : (onCancel ?? () => Navigator.of(context).maybePop()),
         );

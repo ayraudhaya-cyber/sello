@@ -3,13 +3,14 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/supplier_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/supplier_summary.dart';
 import 'package:sello/shared/models/supplier_upsert_input.dart';
 import 'package:sello/shared/utils/hub_table_paging.dart';
 
 enum SupplierStatusFilter { all, active, inactive }
 
-class HubSuppliersState {
+class HubSuppliersState implements SelloBusyState {
   const HubSuppliersState({
     this.items = const [],
     this.stats = const SupplierDashboardStats(),
@@ -37,6 +38,9 @@ class HubSuppliersState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

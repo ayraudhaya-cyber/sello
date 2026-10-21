@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
 import 'package:sello/shared/widgets/feedback/sello_feedback.dart';
 import 'package:sello/shared/widgets/inputs/sello_text_field.dart';
@@ -52,6 +53,7 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _saving = true);
+    SelloActivity.begin();
     try {
       await ref
           .read(authServiceProvider)
@@ -73,6 +75,8 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
         _saving = false;
         _error = 'Unable to update password. Please try again.';
       });
+    } finally {
+      SelloActivity.end();
     }
   }
 

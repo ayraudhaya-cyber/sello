@@ -5,6 +5,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:sello/app.dart';
 import 'package:sello/core/theme/app_theme.dart';
 import 'package:sello/features/system/presentation/system_pages.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/services/reliability/reliability_providers.dart';
 import 'package:sello/services/supabase/supabase.dart';
 import 'package:sello/services/updates/update_providers.dart';
@@ -42,6 +43,7 @@ Future<void> main() async {
   // Reliability bootstrap (connectivity + sync) starts with the first frame.
   runApp(
     ProviderScope(
+      observers: [SelloActivityObserver()],
       child: Consumer(
         builder: (context, ref, _) {
           ref.watch(reliabilityBootstrapProvider);

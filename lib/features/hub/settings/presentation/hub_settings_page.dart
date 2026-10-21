@@ -15,6 +15,7 @@ import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome
 import 'package:sello/features/hub/settings/settings_sections.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/app_notification.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/financial_visibility.dart';
@@ -705,6 +706,7 @@ class _NotificationsPrefsSectionState
       ];
       _saving = true;
     });
+    SelloActivity.begin();
     try {
       await ref.read(notificationRepositoryProvider).updatePreference(updated);
     } catch (_) {
@@ -712,6 +714,7 @@ class _NotificationsPrefsSectionState
       SelloSnackbars.error(context, 'Unable to save preference.');
       await _load();
     } finally {
+      SelloActivity.end();
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -911,9 +914,9 @@ class _ProductFieldsSectionState extends ConsumerState<_ProductFieldsSection> {
     final draft = _draft;
     if (draft == null) return;
     setState(() => _saving = true);
-    final error = await ref
-        .read(productFieldConfigProvider.notifier)
-        .save(draft);
+    final error = await SelloActivity.run(
+      () => ref.read(productFieldConfigProvider.notifier).save(draft),
+    );
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {

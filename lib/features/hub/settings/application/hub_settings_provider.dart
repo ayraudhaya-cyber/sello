@@ -5,13 +5,14 @@ import 'package:sello/data/repositories/company_settings_repository.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/notifications/outbound/messaging_phone.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/client_branding.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/document_issuer_identity.dart';
 import 'package:sello/shared/models/processed_media.dart';
 import 'package:sello/shared/providers/branding_provider.dart';
 
-class HubSettingsState {
+class HubSettingsState implements SelloBusyState {
   const HubSettingsState({
     this.settings,
     this.draft,
@@ -29,6 +30,9 @@ class HubSettingsState {
   final bool isLoading;
   final bool isSaving;
   final bool isSavingBranding;
+
+  @override
+  bool get isBusy => isSaving || isSavingBranding;
   final String? errorMessage;
   final bool initialized;
 

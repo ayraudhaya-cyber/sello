@@ -14,6 +14,7 @@ import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
 import 'package:sello/features/payments/presentation/record_cheque_dialog.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/features/visits/application/visit_checkout_payment_rules.dart';
 import 'package:sello/features/visits/presentation/signature_pad.dart';
 import 'package:sello/features/visits/presentation/visit_basket_bar.dart';
@@ -704,6 +705,7 @@ class _CustomerVisitWorkspacePageState
     }
 
     setState(() => _saving = true);
+    SelloActivity.begin();
     try {
       if (_customer == null && hasLines) {
         final registered = await _registerWalkInCustomer();
@@ -922,6 +924,7 @@ class _CustomerVisitWorkspacePageState
       if (!mounted) return;
       SelloSnackbars.error(context, 'Unable to finish this visit.');
     } finally {
+      SelloActivity.end();
       if (mounted) setState(() => _saving = false);
     }
   }

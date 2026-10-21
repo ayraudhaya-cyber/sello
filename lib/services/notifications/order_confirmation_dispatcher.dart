@@ -971,11 +971,11 @@ class CollectionAcknowledgementPrepareResult {
   }
 }
 
-/// Applied payment SMS for collections allocated to opening-balance AR.
+/// Applied payment SMS for the customer.
 ///
-/// Reuses [OutboundSmsSender] + unique `receipt` events. Does not send for
-/// pending collections or order-only payments, so existing order collection
-/// SMS (pending acknowledgement only) stays unchanged.
+/// One receipt per completed collection: order, opening balance, or both.
+/// Includes the discount when the payment has one. Pending collections keep
+/// the separate acknowledgement and do not send this receipt.
 class PaymentReceivedDispatcher {
   PaymentReceivedDispatcher({
     required this.prepare,
@@ -1040,6 +1040,7 @@ class PaymentReceivedDispatcher {
     final body = OutboundMessageTemplate.openingBalancePaymentReceived(
       amountLabel: amountLabel,
       discountLabel: discountLabel,
+      orderNumbers: prepared.orderNumbers,
       oldInvoiceReference: prepared.openingReference,
       businessName: prepared.companyName,
     );
@@ -1081,6 +1082,7 @@ class PaymentReceiptPrepareResult {
     required this.currency,
     required this.companyName,
     required this.customerName,
+    this.orderNumbers,
     this.openingReference,
     this.customer,
   });
@@ -1093,6 +1095,7 @@ class PaymentReceiptPrepareResult {
   final String currency;
   final String companyName;
   final String customerName;
+  final String? orderNumbers;
   final String? openingReference;
   final OrderConfirmationContact? customer;
 
@@ -1127,6 +1130,7 @@ class PaymentReceiptPrepareResult {
     }
 
     final ref = json['opening_reference']?.toString().trim();
+    final orders = json['order_numbers']?.toString().trim();
     return PaymentReceiptPrepareResult(
       ok: true,
       alreadyPrepared: json['already_prepared'] == true,
@@ -1140,6 +1144,7 @@ class PaymentReceiptPrepareResult {
       currency: paymentMap['currency']?.toString() ?? 'USD',
       companyName: paymentMap['company_name']?.toString() ?? 'Sello',
       customerName: paymentMap['customer_name']?.toString() ?? 'Customer',
+      orderNumbers: (orders == null || orders.isEmpty) ? null : orders,
       openingReference: (ref == null || ref.isEmpty) ? null : ref,
       customer: parseContact(customerJson),
     );

@@ -3,6 +3,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/repositories/employee_repository.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/branch.dart';
 import 'package:sello/shared/models/employee_activity_event.dart';
 import 'package:sello/shared/models/employee_assignment.dart';
@@ -48,7 +49,7 @@ extension on EmployeeStatusFilter {
   };
 }
 
-class HubEmployeesState {
+class HubEmployeesState implements SelloBusyState {
   const HubEmployeesState({
     this.items = const [],
     this.roles = const [],
@@ -83,6 +84,9 @@ class HubEmployeesState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
 
   /// Human-readable phase while [isSaving] (e.g. sending invitation).
   final String? savingProgress;

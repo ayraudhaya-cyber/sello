@@ -86,6 +86,7 @@ abstract final class OutboundMessageTemplate {
   static const openingBalancePaymentReceivedDefault =
       'Payment received: {{collection_amount}}\n'
       '{{#discount_amount}}Discount: {{discount_amount}}\n{{/discount_amount}}'
+      '{{#order_numbers}}Order: {{order_numbers}}\n{{/order_numbers}}'
       '{{#old_invoice_reference}}Reference: {{old_invoice_reference}}\n{{/old_invoice_reference}}'
       '{{#business_name}}\n{{business_name}}{{/business_name}}';
 
@@ -103,6 +104,7 @@ abstract final class OutboundMessageTemplate {
   static String openingBalancePaymentReceived({
     required String amountLabel,
     String? discountLabel,
+    String? orderNumbers,
     String? oldInvoiceReference,
     String? businessName,
   }) {
@@ -111,6 +113,7 @@ abstract final class OutboundMessageTemplate {
       values: {
         'collection_amount': amountLabel,
         'discount_amount': discountLabel,
+        'order_numbers': orderNumbers,
         'old_invoice_reference': oldInvoiceReference,
         'business_name': businessName,
       },

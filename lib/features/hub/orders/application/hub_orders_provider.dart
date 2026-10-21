@@ -7,6 +7,7 @@ import 'package:sello/data/repositories/order_repository.dart';
 import 'package:sello/features/hub/inventory/application/inventory_cross_refresh.dart';
 import 'package:sello/features/hub/products/application/products_cross_refresh.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
@@ -37,7 +38,7 @@ enum OrderSort {
   final String column;
 }
 
-class HubOrdersState {
+class HubOrdersState implements SelloBusyState {
   const HubOrdersState({
     this.items = const [],
     this.reps = const [],
@@ -78,6 +79,9 @@ class HubOrdersState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

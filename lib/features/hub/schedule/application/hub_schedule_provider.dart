@@ -3,6 +3,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/visit_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/scheduled_visit.dart';
 
@@ -17,7 +18,7 @@ enum VisitStatusFilter {
   unplanned,
 }
 
-class HubScheduleState {
+class HubScheduleState implements SelloBusyState {
   const HubScheduleState({
     this.items = const [],
     this.reps = const [],
@@ -43,6 +44,9 @@ class HubScheduleState {
   final String? employeeId;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

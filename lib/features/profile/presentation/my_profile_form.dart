@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/utils/phone_number.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -55,6 +56,7 @@ class _MyProfileFormState extends ConsumerState<MyProfileForm> {
       _saving = true;
       _error = null;
     });
+    SelloActivity.begin();
     try {
       await ref.read(employeeRepositoryProvider).updateMyProfile(
             fullName: _name.text,
@@ -74,6 +76,7 @@ class _MyProfileFormState extends ConsumerState<MyProfileForm> {
       if (!mounted) return;
       setState(() => _error = 'Unable to save your profile right now.');
     } finally {
+      SelloActivity.end();
       if (mounted) setState(() => _saving = false);
     }
   }

@@ -350,7 +350,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
           ),
           if (_customer != null)
             SelloDialogSection(
-              title: 'Outstanding',
+              title: 'Unpaid orders',
               children: [
                 if (_loadingOrders)
                   const LinearProgressIndicator(minHeight: 2)
@@ -589,7 +589,7 @@ class _ReceiveDiscountSummary extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _ReceiveSummaryRow(
-            label: 'Outstanding left',
+            label: 'Unpaid left',
             value: _money(remainingClamped),
           ),
         ],
@@ -730,6 +730,18 @@ class _CustomerStrip extends StatelessWidget {
             value: SelloFormatters.currency(
               customer.outstandingBalance,
               symbol: currencySymbol,
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              'From delivered orders.',
+              style: TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 12,
+                height: 1.35,
+                color: AppColors.textFaint,
+              ),
             ),
           ),
           const SizedBox(height: 6),

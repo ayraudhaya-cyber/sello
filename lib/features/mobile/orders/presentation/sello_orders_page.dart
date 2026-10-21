@@ -83,7 +83,7 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     String? visitId,
     String? initialCustomerId,
   }) async {
-    final result = await showDialog<OrderEditorResult>(
+    await showDialog<OrderEditorResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) => OrderEditorDialog(
@@ -91,31 +91,36 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
         currencySymbol: _currencySymbol,
         visitId: visitId,
         initialCustomerId: initialCustomerId,
+        onSave: (result) async {
+          final saved = await ref
+              .read(selloOrdersProvider.notifier)
+              .saveOrder(
+                result.input,
+                complete: result.complete,
+                place: result.place,
+              );
+          if (!saved.isOk) {
+            return OrderSaveFeedback(error: saved.error);
+          }
+          return OrderSaveFeedback(
+            onClosed: () async {
+              if (!mounted) return;
+              if (result.place) {
+                SelloSnackbars.success(context, 'Order submitted.');
+              } else if (result.complete) {
+                await presentOrderConfirmation(
+                  context,
+                  saved.confirmation,
+                  completed: true,
+                );
+              } else {
+                SelloSnackbars.success(context, 'Saved for later.');
+              }
+            },
+          );
+        },
       ),
     );
-    if (result == null) return;
-
-    final saved = await ref
-        .read(selloOrdersProvider.notifier)
-        .saveOrder(
-          result.input,
-          complete: result.complete,
-          place: result.place,
-        );
-    if (!mounted) return;
-    if (!saved.isOk) {
-      SelloSnackbars.error(context, saved.error!);
-    } else if (result.place) {
-      SelloSnackbars.success(context, 'Order submitted.');
-    } else if (result.complete) {
-      await presentOrderConfirmation(
-        context,
-        saved.confirmation,
-        completed: true,
-      );
-    } else {
-      SelloSnackbars.success(context, 'Saved for later.');
-    }
   }
 
   String? _openingOrderId;

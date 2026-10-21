@@ -160,4 +160,17 @@ abstract final class OrderCollectionRules {
     }
     return null;
   }
+
+  /// Money written off from [outstanding]. Percent applies first, then amount.
+  static num resolvedDiscount({
+    required num outstanding,
+    num amount = 0,
+    num percent = 0,
+  }) {
+    return OrderCalculations.resolvedOrderDiscount(
+      subtotal: outstanding < 0 ? 0 : outstanding,
+      orderDiscountAmount: amount < 0 ? 0 : amount,
+      orderDiscountPercent: percent < 0 ? 0 : percent,
+    );
+  }
 }

@@ -10,6 +10,7 @@ import 'package:sello/features/mobile/dashboard/application/sello_company_settin
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/payments/application/order_collection_rules.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/payment_method.dart';
@@ -367,6 +368,7 @@ class _RecordOrderCollectionSheetState
       _error = null;
     });
     var walletSaved = false;
+    SelloActivity.begin();
     try {
       // Put the discount on the cash/card/bank row when present; otherwise on
       // the wallet row so a wallet-only settlement can still write off.
@@ -482,6 +484,8 @@ class _RecordOrderCollectionSheetState
             ? 'Wallet was applied. The rest could not be saved.'
             : 'Unable to record this collection.';
       });
+    } finally {
+      SelloActivity.end();
     }
   }
 
@@ -492,6 +496,7 @@ class _RecordOrderCollectionSheetState
       _saving = true;
       _error = null;
     });
+    SelloActivity.begin();
     try {
       final repo = ref.read(chequeRepositoryProvider);
       if (match.action == AssociatedChequeAction.collectExisting) {
@@ -530,6 +535,8 @@ class _RecordOrderCollectionSheetState
             ? 'Unable to collect this cheque.'
             : 'Unable to apply this cheque.';
       });
+    } finally {
+      SelloActivity.end();
     }
   }
 

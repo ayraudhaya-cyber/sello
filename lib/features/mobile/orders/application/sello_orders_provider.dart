@@ -3,6 +3,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/order_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
@@ -28,7 +29,7 @@ List<OrderStatus>? salesOrderListStatuses({
 }
 
 /// Field sales orders — same repository as Hub, scoped to the signed-in rep.
-class SelloOrdersState {
+class SelloOrdersState implements SelloBusyState {
   const SelloOrdersState({
     this.items = const [],
     this.search = '',
@@ -55,6 +56,9 @@ class SelloOrdersState {
   final bool isLoading;
   final bool isLoadingMore;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
   final bool showAllStatuses;

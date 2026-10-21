@@ -3,6 +3,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/cheque_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/utils/hub_table_paging.dart';
@@ -33,7 +34,7 @@ enum ChequeStatusFilter {
   };
 }
 
-class HubChequesState {
+class HubChequesState implements SelloBusyState {
   const HubChequesState({
     this.items = const [],
     this.stats = const ChequeDashboardStats(),
@@ -61,6 +62,9 @@ class HubChequesState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

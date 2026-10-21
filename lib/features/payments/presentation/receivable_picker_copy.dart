@@ -8,7 +8,7 @@ abstract final class ReceivablePickerCopy {
     required String currencySymbol,
   }) {
     final due =
-        'Due ${SelloFormatters.currency(order.remaining, symbol: currencySymbol)}';
+        'Unpaid ${SelloFormatters.currency(order.remaining, symbol: currencySymbol)}';
     if (!order.isOpeningBalance) {
       return ['$due · ${SelloFormatters.date(order.orderedAt)}'];
     }

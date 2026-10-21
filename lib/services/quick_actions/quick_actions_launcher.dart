@@ -17,6 +17,7 @@ import 'package:sello/features/orders/presentation/order_confirmation_share_shee
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
@@ -85,14 +86,16 @@ abstract final class QuickActionsLauncher {
     if (input == null || !context.mounted) return;
 
     try {
-      await ref
-          .read(customerRepositoryProvider)
-          .upsertCustomer(
-            companyId: session.company.id,
-            employeeId: session.employee.id,
-            branchId: session.employee.branchId,
-            input: input,
-          );
+      await SelloActivity.run(
+        () => ref
+            .read(customerRepositoryProvider)
+            .upsertCustomer(
+              companyId: session.company.id,
+              employeeId: session.employee.id,
+              branchId: session.employee.branchId,
+              input: input,
+            ),
+      );
       if (!context.mounted) return;
       SelloSnackbars.success(context, 'Customer created.');
     } on AppFailure catch (error) {
@@ -147,9 +150,9 @@ abstract final class QuickActionsLauncher {
     }
 
     try {
-      final result = await ref
-          .read(paymentRepositoryProvider)
-          .receivePayment(input);
+      final result = await SelloActivity.run(
+        () => ref.read(paymentRepositoryProvider).receivePayment(input),
+      );
       if (!context.mounted) return;
       if (result.isPendingReview) {
         await presentCollectionAcknowledgement(context, result.acknowledgement);
@@ -176,37 +179,42 @@ abstract final class QuickActionsLauncher {
       return;
     }
 
-    final result = await showDialog<OrderEditorResult>(
+    await showDialog<OrderEditorResult>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => OrderEditorDialog(
+      builder: (dialogContext) => OrderEditorDialog(
         currencySymbol: _currency(ref, role),
         initialCustomerId: customerId,
+        onSave: (result) async {
+          final saved = await ref
+              .read(hubOrdersProvider.notifier)
+              .saveOrder(
+                result.input,
+                complete: result.complete,
+                place: result.place,
+              );
+          if (!saved.isOk) {
+            return OrderSaveFeedback(error: saved.error);
+          }
+          return OrderSaveFeedback(
+            onClosed: () async {
+              if (!context.mounted) return;
+              if (result.place) {
+                SelloSnackbars.success(context, 'Order submitted.');
+              } else if (result.complete) {
+                await presentOrderConfirmation(
+                  context,
+                  saved.confirmation,
+                  completed: true,
+                );
+              } else {
+                SelloSnackbars.success(context, 'Draft saved.');
+              }
+            },
+          );
+        },
       ),
     );
-    if (result == null || !context.mounted) return;
-
-    final saved = await ref
-        .read(hubOrdersProvider.notifier)
-        .saveOrder(
-          result.input,
-          complete: result.complete,
-          place: result.place,
-        );
-    if (!context.mounted) return;
-    if (!saved.isOk) {
-      SelloSnackbars.error(context, saved.error!);
-    } else if (result.place) {
-      SelloSnackbars.success(context, 'Order submitted.');
-    } else if (result.complete) {
-      await presentOrderConfirmation(
-        context,
-        saved.confirmation,
-        completed: true,
-      );
-    } else {
-      SelloSnackbars.success(context, 'Draft saved.');
-    }
   }
 
   static Future<void> _startVisit(BuildContext context, WidgetRef ref) async {

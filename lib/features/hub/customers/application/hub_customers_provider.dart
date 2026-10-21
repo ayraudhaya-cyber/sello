@@ -3,6 +3,7 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/customer_repository.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_type.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
@@ -26,7 +27,7 @@ enum CustomerSort {
   final String? column;
 }
 
-class HubCustomersState {
+class HubCustomersState implements SelloBusyState {
   const HubCustomersState({
     this.items = const [],
     this.search = '',
@@ -58,6 +59,9 @@ class HubCustomersState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

@@ -4,6 +4,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/payment_repository.dart';
 import 'package:sello/features/hub/payments/application/pending_collections_count_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
@@ -28,7 +29,7 @@ enum PaymentMethodFilter {
   cheque,
 }
 
-class HubPaymentsState {
+class HubPaymentsState implements SelloBusyState {
   const HubPaymentsState({
     this.items = const [],
     this.stats = const PaymentDashboardStats(
@@ -65,6 +66,9 @@ class HubPaymentsState {
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
+
+  @override
+  bool get isBusy => isSaving;
   final String? errorMessage;
   final bool initialized;
 

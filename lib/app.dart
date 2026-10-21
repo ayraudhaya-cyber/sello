@@ -7,6 +7,7 @@ import 'package:sello/features/devtools/dev_experience.dart';
 import 'package:sello/features/updates/presentation/update_check_host.dart';
 import 'package:sello/shared/providers/branding_provider.dart';
 import 'package:sello/shared/providers/theme_mode_provider.dart';
+import 'package:sello/shared/widgets/feedback/sello_activity_pill.dart';
 import 'package:sello/shared/widgets/feedback/sello_toast.dart';
 
 class SelloApp extends ConsumerWidget {
@@ -29,9 +30,11 @@ class SelloApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         return wrapWithDevExperience(
-          SelloToastHost(
-            child: UpdateCheckHost(
-              child: child ?? const SizedBox.shrink(),
+          SelloActivityPill(
+            child: SelloToastHost(
+              child: UpdateCheckHost(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         );

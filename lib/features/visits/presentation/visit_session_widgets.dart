@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
+import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/customer_visit.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
@@ -54,6 +55,7 @@ class _CompleteVisitSheetState extends ConsumerState<_CompleteVisitSheet> {
       return;
     }
     setState(() => _saving = true);
+    SelloActivity.begin();
     try {
       await ref
           .read(activeCustomerVisitProvider.notifier)
@@ -71,6 +73,8 @@ class _CompleteVisitSheetState extends ConsumerState<_CompleteVisitSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       SelloSnackbars.error(context, 'Unable to complete visit.');
+    } finally {
+      SelloActivity.end();
     }
   }
 

@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.19",
-        "build": 20,
+        "version": "1.0.20",
+        "build": 21,
         "released_at": "2026-10-21",
-        "notes": "A collection discount can be an amount, a percent, or both when your company allows it\nThe collection screen shows the discount and what is still left\nScreens and buttons respond faster"
+        "notes": "A Saving indicator shows while a payment, order, or visit is still saving\nReceive payment separates what the customer owes now from unpaid orders\nAn applied order payment can text the customer a receipt that includes the discount"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.19",
-        "build": 20,
+        "version": "1.0.20",
+        "build": 21,
         "released_at": "2026-10-21",
-        "notes": "A collection discount can be an amount, a percent, or both\nCollection messages and the collection screen show the discount and what is still left\nThe collections report stays closer to customer outstanding\nInventory worth at cost and worth at selling is visible only to the Owner\nScreens and buttons respond faster"
+        "notes": "New orders can be created without delivering, with a separate Create and deliver action\nThe order screen stays open until the order is saved, and a Saving indicator shows while other saves finish\nReceive payment separates Outstanding on delivered orders from unpaid orders\nAn applied order payment texts the customer a receipt, including any discount"
       },
       "minimum": {
         "version": "1.0.0",

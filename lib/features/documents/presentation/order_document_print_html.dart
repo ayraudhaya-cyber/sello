@@ -283,6 +283,14 @@ void _writeOrderBody(
           doc.money(doc.collectionPaymentAmount!),
         );
       }
+      if (doc.collectionDiscountAmount != null &&
+          doc.collectionDiscountAmount! > 0) {
+        _total(
+          buffer,
+          'Discount',
+          '- ${doc.money(doc.collectionDiscountAmount!)}',
+        );
+      }
       if (doc.collectionReceivedAt != null) {
         _total(
           buffer,
@@ -331,6 +339,10 @@ void _writePaymentBody(StringBuffer buffer, OrderDocument doc) {
     doc.money(doc.total),
     emphasize: true,
   );
+  if (doc.discountAmount > 0) {
+    _total(buffer, 'Discount', '- ${doc.money(doc.discountAmount)}');
+    _total(buffer, 'Settles', doc.money(doc.total + doc.discountAmount));
+  }
   buffer.writeln('</div>');
 
   if (doc.notes != null) {

@@ -13,6 +13,7 @@ import 'package:sello/features/intelligence/application/intelligence_providers.d
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/collections_report.dart';
 import 'package:sello/shared/models/report_models.dart';
+import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -30,6 +31,10 @@ class HubReportsPage extends ConsumerWidget {
     WidgetRef ref,
     ReportDefinition definition,
   ) async {
+    if (definition.ownerOnly &&
+        !(ref.read(currentRoleProvider)?.canViewInventoryValuation ?? false)) {
+      return;
+    }
     if (definition.id == kCollectionsReportId) {
       await showDialog<void>(
         context: context,
@@ -169,7 +174,13 @@ class HubReportsPage extends ConsumerWidget {
             SelloReportKpiGrid(
               kpis: ref
                   .read(analyticsServiceProvider)
-                  .buildKpis(overview: overview, currencySymbol: currency),
+                  .buildKpis(
+                    overview: overview,
+                    currencySymbol: currency,
+                    includeInventoryValuation:
+                        ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
+                        false,
+                  ),
               onKpiTap: (kpi) => _onKpiTap(context, ref, kpi),
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -256,6 +267,8 @@ class HubReportsPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
             _ReportLibrary(
               categoryFilter: state.categoryFilter,
+              isOwner: ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
+                  false,
               onOpen: (definition) => _openReport(context, ref, definition),
             ),
           ],
@@ -478,10 +491,15 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _ReportLibrary extends StatelessWidget {
-  const _ReportLibrary({required this.categoryFilter, required this.onOpen});
+  const _ReportLibrary({
+    required this.categoryFilter,
+    required this.onOpen,
+    this.isOwner = false,
+  });
 
   final ReportCategory? categoryFilter;
   final ValueChanged<ReportDefinition> onOpen;
+  final bool isOwner;
 
   IconData _iconFor(String key) {
     return switch (key) {
@@ -564,7 +582,10 @@ class _ReportLibrary extends StatelessWidget {
               final width =
                   (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
                   columns;
-              final items = ReportCatalog.forCategory(category);
+              final items = ReportCatalog.forCategory(
+                category,
+                isOwner: isOwner,
+              );
               return Wrap(
                 spacing: AppSpacing.md,
                 runSpacing: AppSpacing.md,

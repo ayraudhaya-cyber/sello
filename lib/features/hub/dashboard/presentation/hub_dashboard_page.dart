@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:sello/core/animations/app_durations.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
@@ -310,13 +311,13 @@ class _MetaChipState extends State<_MetaChip> {
       onExit: (_) => setState(() => _hovered = false),
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: _hovered ? -2.0 : 0.0),
-        duration: const Duration(milliseconds: 220),
-        curve: const Cubic(0.22, 0.61, 0.36, 1),
+        duration: AppDurations.hover,
+        curve: AppCurves.standard,
         builder: (context, dy, child) {
           return Transform.translate(offset: Offset(0, dy), child: child);
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: AppDurations.hover,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: _hovered

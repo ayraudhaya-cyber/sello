@@ -382,7 +382,7 @@ abstract final class AppTheme {
         ),
       ),
       tooltipTheme: TooltipThemeData(
-        waitDuration: const Duration(milliseconds: 400),
+        waitDuration: const Duration(milliseconds: 280),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xs,
           vertical: 6,

@@ -47,7 +47,12 @@ abstract final class ReceivePaymentAllocation {
     required num paymentAmount,
     required Map<String, num> allocations,
     required List<ReceivableOrder> receivables,
+    num discountAmount = 0,
   }) {
+    if (discountAmount < -0.001) {
+      return 'Discount cannot be negative.';
+    }
+    final settlement = paymentAmount + (discountAmount < 0 ? 0 : discountAmount);
     final byId = {for (final row in receivables) row.id: row};
     num total = 0;
     for (final entry in allocations.entries) {
@@ -59,14 +64,16 @@ abstract final class ReceivePaymentAllocation {
       }
       total += entry.value;
     }
-    if (total > paymentAmount + 0.001) {
-      return 'Selected outstanding is more than the payment amount.';
+    if (total > settlement + 0.001) {
+      return discountAmount > 0.001
+          ? 'Selected outstanding is more than the payment amount plus discount.'
+          : 'Selected outstanding is more than the payment amount.';
     }
     final available = receivables.fold<num>(
       0,
       (sum, row) => sum + (row.remaining > 0 ? row.remaining : 0),
     );
-    final required = paymentAmount < available ? paymentAmount : available;
+    final required = settlement < available ? settlement : available;
     if (required > 0 && total + 0.001 < required) {
       return 'Allocate the payment across the listed outstanding balances. '
           'Only an amount above all outstanding becomes Wallet credit.';

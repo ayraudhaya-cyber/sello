@@ -51,6 +51,7 @@ class PaymentRepository {
     employee_id,
     payment_number,
     amount,
+    discount_amount,
     method,
     status,
     reference,
@@ -103,6 +104,7 @@ class PaymentRepository {
     employee_id,
     payment_number,
     amount,
+    discount_amount,
     method,
     status,
     reference,
@@ -125,6 +127,7 @@ class PaymentRepository {
     employee_id,
     payment_number,
     amount,
+    discount_amount,
     method,
     status,
     reference,
@@ -333,6 +336,7 @@ class PaymentRepository {
               employeeId: row.employeeId,
               paymentNumber: row.paymentNumber,
               amount: row.amount,
+              discountAmount: row.discountAmount,
               method: row.method,
               status: row.status,
               receivedAt: row.receivedAt,
@@ -574,11 +578,16 @@ class PaymentRepository {
 
   Future<num> _sumActiveCustomers(String column) async {
     try {
-      final rows = await _client
+      var query = _client
           .from('customers')
           .select('total:$column.sum()')
           .isFilter('deleted_at', null)
           .eq('is_active', true);
+      // Outstanding should only count customers who still owe.
+      if (column == 'current_balance') {
+        query = query.gt('current_balance', 0);
+      }
+      final rows = await query;
       final summed = _readAggregate(rows, 'total');
       if (summed != null) return summed;
     } on PostgrestException {
@@ -592,7 +601,9 @@ class PaymentRepository {
         .eq('is_active', true);
     num total = 0;
     for (final row in customerRows as List) {
-      total += _asNum((row as Map)[column]);
+      final value = _asNum((row as Map)[column]);
+      if (column == 'current_balance' && value <= 0) continue;
+      total += value;
     }
     return total;
   }
@@ -790,9 +801,12 @@ class PaymentRepository {
     if (!input.method.isSettlementMethod) {
       throw const ValidationFailure('Choose a valid collection method.');
     }
-    if (input.amount <= 0) {
+    if (input.amount < 0) {
+      throw const ValidationFailure('Payment amount cannot be negative.');
+    }
+    if (input.amount <= 0 && input.discountAmount <= 0) {
       throw const ValidationFailure(
-        'Enter a payment amount greater than zero.',
+        'Enter a payment amount or a discount greater than zero.',
       );
     }
 
@@ -809,6 +823,9 @@ class PaymentRepository {
           'p_reference': input.reference,
           'p_notes': input.notes,
           'p_visit_id': input.visitId,
+          'p_discount_amount': input.discountAmount <= 0
+              ? 0
+              : input.discountAmount,
         },
       );
       final paymentId = result is String ? result : result.toString();
@@ -873,7 +890,7 @@ class PaymentRepository {
       throw ValidationFailure(_mapPaymentError(error.message));
     } catch (error) {
       if (error is AppFailure) rethrow;
-      throw UnexpectedFailure(error.toString());
+      throw UnexpectedFailure(_mapTransportError(error));
     }
   }
 
@@ -1169,6 +1186,13 @@ class PaymentRepository {
     if (lower.contains('allocation exceeds')) {
       return message;
     }
+    if (lower.contains('allocate the full payment and discount')) {
+      return message;
+    }
+    if (lower.contains('more than the customer outstanding')) {
+      // Legacy 113 wording — replaced by migration 119.
+      return 'Payment and discount are more than what is left on this order.';
+    }
     if (lower.contains('amount must')) {
       return message;
     }
@@ -1182,5 +1206,17 @@ class PaymentRepository {
       return 'Enter a short reason for this payment correction.';
     }
     return message;
+  }
+
+  static String _mapTransportError(Object error) {
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('failed to fetch') ||
+        lower.contains('clientexception') ||
+        lower.contains('socketexception') ||
+        lower.contains('xmlhttprequest')) {
+      return 'Could not reach the server. Check your connection and try again.';
+    }
+    return text;
   }
 }

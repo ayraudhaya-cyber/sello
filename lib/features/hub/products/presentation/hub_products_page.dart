@@ -2074,9 +2074,9 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
       if (target == null) return;
       Scrollable.ensureVisible(
         target,
-        duration: const Duration(milliseconds: 180),
+        duration: AppDurations.fast,
         alignment: 0.08,
-        curve: Curves.easeOutCubic,
+        curve: AppCurves.standard,
       );
     });
   }

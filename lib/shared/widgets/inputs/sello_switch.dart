@@ -44,7 +44,7 @@ class SelloSwitch extends StatelessWidget {
           curve: AppCurves.standard,
           opacity: _interactive ? 1 : 0.55,
           child: AnimatedContainer(
-            duration: AppDurations.normal,
+            duration: AppDurations.fast,
             curve: AppCurves.emphasized,
             width: width,
             height: height,
@@ -58,13 +58,13 @@ class SelloSwitch extends StatelessWidget {
               ),
             ),
             child: AnimatedAlign(
-              duration: AppDurations.normal,
+              duration: AppDurations.fast,
               curve: AppCurves.emphasized,
               alignment: value ? Alignment.centerRight : Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.all(padding),
                 child: AnimatedContainer(
-                  duration: AppDurations.normal,
+                  duration: AppDurations.fast,
                   curve: AppCurves.emphasized,
                   width: thumbSize,
                   height: thumbSize,

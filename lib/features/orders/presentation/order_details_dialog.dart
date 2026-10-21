@@ -260,24 +260,24 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               title: 'Customer',
               fields: [
                 _InfoField(
-                  label: 'Name',
-                  value: order.customerName ?? dash,
+                    label: 'Name',
+                    value: order.customerName ?? dash,
                   muted: order.customerName == null,
-                ),
+                  ),
                 _InfoField(
-                  label: 'Phone',
-                  value: order.customerPhone ?? dash,
+                    label: 'Phone',
+                    value: order.customerPhone ?? dash,
                   muted: order.customerPhone == null,
                 ),
                 if (detail.customerOutstanding != null)
                   _InfoField(
-                    label: 'Outstanding balance',
-                    value: SelloFormatters.currency(
+                      label: 'Outstanding balance',
+                      value: SelloFormatters.currency(
                       detail.customerOutstanding!,
-                      symbol: currencySymbol,
+                        symbol: currencySymbol,
                     ),
                   ),
-              ],
+                ],
               account: hasAccountExtras
                   ? _AccountExtras(
                       currencySymbol: currencySymbol,
@@ -296,7 +296,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                 ),
                 _InfoField(
                   label: 'Sales Rep',
-                  value: order.employeeName ?? dash,
+                      value: order.employeeName ?? dash,
                   muted: order.employeeName == null,
                 ),
                 if (order.paymentMethod != null)
@@ -596,7 +596,7 @@ class _InvoiceLink extends StatelessWidget {
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
         ),
-      ),
+            ),
     );
   }
 }
@@ -720,9 +720,9 @@ class _InfoGrid extends StatelessWidget {
             constraints.maxWidth >= _OrderGrid.wideBreakpoint &&
             blocks.length > 1;
         if (!wide) {
-          return Column(
+    return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      children: [
               for (var i = 0; i < blocks.length; i++) ...[
                 if (i > 0) const SizedBox(height: _OrderGrid.colGutter),
                 _InfoBlockView(block: blocks[i]),
@@ -757,12 +757,12 @@ class _InfoBlockView extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      decoration: BoxDecoration(
+                decoration: BoxDecoration(
         color: AppColors.veil,
         borderRadius: AppRadius.panelAll,
-        border: Border.all(color: AppColors.outlinePanel),
-      ),
-      child: Column(
+                  border: Border.all(color: AppColors.outlinePanel),
+                ),
+                child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(block.title.toUpperCase(), style: _Type.section),
@@ -793,17 +793,17 @@ class _CompactField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
         Text(field.label, style: _Type.label),
-        const SizedBox(height: 2),
-        Text(
+                    const SizedBox(height: 2),
+                    Text(
           field.value,
           style: _Type.value.copyWith(
             color: field.muted ? AppColors.textFaint : AppColors.textPrimary,
-          ),
-        ),
-      ],
+                        ),
+                      ),
+                    ],
     );
   }
 }
@@ -865,8 +865,8 @@ class _AccountExtras extends StatelessWidget {
                           : 'Not allowed',
                       muted: creditAllowed != true,
                     ),
-                  ),
                 ),
+              ),
             ],
           ),
         ],
@@ -894,8 +894,8 @@ class _ProductsTable extends StatelessWidget {
       builder: (context, constraints) {
         final useTable = constraints.maxWidth >= _OrderGrid.tableBreakpoint;
         if (!useTable) {
-          return Column(
-            children: [
+    return Column(
+      children: [
               for (var i = 0; i < lines.length; i++) ...[
                 if (i > 0)
                   const Padding(
@@ -1000,8 +1000,8 @@ TableRow _productTableRow({
       cell(Text('$index', style: _Type.meta)),
       cell(
         Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
             Text(line.displayTitle, style: _Type.productName),
             if (specs != null) ...[
               const SizedBox(height: 2),
@@ -1034,10 +1034,10 @@ TableRow _productTableRow({
           SelloFormatters.currency(line.lineTotal, symbol: currencySymbol),
           textAlign: TextAlign.right,
           style: _Type.amount,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
 }
 
 class _ProductMobileRow extends StatelessWidget {
@@ -1116,26 +1116,26 @@ String? _productSpecs(
   OrderLineItem line,
   List<CompanyProductField> catalogFields,
 ) {
-  final parts = <String>[];
-  if (line.productSku != null && line.productSku!.isNotEmpty) {
-    parts.add(line.productSku!);
+    final parts = <String>[];
+    if (line.productSku != null && line.productSku!.isNotEmpty) {
+      parts.add(line.productSku!);
+    }
+    if (line.productBrand != null && line.productBrand!.trim().isNotEmpty) {
+      parts.add(line.productBrand!.trim());
+    }
+    for (final field in catalogFields) {
+      if (field.definition.storage != ProductFieldStorage.attribute) continue;
+      final raw = line.productAttributes[field.fieldKey];
+      if (raw == null || raw.trim().isEmpty) continue;
+      final display = field.definition.fieldType == ProductFieldType.country
+          ? CountryCatalog.display(raw)
+          : raw.trim();
+      parts.add(display);
+      if (parts.length >= 4) break;
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' · ');
   }
-  if (line.productBrand != null && line.productBrand!.trim().isNotEmpty) {
-    parts.add(line.productBrand!.trim());
-  }
-  for (final field in catalogFields) {
-    if (field.definition.storage != ProductFieldStorage.attribute) continue;
-    final raw = line.productAttributes[field.fieldKey];
-    if (raw == null || raw.trim().isEmpty) continue;
-    final display = field.definition.fieldType == ProductFieldType.country
-        ? CountryCatalog.display(raw)
-        : raw.trim();
-    parts.add(display);
-    if (parts.length >= 4) break;
-  }
-  if (parts.isEmpty) return null;
-  return parts.join(' · ');
-}
 
 String _deliveryLine(OrderLineItem line) {
   return '${SelloFormatters.quantity(line.deliveredQuantity)} delivered · '
@@ -1156,19 +1156,19 @@ class _CollectionsList extends StatelessWidget {
         for (var i = 0; i < entries.length; i++) ...[
           if (i > 0) const SizedBox(height: 10),
           Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
+              Text(
                       entries[i].paymentNumber.isEmpty
                           ? entries[i].method.label
                           : entries[i].paymentNumber,
                       style: _Type.productName,
                     ),
                     const SizedBox(height: 2),
-                    Text(
+              Text(
                       '${entries[i].method.label} · ${SelloFormatters.date(entries[i].receivedAt)}'
                       '${entries[i].status == PaymentRecordStatus.completed ? '' : ' · ${entries[i].status.label}'}',
                       style: _Type.meta,
@@ -1176,7 +1176,7 @@ class _CollectionsList extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
+                Text(
                 SelloFormatters.currency(
                   entries[i].amount,
                   symbol: currencySymbol,
@@ -1353,7 +1353,7 @@ class _CompactTimeline extends StatelessWidget {
                   children: [
                     Text(events[i].title, style: _Type.productName),
                     const SizedBox(height: 2),
-                    Text(
+        Text(
                       SelloFormatters.dateTime(events[i].at),
                       style: _Type.meta,
                     ),

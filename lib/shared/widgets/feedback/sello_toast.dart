@@ -230,7 +230,7 @@ class _SelloToastCard extends StatefulWidget {
 
 class _SelloToastCardState extends State<_SelloToastCard>
     with TickerProviderStateMixin {
-  static const Duration _motion = Duration(milliseconds: 200);
+  static const Duration _motion = AppDurations.fast;
 
   late final AnimationController _motionController = AnimationController(
     vsync: this,

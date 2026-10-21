@@ -7,11 +7,16 @@ import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
+import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
+import 'package:sello/features/payments/application/order_collection_rules.dart';
 import 'package:sello/features/payments/application/receive_payment_allocation.dart';
 import 'package:sello/features/payments/presentation/receivable_picker_copy.dart';
+import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -44,6 +49,8 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   final Set<String> _selectedIds = {};
   PaymentMethod? _method = PaymentMethod.cash;
   final _amount = TextEditingController();
+  final _discountAmount = TextEditingController();
+  final _discountPercent = TextEditingController();
   final _reference = TextEditingController();
   final _notes = TextEditingController();
   bool _loadingOrders = false;
@@ -63,9 +70,59 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   @override
   void dispose() {
     _amount.dispose();
+    _discountAmount.dispose();
+    _discountPercent.dispose();
     _reference.dispose();
     _notes.dispose();
     super.dispose();
+  }
+
+  num get _discountAmountValue {
+    final value = num.tryParse(_discountAmount.text.trim()) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  num get _discountPercentValue {
+    final value = num.tryParse(_discountPercent.text.trim()) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  bool _discountAllowed() {
+    final role = ref.read(currentRoleProvider);
+    if (role != UserRole.salesRepresentative) return true;
+    final salesSettings = ref.read(selloCompanySettingsProvider).valueOrNull;
+    if (salesSettings != null) {
+      return salesSettings.salesRepsCanDiscountCollections;
+    }
+    return ref.read(companySettingsProvider).salesRepsCanDiscountCollections;
+  }
+
+  num get _allocatedTotal => ReceivePaymentAllocation.totalOf(_allocations);
+
+  /// Money discount against the selected outstanding lines.
+  num get _resolvedDiscount {
+    if (!_discountAllowed()) return 0;
+    return OrderCollectionRules.resolvedDiscount(
+      outstanding: _allocatedTotal,
+      amount: _discountAmountValue,
+      percent: _discountPercentValue,
+    );
+  }
+
+  void _writePaymentAmount(num value) {
+    if (value <= 0) {
+      _amount.clear();
+      return;
+    }
+    _amount.text = value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
+  }
+
+  void _syncAmountFromAllocations() {
+    final discount = _resolvedDiscount;
+    final cash = _allocatedTotal - discount;
+    _writePaymentAmount(cash < 0 ? 0 : cash);
   }
 
   Future<void> _pickCustomer() async {
@@ -84,6 +141,8 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       _allocations.clear();
       _selectedIds.clear();
       _amount.clear();
+      _discountAmount.clear();
+      _discountPercent.clear();
       _error = null;
       _loadingOrders = true;
     });
@@ -112,18 +171,6 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
         _error = failure.message;
       });
     }
-  }
-
-  void _writePaymentAmount(num value) {
-    if (value <= 0) {
-      _amount.clear();
-      return;
-    }
-    _amount.text = value.toStringAsFixed(2);
-  }
-
-  void _syncAmountFromAllocations() {
-    _writePaymentAmount(ReceivePaymentAllocation.totalOf(_allocations));
   }
 
   void _toggleReceivable(ReceivableOrder receivable, bool selected) {
@@ -197,8 +244,23 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       setState(() => _error = 'Wallet balance is insufficient.');
       return null;
     }
+    final discount = _resolvedDiscount;
+    // Cap against selected receivables — not global customer AR (delivered-only).
+    final discountError = OrderCollectionRules.validateDiscount(
+      discount: discount,
+      moneyReceived: amount,
+      outstanding: _allocatedTotal > 0.001
+          ? _allocatedTotal
+          : (_customer?.outstandingBalance ?? 0),
+      allowed: _discountAllowed(),
+    );
+    if (discountError != null) {
+      setState(() => _error = discountError);
+      return null;
+    }
     final allocationError = ReceivePaymentAllocation.validate(
       paymentAmount: amount,
+      discountAmount: discount,
       allocations: _allocations,
       receivables: _receivables,
     );
@@ -210,6 +272,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     return ReceivePaymentInput(
       customerId: _customer!.id,
       amount: amount,
+      discountAmount: discount,
       method: _method!,
       allocations: [
         for (final entry in _allocations.entries)
@@ -235,6 +298,10 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   Widget build(BuildContext context) {
     final symbol = widget.currencySymbol;
     final isMobile = context.isMobile;
+    ref.watch(currentRoleProvider);
+    ref.watch(selloCompanySettingsProvider);
+    ref.watch(companySettingsProvider);
+    final canDiscount = _discountAllowed();
 
     return SelloFormDialog(
       title: 'Receive payment',
@@ -323,6 +390,65 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                   setState(() => _error = null);
                 },
               ),
+              if (canDiscount) ...[
+                const SizedBox(height: 12),
+                SelloFormRow(
+                  left: SelloTextField(
+                    controller: _discountAmount,
+                    label: 'Discount amount',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    onChanged: (_) {
+                      setState(() {
+                        _error = null;
+                        _syncAmountFromAllocations();
+                      });
+                    },
+                  ),
+                  right: SelloTextField(
+                    controller: _discountPercent,
+                    label: 'Discount %',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    onChanged: (_) {
+                      setState(() {
+                        _error = null;
+                        _syncAmountFromAllocations();
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Use amount, percent, or both. Percent applies first to the '
+                  'selected outstanding, then the amount.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    height: 1.35,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                if (_resolvedDiscount > 0.001) ...[
+                  const SizedBox(height: 12),
+                  _ReceiveDiscountSummary(
+                    currencySymbol: symbol,
+                    allocated: _allocatedTotal,
+                    discount: _resolvedDiscount,
+                    discountPercent: _discountPercentValue,
+                    discountAmount: _discountAmountValue,
+                    moneyReceived: num.tryParse(_amount.text.trim()) ?? 0,
+                  ),
+                ],
+              ],
             ],
           ),
           SelloDialogSection(
@@ -389,6 +515,148 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
         primaryLabel: 'Confirm payment',
         onPrimary: _confirm,
       ),
+    );
+  }
+}
+
+class _ReceiveDiscountSummary extends StatelessWidget {
+  const _ReceiveDiscountSummary({
+    required this.currencySymbol,
+    required this.allocated,
+    required this.discount,
+    required this.discountPercent,
+    required this.discountAmount,
+    required this.moneyReceived,
+  });
+
+  final String currencySymbol;
+  final num allocated;
+  final num discount;
+  final num discountPercent;
+  final num discountAmount;
+  final num moneyReceived;
+
+  String _money(num value) =>
+      SelloFormatters.currency(value, symbol: currencySymbol);
+
+  String get _discountDetail {
+    final parts = <String>[];
+    if (discountPercent > 0.001) {
+      final pct = discountPercent == discountPercent.roundToDouble()
+          ? discountPercent.toStringAsFixed(0)
+          : discountPercent.toString();
+      parts.add('$pct% of selected');
+    }
+    if (discountAmount > 0.001) {
+      parts.add(_money(discountAmount));
+    }
+    return parts.join(' + ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settles = moneyReceived + discount;
+    final remaining = allocated - settles;
+    final remainingClamped = remaining < 0 ? 0 : remaining;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Column(
+        children: [
+          _ReceiveSummaryRow(
+            label: 'Discount',
+            value: '− ${_money(discount)}',
+            detail: _discountDetail.isEmpty ? null : _discountDetail,
+          ),
+          const SizedBox(height: 8),
+          _ReceiveSummaryRow(
+            label: 'Amount received',
+            value: _money(moneyReceived),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          _ReceiveSummaryRow(
+            label: 'Total applied',
+            value: _money(settles),
+            emphasize: true,
+          ),
+          const SizedBox(height: 8),
+          _ReceiveSummaryRow(
+            label: 'Outstanding left',
+            value: _money(remainingClamped),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReceiveSummaryRow extends StatelessWidget {
+  const _ReceiveSummaryRow({
+    required this.label,
+    required this.value,
+    this.detail,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final String? detail;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: emphasize ? 13 : 12.5,
+                  fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+                  color: emphasize
+                      ? AppColors.textPrimary
+                      : AppColors.textTertiary,
+                ),
+              ),
+              if (detail != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  detail!,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 11.5,
+                    height: 1.3,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: emphasize ? 15 : 13.5,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

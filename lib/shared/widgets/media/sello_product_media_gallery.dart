@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:sello/core/animations/app_durations.dart';
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
@@ -723,7 +724,7 @@ class _GalleryPreviewState extends State<_GalleryPreview> {
                               right: 10,
                               bottom: 10,
                               child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 140),
+                                duration: AppDurations.hover,
                                 opacity: _hovered ? 1 : 0.72,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -1017,8 +1018,8 @@ class _ThumbTileState extends State<_ThumbTile> {
       child: GestureDetector(
         onTap: widget.onSelect,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
+          duration: AppDurations.hover,
+          curve: AppCurves.standard,
           transform: Matrix4.translationValues(
             0,
             widget.elevateOnHover && _hovered ? -2 : 0,

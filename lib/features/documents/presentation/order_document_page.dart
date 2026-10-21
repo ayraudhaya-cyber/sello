@@ -87,10 +87,10 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
               child: SafeArea(
                 top: compact,
                 bottom: false,
-                child: Center(
-                  child: ConstrainedBox(
+          child: Center(
+            child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 760),
-                    child: ListView(
+              child: ListView(
                       padding: EdgeInsets.fromLTRB(
                         compact ? 18 : 28,
                         compact ? 18 : 22,
@@ -100,7 +100,7 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                       children: [
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
+                children: [
                             Expanded(
                               child: _DocumentIssuerHeader(
                                 identity: doc.issuerIdentity,
@@ -145,18 +145,18 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                         ],
                         if (doc.issuerIdentity.hasTagline) ...[
                           const SizedBox(height: 16),
-                          Text(
+                    Text(
                             doc.issuerIdentity.tagline!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: AppTypography.fontFamily,
-                              fontSize: 13,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13,
                               fontWeight: FontWeight.w500,
                               height: 1.45,
                               color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                      ),
+                    ),
+                  ],
                       ],
                     ),
                   ),
@@ -561,51 +561,62 @@ class _PaymentBillCard extends StatelessWidget {
     return _BillSurface(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (isPending) ...[
-              Container(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isPending) ...[
+            Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 10,
                 ),
-                decoration: BoxDecoration(
+              decoration: BoxDecoration(
                   color: AppColors.warningContainer,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.28),
-                  ),
-                ),
-                child: const Text(
-                  'Pending Review — this collection was submitted and is waiting '
-                  'for owner/manager approval. Outstanding balances are not '
-                  'updated until it is approved.',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 13,
-                    height: 1.4,
-                    color: AppColors.textSecondary,
-                  ),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: AppColors.warning.withValues(alpha: 0.28),
                 ),
               ),
+              child: const Text(
+                'Pending Review — this collection was submitted and is waiting '
+                'for owner/manager approval. Outstanding balances are not '
+                'updated until it is approved.',
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 13,
+                  height: 1.4,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
               const SizedBox(height: 16),
             ],
-            if (method != null && method.isNotEmpty)
+          if (method != null && method.isNotEmpty)
               _MetaLine(label: 'Method', value: method),
-            if (doc.reference != null)
+          if (doc.reference != null)
               _MetaLine(label: 'Reference', value: doc.reference!),
             _MetaLine(
-              label: 'Status',
-              value: isPending
-                  ? 'Pending Review'
-                  : (doc.paymentStatus ?? 'Recorded'),
-            ),
-            const SizedBox(height: 12),
+            label: 'Status',
+            value: isPending
+                ? 'Pending Review'
+                : (doc.paymentStatus ?? 'Recorded'),
+          ),
+          const SizedBox(height: 12),
             _GrandTotal(
-              label: isPending ? 'Amount submitted' : 'Amount',
-              value: doc.money(doc.total),
+            label: isPending ? 'Amount submitted' : 'Amount',
+            value: doc.money(doc.total),
             ),
+          if (doc.discountAmount > 0) ...[
+            const SizedBox(height: 8),
+            _MetaLine(
+              label: 'Discount',
+              value: '- ${doc.money(doc.discountAmount)}',
+            ),
+            _MetaLine(
+              label: 'Settles',
+              value: doc.money(doc.total + doc.discountAmount),
+            ),
+          ],
             if (doc.notes != null) _Notes(doc.notes!),
           ],
         ),
@@ -722,7 +733,7 @@ class _DesktopLineTable extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+            Text(
                         doc.lines[i].displayTitle,
                         style: _cellStyle.copyWith(fontWeight: FontWeight.w600),
                       ),
@@ -731,8 +742,8 @@ class _DesktopLineTable extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             doc.lines[i].sku!.trim(),
-                            style: const TextStyle(
-                              fontFamily: AppTypography.fontFamily,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
                               fontSize: 11.5,
                               color: AppColors.textTertiary,
                             ),
@@ -763,9 +774,9 @@ class _DesktopLineTable extends StatelessWidget {
                     doc.money(doc.lines[i].lineTotal),
                     textAlign: TextAlign.right,
                     style: _cellStyle.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
+              ),
+            ),
+          ],
             ),
         ],
       ),
@@ -820,24 +831,24 @@ class _MobileLines extends StatelessWidget {
                           Expanded(
                             child: Text(
                               '${SelloFormatters.quantity(doc.lines[i].quantity)} × ${doc.money(doc.lines[i].unitPrice)}',
-                              style: const TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontSize: 12.5,
-                                color: AppColors.textTertiary,
-                              ),
-                            ),
-                          ),
-                          Text(
+                        style: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 12.5,
+                          color: AppColors.textTertiary,
+                        ),
+                  ),
+                ),
+                Text(
                             doc.money(doc.lines[i].lineTotal),
-                            style: const TextStyle(
-                              fontFamily: AppTypography.fontFamily,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
                     ],
                   ),
                 ),
@@ -966,6 +977,12 @@ class _PaymentDetails extends StatelessWidget {
               label: 'Amount received',
               value: doc.money(doc.collectionPaymentAmount!),
             ),
+          if (doc.collectionDiscountAmount != null &&
+              doc.collectionDiscountAmount! > 0)
+            _MetaLine(
+              label: 'Discount',
+              value: '- ${doc.money(doc.collectionDiscountAmount!)}',
+            ),
           if (doc.collectionReceivedAt != null)
             _MetaLine(
               label: 'Recorded on',
@@ -976,7 +993,7 @@ class _PaymentDetails extends StatelessWidget {
               label: 'Outstanding balance',
               value: doc.money(doc.outstandingBalance!),
               warning: doc.outstandingBalance! > 0,
-            ),
+          ),
         ],
       ),
     );

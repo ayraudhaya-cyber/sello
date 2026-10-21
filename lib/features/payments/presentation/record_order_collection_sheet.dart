@@ -5,11 +5,16 @@ import 'package:intl/intl.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
+import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/payments/application/order_collection_rules.dart';
+import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
+import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -93,6 +98,8 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
 class _RecordOrderCollectionSheetState
     extends ConsumerState<RecordOrderCollectionSheet> {
   final _amount = TextEditingController();
+  final _discountAmount = TextEditingController();
+  final _discountPercent = TextEditingController();
   final _wallet = TextEditingController();
   final _bank = TextEditingController();
   final _chequeNumber = TextEditingController();
@@ -133,6 +140,8 @@ class _RecordOrderCollectionSheetState
   @override
   void dispose() {
     _amount.dispose();
+    _discountAmount.dispose();
+    _discountPercent.dispose();
     _wallet.dispose();
     _bank.dispose();
     _chequeNumber.dispose();
@@ -141,6 +150,47 @@ class _RecordOrderCollectionSheetState
   }
 
   num? get _parsedAmount => num.tryParse(_amount.text.trim());
+
+  num get _discountAmountValue {
+    final value = num.tryParse(_discountAmount.text.trim()) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  num get _discountPercentValue {
+    final value = num.tryParse(_discountPercent.text.trim()) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  /// Resolved money discount against what this collection can still cover.
+  num get _resolvedDiscount {
+    if (!_discountAllowed()) return 0;
+    return OrderCollectionRules.resolvedDiscount(
+      outstanding: _collectableNow,
+      amount: _discountAmountValue,
+      percent: _discountPercentValue,
+    );
+  }
+
+  void _clearDiscount() {
+    _discountAmount.clear();
+    _discountPercent.clear();
+  }
+
+  CompanySettings _readSettings() {
+    final role = ref.read(currentRoleProvider);
+    if (role == UserRole.salesRepresentative) {
+      return ref.read(selloCompanySettingsProvider).valueOrNull ??
+          CompanySettings.defaults;
+    }
+    return ref.read(companySettingsProvider);
+  }
+
+  bool _discountAllowed() {
+    if (_usingExisting || _method == PaymentMethod.cheque) return false;
+    final role = ref.read(currentRoleProvider);
+    if (role != UserRole.salesRepresentative) return true;
+    return _readSettings().salesRepsCanDiscountCollections;
+  }
 
   num get _walletApplied {
     if (_usingExisting || _walletAvailable <= 0.001) return 0;
@@ -167,17 +217,6 @@ class _RecordOrderCollectionSheetState
           ) >
           0.001;
 
-  num get _receivedRoom {
-    final ceiling = OrderCollectionAssociation.newCollectionCeiling(
-      remaining: widget.outstanding,
-      method: _method,
-      match: _match,
-    );
-    final base = ceiling > 0 ? ceiling : widget.outstanding;
-    final room = base - (_showWallet ? _walletApplied : 0);
-    return room < 0 ? 0 : room;
-  }
-
   String _money(num value) =>
       SelloFormatters.currency(value, symbol: widget.currencySymbol);
 
@@ -187,18 +226,45 @@ class _RecordOrderCollectionSheetState
         : value.toString();
   }
 
-  void _syncAmountToCeiling() {
-    _writeAmount(_receivedRoom);
+  void _writeWallet(num value) {
+    _wallet.text = value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toString();
   }
 
+  /// Keeps wallet + cash + discount within outstanding.
+  /// Discount wins first; wallet is trimmed next; cash fills the rest.
+  void _syncSettlementToCeiling({bool trimWallet = true}) {
+    final discount = _resolvedDiscount;
+    final moneyRoom = _collectableNow - discount;
+    final room = moneyRoom < 0 ? 0 : moneyRoom;
+
+    if (_showWallet && trimWallet) {
+      final walletCap = OrderCollectionRules.walletCap(
+        available: _walletAvailable,
+        outstanding: room,
+      );
+      if (_walletApplied > walletCap + 0.001) {
+        _writeWallet(walletCap);
+      }
+    }
+
+    final wallet = _showWallet ? _walletApplied : 0;
+    final cashRoom = room - wallet;
+    _writeAmount(cashRoom < 0 ? 0 : cashRoom);
+  }
+
+  void _syncAmountToCeiling() => _syncSettlementToCeiling();
+
   void _applyDefaultWallet() {
+    final discount = _resolvedDiscount;
+    final moneyRoom = _collectableNow - discount;
+    final room = moneyRoom < 0 ? 0 : moneyRoom;
     final cap = OrderCollectionRules.walletCap(
       available: _walletAvailable,
-      outstanding: _collectableNow,
+      outstanding: room,
     );
-    _wallet.text = cap == cap.roundToDouble()
-        ? cap.toStringAsFixed(0)
-        : cap.toString();
+    _writeWallet(cap);
   }
 
   Future<void> _loadAssociatedCheques() async {
@@ -251,24 +317,39 @@ class _RecordOrderCollectionSheetState
     }
 
     final walletApplied = _walletApplied;
+    final discount = _resolvedDiscount;
     final amountError = _showWallet
         ? OrderCollectionRules.validateWithWallet(
             walletApplied: walletApplied,
             walletAvailable: _walletAvailable,
             received: _parsedAmount,
             outstanding: _collectableNow,
+            discount: discount,
           )
         : OrderCollectionRules.validateNewCollection(
             method: _method,
             amount: _parsedAmount,
             remaining: widget.outstanding,
             match: _match,
+            discount: discount,
           );
     if (amountError != null) {
       setState(() => _error = amountError);
       return;
     }
     final amount = _parsedAmount ?? 0;
+    if (_method != PaymentMethod.cheque) {
+      final discountError = OrderCollectionRules.validateDiscount(
+        discount: discount,
+        moneyReceived: walletApplied + amount,
+        outstanding: _collectableNow,
+        allowed: _discountAllowed(),
+      );
+      if (discountError != null) {
+        setState(() => _error = discountError);
+        return;
+      }
+    }
     if (_method == PaymentMethod.cheque && amount > 0.001) {
       final chequeError = OrderCollectionRules.validateCheque(
         bankName: _bank.text,
@@ -287,18 +368,29 @@ class _RecordOrderCollectionSheetState
     });
     var walletSaved = false;
     try {
+      // Put the discount on the cash/card/bank row when present; otherwise on
+      // the wallet row so a wallet-only settlement can still write off.
+      // Discount-only (no cash/wallet) records amount 0 + discount.
+      final discountOnCash = amount > 0.001 || walletApplied <= 0.001
+          ? discount
+          : 0;
+      final discountOnWallet =
+          amount <= 0.001 && walletApplied > 0.001 ? discount : 0;
+
       if (walletApplied > 0.001) {
+        final walletSettle = walletApplied + discountOnWallet;
         final walletResult = await ref
             .read(paymentRepositoryProvider)
             .receivePayment(
               ReceivePaymentInput(
                 customerId: widget.customerId,
                 amount: walletApplied,
+                discountAmount: discountOnWallet,
                 method: PaymentMethod.wallet,
                 allocations: [
                   PaymentAllocationInput(
                     orderId: widget.orderId,
-                    amount: walletApplied,
+                    amount: walletSettle,
                   ),
                 ],
                 notes: 'Wallet applied to ${widget.orderNumber}',
@@ -314,10 +406,12 @@ class _RecordOrderCollectionSheetState
           );
         }
       }
-      if (amount > 0.001) {
+      if (amount > 0.001 ||
+          (discountOnCash > 0.001 && walletApplied <= 0.001)) {
+        final settleAmount = amount + discountOnCash;
         final allocation = PaymentAllocationInput(
           orderId: widget.orderId,
-          amount: amount,
+          amount: settleAmount,
         );
         if (OrderCollectionAssociation.shouldCreateNewCheque(
           method: _method,
@@ -334,7 +428,12 @@ class _RecordOrderCollectionSheetState
                   holderName: _holder.text.trim(),
                   chequeDate: _chequeDate,
                   collectionDate: DateTime.now(),
-                  allocations: [allocation],
+                  allocations: [
+                    PaymentAllocationInput(
+                      orderId: widget.orderId,
+                      amount: amount,
+                    ),
+                  ],
                   markCollected: true,
                   visitId: widget.orderVisitId,
                   notes: 'Collected against ${widget.orderNumber}',
@@ -347,9 +446,12 @@ class _RecordOrderCollectionSheetState
                 ReceivePaymentInput(
                   customerId: widget.customerId,
                   amount: amount,
+                  discountAmount: discountOnCash,
                   method: _method,
                   allocations: [allocation],
-                  notes: 'Collected against ${widget.orderNumber}',
+                  notes: discountOnCash > 0.001 && amount <= 0.001
+                      ? 'Discount on ${widget.orderNumber}'
+                      : 'Collected against ${widget.orderNumber}',
                   visitId: widget.orderVisitId,
                 ),
               );
@@ -436,6 +538,11 @@ class _RecordOrderCollectionSheetState
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     final outstandingMoney = _money(widget.outstanding);
     final match = _match;
+    final canDiscount = _discountAllowed();
+    // Keep Sales settings subscribed so the discount field appears when loaded.
+    ref.watch(currentRoleProvider);
+    ref.watch(selloCompanySettingsProvider);
+    ref.watch(companySettingsProvider);
     final primaryLabel = _saving
         ? 'Saving…'
         : _usingExisting
@@ -564,7 +671,7 @@ class _RecordOrderCollectionSheetState
                   ],
                   onChanged: (_) => setState(() {
                     _error = null;
-                    _syncAmountToCeiling();
+                    _syncSettlementToCeiling(trimWallet: true);
                   }),
                 ),
               ],
@@ -572,8 +679,9 @@ class _RecordOrderCollectionSheetState
               SelloTextField(
                 controller: _amount,
                 label: _showWallet ? 'Amount still to receive' : 'Amount received',
-                required:
-                    !_showWallet || _walletApplied + 0.001 < _collectableNow,
+                required: !_showWallet ||
+                    _walletApplied + _resolvedDiscount + 0.001 <
+                        _collectableNow,
                 enabled: !_usingExisting && !_saving,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -582,6 +690,73 @@ class _RecordOrderCollectionSheetState
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
               ),
+              if (canDiscount) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SelloTextField(
+                        controller: _discountAmount,
+                        label: 'Discount amount',
+                        enabled: !_saving,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                        onChanged: (_) => setState(() {
+                          _error = null;
+                          _syncSettlementToCeiling();
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SelloTextField(
+                        controller: _discountPercent,
+                        label: 'Discount %',
+                        enabled: !_saving,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                        onChanged: (_) => setState(() {
+                          _error = null;
+                          _syncSettlementToCeiling();
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Use amount, percent, or both. Percent applies first to the '
+                  'outstanding, then the amount. Reduces outstanding without '
+                  'collecting that money.',
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 12,
+                    height: 1.35,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                if (_resolvedDiscount > 0.001) ...[
+                  const SizedBox(height: 12),
+                  _SettlementSummary(
+                    currencySymbol: widget.currencySymbol,
+                    outstanding: _collectableNow,
+                    discount: _resolvedDiscount,
+                    discountPercent: _discountPercentValue,
+                    discountAmount: _discountAmountValue,
+                    walletApplied: _showWallet ? _walletApplied : 0,
+                    cashReceived: _parsedAmount ?? 0,
+                  ),
+                ],
+              ],
               const SizedBox(height: 18),
               Text(
                 _showWallet && _walletApplied > 0.001
@@ -608,6 +783,9 @@ class _RecordOrderCollectionSheetState
                           : () => setState(() {
                               _method = method;
                               _error = null;
+                              if (method == PaymentMethod.cheque) {
+                                _clearDiscount();
+                              }
                               _syncAmountToCeiling();
                             }),
                     ),
@@ -734,6 +912,177 @@ class _LabeledValue extends StatelessWidget {
             fontFamily: AppTypography.fontFamily,
             fontWeight: FontWeight.w700,
             fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Clear money math once a collection discount is entered.
+class _SettlementSummary extends StatelessWidget {
+  const _SettlementSummary({
+    required this.currencySymbol,
+    required this.outstanding,
+    required this.discount,
+    required this.discountPercent,
+    required this.discountAmount,
+    required this.walletApplied,
+    required this.cashReceived,
+  });
+
+  final String currencySymbol;
+  final num outstanding;
+  final num discount;
+  final num discountPercent;
+  final num discountAmount;
+  final num walletApplied;
+  final num cashReceived;
+
+  String _money(num value) =>
+      SelloFormatters.currency(value, symbol: currencySymbol);
+
+  String? get _discountDetail {
+    final capped = discountAmount > discount + 0.001;
+    final parts = <String>[];
+    if (discountPercent > 0.001) {
+      final pct = discountPercent == discountPercent.roundToDouble()
+          ? discountPercent.toStringAsFixed(0)
+          : discountPercent.toString();
+      parts.add('$pct% of outstanding');
+    }
+    if (discountAmount > 0.001 &&
+        (discountPercent > 0.001 || capped)) {
+      parts.add(_money(discountAmount));
+    }
+    if (capped) {
+      parts.add('capped to outstanding');
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final moneyReceived = walletApplied + cashReceived;
+    final settles = moneyReceived + discount;
+    final remaining = outstanding - settles;
+    final remainingClamped = remaining < 0 ? 0 : remaining;
+    final rows = <Widget>[
+      _SummaryRow(
+        label: 'Discount',
+        value: '− ${_money(discount)}',
+        detail: _discountDetail,
+      ),
+    ];
+    if (walletApplied > 0.001) {
+      rows.addAll([
+        const SizedBox(height: 8),
+        _SummaryRow(
+          label: 'From wallet',
+          value: _money(walletApplied),
+        ),
+      ]);
+    }
+    if (cashReceived > 0.001 || walletApplied <= 0.001) {
+      rows.addAll([
+        const SizedBox(height: 8),
+        _SummaryRow(
+          label: walletApplied > 0.001
+              ? 'Cash still received'
+              : 'Amount received',
+          value: _money(cashReceived),
+        ),
+      ]);
+    }
+    rows.addAll([
+      const SizedBox(height: 8),
+      const Divider(height: 1),
+      const SizedBox(height: 8),
+      _SummaryRow(
+        label: 'Total applied',
+        value: _money(settles),
+        emphasize: true,
+      ),
+      const SizedBox(height: 8),
+      _SummaryRow(
+        label: 'Outstanding left',
+        value: _money(remainingClamped),
+      ),
+    ]);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outlinePanel),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.detail,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final String? detail;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: emphasize ? 13 : 12.5,
+                  fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+                  color: emphasize
+                      ? AppColors.textPrimary
+                      : AppColors.textTertiary,
+                ),
+              ),
+              if (detail != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  detail!,
+                  style: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 11.5,
+                    height: 1.3,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: emphasize ? 15 : 13.5,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
           ),
         ),
       ],

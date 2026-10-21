@@ -237,9 +237,9 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
   Widget _buildContent(HubSettingsState state, SettingsSectionId section) {
     return SizedBox.expand(
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
+        duration: AppDurations.fast,
+        switchInCurve: AppCurves.standard,
+        switchOutCurve: AppCurves.standard,
         layoutBuilder: (currentChild, previousChildren) {
           return Stack(
             fit: StackFit.expand,
@@ -1932,6 +1932,22 @@ class _OrdersInvoicesSection extends StatelessWidget {
                       ),
                     );
                   },
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            const Divider(height: 1, color: AppColors.outlinePanel),
+            const SizedBox(height: 22),
+            SettingsSubgroup(
+              title: 'Collection discount',
+              child: SelloStatusToggle(
+                value: draft.salesRepsCanDiscountCollections,
+                label: 'Sales reps can add discount on collections',
+                helper:
+                    'When off, only Owner or Manager can reduce outstanding with a '
+                    'discount while recording a collection. Order discounts are unchanged.',
+                onChanged: (value) => onChanged(
+                  (c) => c.copyWith(salesRepsCanDiscountCollections: value),
                 ),
               ),
             ),

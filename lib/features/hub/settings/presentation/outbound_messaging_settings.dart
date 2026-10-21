@@ -57,40 +57,40 @@ class OutboundMessagingSettingsCard extends ConsumerWidget {
           ],
           _SettingsPanel(
             child: SettingsSubgroup(
-              title: 'Channels',
-              child: SettingsTwoUp(
-                children: [
-                  SelloStatusToggle(
-                    value: policies.whatsappEnabled,
-                    label: 'WhatsApp',
-                    helper:
-                        'Opens WhatsApp with a prefilled confirmation or acknowledgement.',
-                    onChanged: (value) => ref
-                        .read(hubSettingsProvider.notifier)
-                        .patchDraft(
-                          (c) => c.copyWith(
-                            outboundNotificationPolicies: policies.copyWith(
-                              whatsappEnabled: value,
-                            ),
+            title: 'Channels',
+            child: SettingsTwoUp(
+              children: [
+                SelloStatusToggle(
+                  value: policies.whatsappEnabled,
+                  label: 'WhatsApp',
+                  helper:
+                      'Opens WhatsApp with a prefilled confirmation or acknowledgement.',
+                  onChanged: (value) => ref
+                      .read(hubSettingsProvider.notifier)
+                      .patchDraft(
+                        (c) => c.copyWith(
+                          outboundNotificationPolicies: policies.copyWith(
+                            whatsappEnabled: value,
                           ),
                         ),
-                  ),
+                      ),
+                ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SelloStatusToggle(
-                        value: policies.smsEnabled,
-                        label: 'SMS',
+                SelloStatusToggle(
+                  value: policies.smsEnabled,
+                  label: 'SMS',
                         helper: 'Sent automatically when a message is enabled.',
-                        onChanged: (value) => ref
-                            .read(hubSettingsProvider.notifier)
-                            .patchDraft(
-                              (c) => c.copyWith(
-                                outboundNotificationPolicies: policies.copyWith(
-                                  smsEnabled: value,
-                                ),
-                              ),
-                            ),
+                  onChanged: (value) => ref
+                      .read(hubSettingsProvider.notifier)
+                      .patchDraft(
+                        (c) => c.copyWith(
+                          outboundNotificationPolicies: policies.copyWith(
+                            smsEnabled: value,
+                          ),
+                        ),
+                      ),
                       ),
                       const SmsQuotaChip(placement: SmsQuotaPlacement.settings),
                       const SizedBox(height: 14),
@@ -148,11 +148,11 @@ class OutboundMessagingSettingsCard extends ConsumerWidget {
                 type: _eventGroups[g].types[i],
                 policies: policies,
                 isDirty: state.isDirty,
-                masterWhatsapp: policies.whatsappEnabled,
-                masterSms: policies.smsEnabled,
-                onChanged: (next) => ref
-                    .read(hubSettingsProvider.notifier)
-                    .patchDraft(
+              masterWhatsapp: policies.whatsappEnabled,
+              masterSms: policies.smsEnabled,
+              onChanged: (next) => ref
+                  .read(hubSettingsProvider.notifier)
+                  .patchDraft(
                       (c) => c.copyWith(outboundNotificationPolicies: next),
                     ),
               ),
@@ -543,8 +543,8 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
     final smsOn = policy.sms && widget.masterSms;
     return _SettingsPanel(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -572,13 +572,13 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
                   children: [
                     Text(
                       widget.type.audienceHeading,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.fontFamily,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
                         fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
                     const SizedBox(height: 4),
                     Text(
                       widget.type.hint,
@@ -590,10 +590,10 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
                       ),
                     ),
                   ],
-                ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
           const SizedBox(height: 16),
           SettingsTwoUp(
             children: [
@@ -617,54 +617,54 @@ class _MessageTypeEditorState extends State<_MessageTypeEditor> {
             ],
           ),
           if (policy.enabled) ...[
-            const SizedBox(height: 14),
-            Text(
-              'Send to',
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textTertiary,
-              ),
+          const SizedBox(height: 14),
+          Text(
+            'Send to',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textTertiary,
             ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
                 for (final target in _allowedRecipients(widget.type))
-                  FilterChip(
-                    label: Text(
-                      target.label,
-                      style: TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: policy.sendsTo(target)
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                    selected: policy.sendsTo(target),
-                    showCheckmark: false,
-                    selectedColor: AppColors.primary.withValues(alpha: 0.12),
-                    backgroundColor: AppColors.surface,
-                    side: BorderSide(
+                FilterChip(
+                  label: Text(
+                    target.label,
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
                       color: policy.sendsTo(target)
-                          ? AppColors.primary.withValues(alpha: 0.35)
-                          : AppColors.outlinePanel,
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                    ),
-                    onSelected: (selected) {
-                      final next = [...policy.recipients];
-                      if (selected) {
-                        if (!next.contains(target)) next.add(target);
-                      } else {
-                        next.remove(target);
-                      }
-                      if (next.isEmpty) return;
+                  ),
+                  selected: policy.sendsTo(target),
+                  showCheckmark: false,
+                  selectedColor: AppColors.primary.withValues(alpha: 0.12),
+                  backgroundColor: AppColors.surface,
+                  side: BorderSide(
+                    color: policy.sendsTo(target)
+                        ? AppColors.primary.withValues(alpha: 0.35)
+                        : AppColors.outlinePanel,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  onSelected: (selected) {
+                    final next = [...policy.recipients];
+                    if (selected) {
+                      if (!next.contains(target)) next.add(target);
+                    } else {
+                      next.remove(target);
+                    }
+                    if (next.isEmpty) return;
                       _patchPolicy(policy.copyWith(recipients: next));
                     },
                   ),

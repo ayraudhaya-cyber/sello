@@ -119,6 +119,7 @@ abstract final class ReportCatalog {
       title: 'Stock value',
       question: 'What is inventory worth at cost?',
       icon: 'attach_money',
+      ownerOnly: true,
     ),
     ReportDefinition(
       id: 'inventory_low',
@@ -330,8 +331,11 @@ abstract final class ReportCatalog {
     ),
   ];
 
-  static List<ReportDefinition> forCategory(ReportCategory category) => [
-        for (final item in definitions)
-          if (item.category == category) item,
-      ];
+  static List<ReportDefinition> forCategory(
+    ReportCategory category, {
+    bool isOwner = true,
+  }) => [
+    for (final item in definitions)
+      if (item.category == category && (!item.ownerOnly || isOwner)) item,
+  ];
 }

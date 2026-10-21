@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.18",
-        "build": 19,
-        "released_at": "2026-10-19",
-        "notes": "No change to the sales app in this update"
+        "version": "1.0.19",
+        "build": 20,
+        "released_at": "2026-10-21",
+        "notes": "A collection discount can be an amount, a percent, or both when your company allows it\nThe collection screen shows the discount and what is still left\nScreens and buttons respond faster"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.18",
-        "build": 19,
-        "released_at": "2026-10-19",
-        "notes": "Saving a product no longer stays stuck after a slow save\nProduct photos show when they are ready and while they upload\nInventory lists products that were missing a stock row\nInventory search finds products and option codes"
+        "version": "1.0.19",
+        "build": 20,
+        "released_at": "2026-10-21",
+        "notes": "A collection discount can be an amount, a percent, or both\nCollection messages and the collection screen show the discount and what is still left\nThe collections report stays closer to customer outstanding\nInventory worth at cost and worth at selling is visible only to the Owner\nScreens and buttons respond faster"
       },
       "minimum": {
         "version": "1.0.0",

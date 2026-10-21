@@ -102,6 +102,7 @@ class PaymentSummary extends Equatable {
     required this.employeeId,
     required this.paymentNumber,
     required this.amount,
+    this.discountAmount = 0,
     required this.method,
     required this.status,
     required this.receivedAt,
@@ -129,6 +130,10 @@ class PaymentSummary extends Equatable {
   final String employeeId;
   final String paymentNumber;
   final num amount;
+
+  /// Write-off applied with this collection (settles AR with [amount]).
+  final num discountAmount;
+
   final PaymentMethod method;
   final PaymentRecordStatus status;
   final DateTime receivedAt;
@@ -195,6 +200,7 @@ class PaymentSummary extends Equatable {
       employeeId: json['employee_id'] as String,
       paymentNumber: json['payment_number'] as String? ?? '',
       amount: _numValue(json['amount']),
+      discountAmount: _numValue(json['discount_amount']),
       method:
           PaymentMethod.fromDb(json['method'] as String?) ?? PaymentMethod.cash,
       status: PaymentRecordStatus.fromDb(json['status'] as String?),
@@ -224,7 +230,17 @@ class PaymentSummary extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, paymentNumber, amount, status, receivedAt];
+  List<Object?> get props => [
+    id,
+    paymentNumber,
+    amount,
+    discountAmount,
+    status,
+    receivedAt,
+  ];
+
+  /// Cash received plus any collection discount.
+  num get settlementAmount => amount + discountAmount;
 }
 
 class PaymentDetail extends Equatable {
@@ -302,6 +318,7 @@ class ReceivePaymentInput {
     required this.customerId,
     required this.amount,
     required this.method,
+    this.discountAmount = 0,
     this.allocations = const [],
     this.reference,
     this.notes,
@@ -311,12 +328,18 @@ class ReceivePaymentInput {
   final String customerId;
   final num amount;
   final PaymentMethod method;
+
+  /// Optional write-off that settles outstanding with [amount].
+  final num discountAmount;
+
   final List<PaymentAllocationInput> allocations;
   final String? reference;
   final String? notes;
 
   /// Operational customer visit this payment was collected during.
   final String? visitId;
+
+  num get settlementAmount => amount + discountAmount;
 }
 
 /// Result of [PaymentRepository.receivePayment].

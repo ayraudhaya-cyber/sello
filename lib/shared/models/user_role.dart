@@ -18,6 +18,9 @@ enum UserRole {
   bool get canViewProductCost =>
       this == owner || this == manager || this == storeInCharge;
 
+  /// Inventory worth at cost / selling — Owner only.
+  bool get canViewInventoryValuation => this == owner;
+
   String get label => switch (this) {
         UserRole.owner => 'Owner',
         UserRole.manager => 'Manager',

@@ -97,6 +97,7 @@ class CompanySettings extends Equatable {
     required this.salesRepsCanViewOutstandingBalances,
     required this.financialVisibility,
     this.collectionApprovalRequired = false,
+    this.salesRepsCanDiscountCollections = false,
     this.salesRepsCanRecordDelivery = true,
     this.collectionDueDays = 0,
     this.outboundNotificationPolicies = OutboundNotificationPolicies.defaults,
@@ -143,6 +144,10 @@ class CompanySettings extends Equatable {
 
   /// When true, Sales Rep collections stay Pending Review until Owner/Manager approve.
   final bool collectionApprovalRequired;
+
+  /// When true, Sales Reps may enter a discount while recording a collection.
+  /// Owner and Manager can always add a collection discount.
+  final bool salesRepsCanDiscountCollections;
 
   /// When false, only Owner/Manager can record delivery and complete orders.
   final bool salesRepsCanRecordDelivery;
@@ -230,6 +235,7 @@ class CompanySettings extends Equatable {
     salesRepsCanViewOutstandingBalances: true,
     financialVisibility: FinancialVisibilityPolicies.defaults,
     collectionApprovalRequired: false,
+    salesRepsCanDiscountCollections: false,
     salesRepsCanRecordDelivery: true,
     collectionDueDays: 0,
     outboundNotificationPolicies: OutboundNotificationPolicies.defaults,
@@ -282,6 +288,7 @@ class CompanySettings extends Equatable {
     bool? salesRepsCanViewOutstandingBalances,
     FinancialVisibilityPolicies? financialVisibility,
     bool? collectionApprovalRequired,
+    bool? salesRepsCanDiscountCollections,
     bool? salesRepsCanRecordDelivery,
     int? collectionDueDays,
     OutboundNotificationPolicies? outboundNotificationPolicies,
@@ -335,6 +342,9 @@ class CompanySettings extends Equatable {
       financialVisibility: financialVisibility ?? this.financialVisibility,
       collectionApprovalRequired:
           collectionApprovalRequired ?? this.collectionApprovalRequired,
+      salesRepsCanDiscountCollections:
+          salesRepsCanDiscountCollections ??
+          this.salesRepsCanDiscountCollections,
       salesRepsCanRecordDelivery:
           salesRepsCanRecordDelivery ?? this.salesRepsCanRecordDelivery,
       collectionDueDays: collectionDueDays ?? this.collectionDueDays,
@@ -425,6 +435,8 @@ class CompanySettings extends Equatable {
       financialVisibility: FinancialVisibilityPolicies.fromJson(policyMap),
       collectionApprovalRequired:
           json['collection_approval_required'] as bool? ?? false,
+      salesRepsCanDiscountCollections:
+          json['sales_reps_can_discount_collections'] as bool? ?? false,
       salesRepsCanRecordDelivery:
           json['sales_reps_can_record_delivery'] as bool? ?? true,
       collectionDueDays: (json['collection_due_days'] as num?)?.toInt() ?? 0,
@@ -481,6 +493,7 @@ class CompanySettings extends Equatable {
           salesRepsCanViewOutstandingBalances,
       'financial_visibility_policies': financialVisibility.toJson(),
       'collection_approval_required': collectionApprovalRequired,
+      'sales_reps_can_discount_collections': salesRepsCanDiscountCollections,
       'sales_reps_can_record_delivery': salesRepsCanRecordDelivery,
       'collection_due_days': collectionDueDays,
       'outbound_notification_policies': outboundNotificationPolicies.toJson(),
@@ -505,6 +518,7 @@ class CompanySettings extends Equatable {
     salesRepsCanViewOutstandingBalances,
     financialVisibility,
     collectionApprovalRequired,
+    salesRepsCanDiscountCollections,
     salesRepsCanRecordDelivery,
     collectionDueDays,
     outboundNotificationPolicies,

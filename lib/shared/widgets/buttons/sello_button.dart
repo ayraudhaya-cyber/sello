@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sello/core/animations/app_durations.dart';
 import 'package:sello/core/theme/theme.dart';
 
 /// Primary CTAs use solid brand purple — same as Quick Create / Add Product.
@@ -238,8 +239,8 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             constraints.maxWidth > 0;
         final fill = widget.expanded || tightFill;
         final button = AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
+          duration: AppDurations.hover,
+          curve: AppCurves.standard,
           width: fill ? double.infinity : null,
           height: widget.height,
           padding: widget.padding,

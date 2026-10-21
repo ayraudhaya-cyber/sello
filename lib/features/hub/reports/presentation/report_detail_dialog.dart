@@ -228,7 +228,8 @@ class ReportDetailDialog extends StatelessWidget {
         return _MetricBlock(
           items: [
             ('SKUs tracked', '${overview.inventory.totalItems}'),
-            ('Stock value', money(overview.inventory.stockValue)),
+            if (definition.id == 'inventory_value')
+              ('Worth at cost', money(overview.inventory.stockValue)),
             ('Low stock', '${overview.inventory.lowStock}'),
             ('Out of stock', '${overview.inventory.outOfStock}'),
             ('Recent movements (7d)', '${overview.inventory.recentMovements}'),

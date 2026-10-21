@@ -97,6 +97,27 @@ void main() {
       );
     });
 
+    test('discount increases how much selected outstanding can settle', () {
+      expect(
+        ReceivePaymentAllocation.validate(
+          paymentAmount: 900,
+          discountAmount: 220,
+          allocations: {'so-1': 640, 'so-2': 480},
+          receivables: [small, mid],
+        ),
+        isNull,
+      );
+      expect(
+        ReceivePaymentAllocation.validate(
+          paymentAmount: 900,
+          discountAmount: 100,
+          allocations: {'so-1': 640, 'so-2': 480},
+          receivables: [small, mid],
+        ),
+        isNotNull,
+      );
+    });
+
     test(
       'payment must cover listed receivables before creating wallet credit',
       () {

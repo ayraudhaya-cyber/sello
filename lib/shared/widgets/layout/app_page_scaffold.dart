@@ -90,8 +90,9 @@ class AppPageScaffold extends StatelessWidget {
               ),
             ),
             AnimatedSwitcher(
-              duration: AppDurations.fast,
+              duration: AppDurations.hover,
               switchInCurve: AppCurves.standard,
+              switchOutCurve: AppCurves.standard,
               child: SelloPageContainer(
                 key: ValueKey(location),
                 maxWidth: maxWidth,

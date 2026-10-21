@@ -32,6 +32,7 @@ class CompanySettingsRepository {
     sales_reps_can_view_outstanding_balances,
     financial_visibility_policies,
     collection_approval_required,
+    sales_reps_can_discount_collections,
     sales_reps_can_record_delivery,
     collection_due_days,
     outbound_notification_policies,
@@ -124,6 +125,8 @@ class CompanySettingsRepository {
                 CompanySettings.defaults.allowOrdersAboveAvailableStock,
             'sales_reps_can_view_outstanding_balances':
                 CompanySettings.defaults.salesRepsCanViewOutstandingBalances,
+            'sales_reps_can_discount_collections':
+                CompanySettings.defaults.salesRepsCanDiscountCollections,
             'sales_reps_can_record_delivery':
                 CompanySettings.defaults.salesRepsCanRecordDelivery,
             'collection_due_days': CompanySettings.defaults.collectionDueDays,

@@ -203,5 +203,33 @@ void main() {
         PaymentMethod.cash,
       );
     });
+
+    test('collection discount resolves percent then amount', () {
+      expect(
+        OrderCollectionRules.resolvedDiscount(outstanding: 1000, percent: 10),
+        100,
+      );
+      expect(
+        OrderCollectionRules.resolvedDiscount(outstanding: 1000, amount: 50),
+        50,
+      );
+      // 10% of 1000 = 100, then + Rs 50 → Rs 150
+      expect(
+        OrderCollectionRules.resolvedDiscount(
+          outstanding: 1000,
+          percent: 10,
+          amount: 50,
+        ),
+        150,
+      );
+      expect(
+        OrderCollectionRules.resolvedDiscount(
+          outstanding: 100,
+          percent: 50,
+          amount: 80,
+        ),
+        100,
+      );
+    });
   });
 }

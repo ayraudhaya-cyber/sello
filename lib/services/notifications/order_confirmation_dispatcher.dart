@@ -624,6 +624,9 @@ class CollectionAcknowledgementDispatcher {
       prepared.amount,
       symbol: symbol,
     );
+    final discountLabel = prepared.discountAmount > 0.001
+        ? SelloFormatters.currency(prepared.discountAmount, symbol: symbol)
+        : null;
 
     final actions = <OrderConfirmationAction>[];
     String messageBody = '';
@@ -644,6 +647,7 @@ class CollectionAcknowledgementDispatcher {
           'sales_rep_name': prepared.salesRepName,
           'collection_amount': amountLabel,
           'amount': amountLabel,
+          'discount_amount': discountLabel,
           'collection_number': prepared.paymentNumber,
           'payment_number': prepared.paymentNumber,
           'payment_method': prepared.methodLabel,
@@ -881,6 +885,7 @@ class CollectionAcknowledgementPrepareResult {
     required this.token,
     required this.paymentNumber,
     required this.amount,
+    this.discountAmount = 0,
     required this.currency,
     required this.methodLabel,
     required this.companyName,
@@ -897,6 +902,7 @@ class CollectionAcknowledgementPrepareResult {
   final String token;
   final String paymentNumber;
   final num amount;
+  final num discountAmount;
   final String currency;
   final String methodLabel;
   final String companyName;
@@ -940,6 +946,9 @@ class CollectionAcknowledgementPrepareResult {
       amount: paymentMap['amount'] is num
           ? paymentMap['amount'] as num
           : num.tryParse('${paymentMap['amount']}') ?? 0,
+      discountAmount: paymentMap['discount_amount'] is num
+          ? paymentMap['discount_amount'] as num
+          : num.tryParse('${paymentMap['discount_amount']}') ?? 0,
       currency: paymentMap['currency']?.toString() ?? 'USD',
       methodLabel: method.replaceAll('_', ' '),
       companyName: paymentMap['company_name']?.toString() ?? 'Sello',
@@ -1025,8 +1034,12 @@ class PaymentReceivedDispatcher {
       prepared.amount,
       symbol: symbol,
     );
+    final discountLabel = prepared.discountAmount > 0.001
+        ? SelloFormatters.currency(prepared.discountAmount, symbol: symbol)
+        : null;
     final body = OutboundMessageTemplate.openingBalancePaymentReceived(
       amountLabel: amountLabel,
+      discountLabel: discountLabel,
       oldInvoiceReference: prepared.openingReference,
       businessName: prepared.companyName,
     );
@@ -1064,6 +1077,7 @@ class PaymentReceiptPrepareResult {
     required this.alreadyPrepared,
     required this.eventId,
     required this.amount,
+    this.discountAmount = 0,
     required this.currency,
     required this.companyName,
     required this.customerName,
@@ -1075,6 +1089,7 @@ class PaymentReceiptPrepareResult {
   final bool alreadyPrepared;
   final String eventId;
   final num amount;
+  final num discountAmount;
   final String currency;
   final String companyName;
   final String customerName;
@@ -1119,6 +1134,9 @@ class PaymentReceiptPrepareResult {
       amount: paymentMap['amount'] is num
           ? paymentMap['amount'] as num
           : num.tryParse('${paymentMap['amount']}') ?? 0,
+      discountAmount: paymentMap['discount_amount'] is num
+          ? paymentMap['discount_amount'] as num
+          : num.tryParse('${paymentMap['discount_amount']}') ?? 0,
       currency: paymentMap['currency']?.toString() ?? 'USD',
       companyName: paymentMap['company_name']?.toString() ?? 'Sello',
       customerName: paymentMap['customer_name']?.toString() ?? 'Customer',

@@ -119,6 +119,7 @@ class OrderDocument extends Equatable {
     this.collectionPaymentNumber,
     this.collectionPaymentMethod,
     this.collectionPaymentAmount,
+    this.collectionDiscountAmount,
     this.collectionReceivedAt,
   });
 
@@ -170,6 +171,9 @@ class OrderDocument extends Equatable {
   final String? collectionPaymentNumber;
   final String? collectionPaymentMethod;
   final num? collectionPaymentAmount;
+
+  /// Write-off on the linked collection payment, when present.
+  final num? collectionDiscountAmount;
   final DateTime? collectionReceivedAt;
   final List<OrderDocumentLine> lines;
 
@@ -327,6 +331,9 @@ class OrderDocument extends Equatable {
       ),
       collectionPaymentNumber: _stringValue(json['collection_payment_number']),
       collectionPaymentMethod: _stringValue(json['collection_payment_method']),
+      collectionDiscountAmount: json['collection_discount_amount'] == null
+          ? null
+          : _numValue(json['collection_discount_amount']),
       collectionPaymentAmount: json['collection_payment_amount'] == null
           ? null
           : _numValue(json['collection_payment_amount']),

@@ -82,6 +82,7 @@ abstract final class OutboundPlaceholders {
   static const collectionFields = <OutboundPlaceholder>[
     customerName,
     collectionAmount,
+    discountAmount,
     collectionNumber,
     businessName,
     salesRep,
@@ -145,6 +146,7 @@ abstract final class OutboundPlaceholders {
       'collection_number': 'PAY-0001',
       'collection_amount': 'Rs 5,000.00',
       'amount': 'Rs 5,000.00',
+      'discount_amount': 'Rs 200.00',
       'collection_status': 'submitted for review',
       'approval_note': 'Balances update only after owner/manager approval.',
       'receipt_link': link,

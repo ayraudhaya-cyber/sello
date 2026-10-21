@@ -275,7 +275,7 @@ class _CollectionsExportDialogState
     return SelloFormDialog(
       title: 'Export collections',
       subtitle: stillToCollect
-          ? 'What customers still owe for orders and opening balances in the period you pick.'
+          ? 'Delivered unpaid balances for orders and opening balances in the period you pick. Matches Payments Outstanding.'
           : 'Money collected by your team, with a summary per sales rep.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,

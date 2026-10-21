@@ -263,6 +263,7 @@ class ReportDefinition {
     required this.question,
     required this.icon,
     this.available = true,
+    this.ownerOnly = false,
     this.drillRoute,
   });
 
@@ -272,6 +273,9 @@ class ReportDefinition {
   final String question;
   final String icon;
   final bool available;
+
+  /// Hidden from Manager and other non-Owner roles (e.g. inventory valuation).
+  final bool ownerOnly;
 
   /// Optional deep link into the underlying domain workspace.
   final String? drillRoute;

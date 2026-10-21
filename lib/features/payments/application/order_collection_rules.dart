@@ -1,5 +1,6 @@
 import 'package:sello/features/payments/application/order_collection_association.dart';
 import 'package:sello/shared/models/order_status.dart';
+import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
 
@@ -58,6 +59,7 @@ abstract final class OrderCollectionRules {
     required num? amount,
     required num remaining,
     AssociatedChequeMatch? match,
+    num discount = 0,
   }) {
     if (OrderCollectionAssociation.shouldUseExistingCheque(
       method: method,
@@ -74,6 +76,13 @@ abstract final class OrderCollectionRules {
       return match.action == AssociatedChequeAction.collectExisting
           ? 'Collect the existing cheque instead of recording another collection.'
           : 'Apply the existing cheque instead of recording another collection.';
+    }
+    final cash = amount ?? 0;
+    if (cash <= 0.001 && discount > 0.001) {
+      if (discount > ceiling + 0.001) {
+        return 'Discount is more than the outstanding balance.';
+      }
+      return null;
     }
     return validateAmount(amount: amount, outstanding: ceiling);
   }
@@ -103,6 +112,7 @@ abstract final class OrderCollectionRules {
     required num walletAvailable,
     required num? received,
     required num outstanding,
+    num discount = 0,
   }) {
     if (walletApplied < -0.001) {
       return 'Wallet amount cannot be negative.';
@@ -117,11 +127,36 @@ abstract final class OrderCollectionRules {
     if (cash < -0.001) {
       return 'Enter an amount greater than zero.';
     }
-    if (walletApplied <= 0.001 && cash <= 0.001) {
+    if (discount < -0.001) {
+      return 'Discount cannot be negative.';
+    }
+    if (walletApplied <= 0.001 && cash <= 0.001 && discount <= 0.001) {
       return 'Enter an amount greater than zero.';
     }
-    if (walletApplied + cash > outstanding + 0.001) {
-      return 'Wallet and the amount received are more than the remaining balance.';
+    if (walletApplied + cash + discount > outstanding + 0.001) {
+      return discount > 0.001
+          ? 'Wallet, amount received, and discount are more than the remaining balance.'
+          : 'Wallet and the amount received are more than the remaining balance.';
+    }
+    return null;
+  }
+
+  /// Optional write-off on a cash/card/bank/wallet collection.
+  static String? validateDiscount({
+    required num discount,
+    required num moneyReceived,
+    required num outstanding,
+    required bool allowed,
+  }) {
+    if (discount <= 0.001) return null;
+    if (!allowed) {
+      return 'Sales reps cannot add a discount on collections for this company.';
+    }
+    if (discount > outstanding + 0.001) {
+      return 'Discount is more than the outstanding balance.';
+    }
+    if (moneyReceived + discount > outstanding + 0.001) {
+      return 'Amount received and discount are more than the outstanding balance.';
     }
     return null;
   }

@@ -369,8 +369,8 @@ class _SideNavItemState extends State<_SideNavItem> {
                 child: TweenAnimationBuilder<double>(
                   // Hover nudge only when not selected (HTML transform)
                   tween: Tween(begin: 0, end: hovered ? 2.0 : 0.0),
-                  duration: const Duration(milliseconds: 200),
-                  curve: const Cubic(0.22, 0.61, 0.36, 1),
+                  duration: AppDurations.hover,
+                  curve: AppCurves.standard,
                   builder: (context, dx, child) {
                     return Transform.translate(
                       offset: Offset(dx, 0),

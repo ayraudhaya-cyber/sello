@@ -9,9 +9,11 @@ import 'package:sello/features/hub/inventory/application/hub_inventory_provider.
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/inventory/presentation/inventory_details_dialog.dart';
 import 'package:sello/features/inventory/presentation/stock_adjust_dialog.dart';
+import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
+import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/browser_file_download.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -475,6 +477,9 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             _SummaryRow(
               stats: state.stats,
               currencySymbol: _currencySymbol(),
+              showValuation:
+                  ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
+                  false,
               onFilter: (filter) => ref
                   .read(hubInventoryProvider.notifier)
                   .setStatusFilter(filter),
@@ -857,11 +862,15 @@ class _SummaryRow extends StatelessWidget {
     required this.stats,
     required this.currencySymbol,
     required this.onFilter,
+    this.showValuation = false,
   });
 
   final InventoryDashboardStats stats;
   final String currencySymbol;
   final ValueChanged<StockStatusFilter> onFilter;
+
+  /// Worth at cost / selling — Owner only.
+  final bool showValuation;
 
   @override
   Widget build(BuildContext context) {
@@ -875,26 +884,28 @@ class _SummaryRow extends StatelessWidget {
           tone: context.brandAccent,
           onTap: () => onFilter(StockStatusFilter.all),
         ),
-        SelloStatCard(
-          label: 'Stock at cost',
-          value: SelloFormatters.currency(
-            stats.stockValue,
-            symbol: currencySymbol,
+        if (showValuation) ...[
+          SelloStatCard(
+            label: 'Worth at cost',
+            value: SelloFormatters.currency(
+              stats.stockValue,
+              symbol: currencySymbol,
+            ),
+            hint: 'Quantity × cost price',
+            icon: Icons.payments_outlined,
+            tone: AppColors.finance,
           ),
-          hint: 'Quantity × cost price',
-          icon: Icons.payments_outlined,
-          tone: AppColors.finance,
-        ),
-        SelloStatCard(
-          label: 'Stock at selling price',
-          value: SelloFormatters.currency(
-            stats.stockSellingValue,
-            symbol: currencySymbol,
+          SelloStatCard(
+            label: 'Worth at selling',
+            value: SelloFormatters.currency(
+              stats.stockSellingValue,
+              symbol: currencySymbol,
+            ),
+            hint: 'Quantity × selling price',
+            icon: Icons.storefront_outlined,
+            tone: AppColors.success,
           ),
-          hint: 'Quantity × selling price',
-          icon: Icons.storefront_outlined,
-          tone: AppColors.success,
-        ),
+        ],
         SelloStatCard(
           label: 'Out of stock',
           value: '${stats.outOfStock}',

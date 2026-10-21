@@ -38,7 +38,7 @@ class _SelloInfoHintState extends State<SelloInfoHint> {
       key: _tooltipKey,
       message: message,
       triggerMode: TooltipTriggerMode.tap,
-      waitDuration: const Duration(milliseconds: 220),
+      waitDuration: const Duration(milliseconds: 160),
       showDuration: const Duration(seconds: 6),
       exitDuration: const Duration(milliseconds: 120),
       preferBelow: true,

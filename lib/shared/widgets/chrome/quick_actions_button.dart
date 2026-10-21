@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/core/animations/app_durations.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/services/quick_actions/quick_actions_launcher.dart';
 import 'package:sello/services/session/session_provider.dart';
@@ -167,7 +168,7 @@ class _QuickActionsMenuButtonState extends State<_QuickActionsMenuButton> {
         ],
       ],
       icon: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 160),
+        duration: AppDurations.hover,
         transitionBuilder: (child, animation) => RotationTransition(
           turns: Tween<double>(begin: 0.75, end: 1).animate(animation),
           child: FadeTransition(opacity: animation, child: child),

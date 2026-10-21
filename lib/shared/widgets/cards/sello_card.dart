@@ -101,8 +101,8 @@ class _SelloCardState extends State<SelloCard> {
         final stretchToMin = !fill && minH.isFinite && minH > 0;
 
         final painted = AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: const Cubic(0.22, 0.61, 0.36, 1),
+          duration: AppDurations.hover,
+          curve: AppCurves.standard,
           clipBehavior: Clip.antiAlias,
           width: double.infinity,
           height: fill ? constraints.maxHeight : null,

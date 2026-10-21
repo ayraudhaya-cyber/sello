@@ -296,46 +296,46 @@ class _HubOverviewBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SelloIntelligenceBanner(
-          message:
-              'Purchase patterns, risk signals, and growth insights will '
-              'appear here as Sello Intelligence rolls out.',
-        ),
+          const SelloIntelligenceBanner(
+            message:
+                'Purchase patterns, risk signals, and growth insights will '
+                'appear here as Sello Intelligence rolls out.',
+          ),
         SizedBox(height: sectionGap),
-        _ProfileSection(
-          label: 'Financial summary',
+          _ProfileSection(
+            label: 'Financial summary',
           showDivider: false,
-          child: Column(
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SelloFormRow(
-                left: _ProfileField(
+              children: [
+                SelloFormRow(
+                  left: _ProfileField(
                   label: 'Outstanding now',
-                  value: SelloFormatters.currency(
-                    customer.outstandingBalance,
-                    symbol: currencySymbol,
+                    value: SelloFormatters.currency(
+                      customer.outstandingBalance,
+                      symbol: currencySymbol,
+                    ),
                   ),
-                ),
-                right: _ProfileField(
+                  right: _ProfileField(
                   label: 'Wallet credit',
-                  value: SelloFormatters.currency(
-                    customer.walletBalance,
-                    symbol: currencySymbol,
+                    value: SelloFormatters.currency(
+                      customer.walletBalance,
+                      symbol: currencySymbol,
+                    ),
                   ),
                 ),
-              ),
               SizedBox(height: fieldGap),
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Credit limit',
-                  value: customer.creditAllowed
-                      ? SelloFormatters.currency(
-                          customer.creditLimit,
-                          symbol: currencySymbol,
-                        )
-                      : 'Credit not allowed',
-                  mutedEmpty: !customer.creditAllowed,
-                ),
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Credit limit',
+                    value: customer.creditAllowed
+                        ? SelloFormatters.currency(
+                            customer.creditLimit,
+                            symbol: currencySymbol,
+                          )
+                        : 'Credit not allowed',
+                    mutedEmpty: !customer.creditAllowed,
+                  ),
                 right: _OpeningBalanceSummaryField(
                   customerId: customer.id,
                   amount: customer.openingBalance,
@@ -406,47 +406,47 @@ class _HubOverviewBody extends StatelessWidget {
           label: 'Customer information',
           child: Column(
             children: [
-              const SelloFormRow(
-                left: _ProfileField(
-                  label: 'Lifetime sales',
-                  value: 'Coming soon',
-                  mutedEmpty: true,
+                const SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Lifetime sales',
+                    value: 'Coming soon',
+                    mutedEmpty: true,
+                  ),
+                  right: _ProfileField(
+                    label: 'Total orders',
+                    value: 'Coming soon',
+                    mutedEmpty: true,
+                  ),
                 ),
-                right: _ProfileField(
-                  label: 'Total orders',
-                  value: 'Coming soon',
-                  mutedEmpty: true,
-                ),
-              ),
               SizedBox(height: fieldGap),
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Customer since',
-                  value: customer.createdAt != null
-                      ? SelloFormatters.date(customer.createdAt)
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Customer since',
+                    value: customer.createdAt != null
+                        ? SelloFormatters.date(customer.createdAt)
                       : _dash,
-                  mutedEmpty: customer.createdAt == null,
-                ),
-                right: _ProfileField(
-                  label: 'Last purchase',
-                  value: customer.lastPurchaseAt != null
-                      ? SelloFormatters.date(customer.lastPurchaseAt)
+                    mutedEmpty: customer.createdAt == null,
+                  ),
+                  right: _ProfileField(
+                    label: 'Last purchase',
+                    value: customer.lastPurchaseAt != null
+                        ? SelloFormatters.date(customer.lastPurchaseAt)
                       : _dash,
-                  mutedEmpty: customer.lastPurchaseAt == null,
+                    mutedEmpty: customer.lastPurchaseAt == null,
+                  ),
                 ),
-              ),
               SizedBox(height: fieldGap),
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Type',
-                  value: customer.customerType.label,
-                ),
-                right: _ProfileField(
-                  label: 'Company',
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Type',
+                    value: customer.customerType.label,
+                  ),
+                  right: _ProfileField(
+                    label: 'Company',
                   value: customer.companyName ?? _dash,
-                  mutedEmpty: customer.companyName == null,
+                    mutedEmpty: customer.companyName == null,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -455,133 +455,133 @@ class _HubOverviewBody extends StatelessWidget {
           label: 'Relationship',
           child: Column(
             children: [
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Upcoming visit',
-                  value: customer.nextVisitAt != null
-                      ? SelloFormatters.date(customer.nextVisitAt)
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Upcoming visit',
+                    value: customer.nextVisitAt != null
+                        ? SelloFormatters.date(customer.nextVisitAt)
                       : _dash,
-                  mutedEmpty: customer.nextVisitAt == null,
-                ),
-                right: _ProfileField(
-                  label: 'Last completed visit',
-                  value: customer.lastVisitAt != null
-                      ? SelloFormatters.date(customer.lastVisitAt)
+                    mutedEmpty: customer.nextVisitAt == null,
+                  ),
+                  right: _ProfileField(
+                    label: 'Last completed visit',
+                    value: customer.lastVisitAt != null
+                        ? SelloFormatters.date(customer.lastVisitAt)
                       : _dash,
-                  mutedEmpty: customer.lastVisitAt == null,
+                    mutedEmpty: customer.lastVisitAt == null,
+                  ),
                 ),
-              ),
               SizedBox(height: fieldGap),
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Assigned representative',
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Assigned representative',
                   value: assignedRepresentativeName ?? _dash,
-                  mutedEmpty: assignedRepresentativeName == null,
+                    mutedEmpty: assignedRepresentativeName == null,
+                  ),
+                  right: const _ProfileField(
+                    label: 'Visit frequency',
+                    value: 'Coming soon',
+                    mutedEmpty: true,
+                  ),
                 ),
-                right: const _ProfileField(
-                  label: 'Visit frequency',
-                  value: 'Coming soon',
-                  mutedEmpty: true,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: sectionGap),
-        _ProfileSection(
-          label: 'Contact',
-          child: Column(
-            children: [
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Phone',
-                  value: PhoneNumber.displayOrNull(customer.phone) ?? _dash,
-                  mutedEmpty: customer.phone == null,
-                ),
-                right: _ProfileField(
-                  label: 'WhatsApp',
-                  value: PhoneNumber.displayOrNull(customer.whatsapp) ?? _dash,
-                  mutedEmpty: customer.whatsapp == null,
-                ),
-              ),
-              SizedBox(height: fieldGap),
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Email',
-                  value: customer.email ?? _dash,
-                  mutedEmpty: customer.email == null,
-                ),
-                right: _ProfileField(
-                  label: 'Tax number',
-                  value: customer.taxNumber ?? _dash,
-                  mutedEmpty: customer.taxNumber == null,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: sectionGap),
-        _ProfileSection(
-          label: 'Address',
-          child: SelloFormRow(
-            left: _ProfileField(
-              label: 'Address',
-              value: customer.addressLine1 ?? _dash,
-              mutedEmpty: customer.addressLine1 == null,
-            ),
-            right: _ProfileField(
-              label: 'City',
-              value: customer.city ?? _dash,
-              mutedEmpty: customer.city == null,
+              ],
             ),
           ),
-        ),
-        if (customer.notes != null &&
-            customer.notes!.trim().isNotEmpty &&
-            !readOnly) ...[
-          SizedBox(height: sectionGap),
+        SizedBox(height: sectionGap),
           _ProfileSection(
-            label: 'Notes',
-            child: Text(
-              customer.notes!,
-              style: _CustomerDetailType.value.copyWith(
-                fontWeight: FontWeight.w500,
-                height: 1.5,
-                color: AppColors.textSecondary,
+            label: 'Contact',
+            child: Column(
+              children: [
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Phone',
+                  value: PhoneNumber.displayOrNull(customer.phone) ?? _dash,
+                    mutedEmpty: customer.phone == null,
+                  ),
+                  right: _ProfileField(
+                    label: 'WhatsApp',
+                  value: PhoneNumber.displayOrNull(customer.whatsapp) ?? _dash,
+                    mutedEmpty: customer.whatsapp == null,
+                  ),
+                ),
+              SizedBox(height: fieldGap),
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Email',
+                  value: customer.email ?? _dash,
+                    mutedEmpty: customer.email == null,
+                  ),
+                  right: _ProfileField(
+                    label: 'Tax number',
+                  value: customer.taxNumber ?? _dash,
+                    mutedEmpty: customer.taxNumber == null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        SizedBox(height: sectionGap),
+          _ProfileSection(
+            label: 'Address',
+            child: SelloFormRow(
+              left: _ProfileField(
+                label: 'Address',
+              value: customer.addressLine1 ?? _dash,
+                mutedEmpty: customer.addressLine1 == null,
+              ),
+              right: _ProfileField(
+                label: 'City',
+              value: customer.city ?? _dash,
+                mutedEmpty: customer.city == null,
               ),
             ),
           ),
-        ],
+          if (customer.notes != null &&
+              customer.notes!.trim().isNotEmpty &&
+              !readOnly) ...[
+          SizedBox(height: sectionGap),
+            _ProfileSection(
+              label: 'Notes',
+              child: Text(
+                customer.notes!,
+                style: _CustomerDetailType.value.copyWith(
+                  fontWeight: FontWeight.w500,
+                  height: 1.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
         SizedBox(height: sectionGap),
-        _ProfileSection(
-          label: 'Activity',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              EntityActivityPanel(
-                referenceType: 'customer',
-                referenceId: customer.id,
-                emptyMessage: 'No company activity for this customer yet.',
-                limit: 12,
-              ),
+          _ProfileSection(
+            label: 'Activity',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                EntityActivityPanel(
+                  referenceType: 'customer',
+                  referenceId: customer.id,
+                  emptyMessage: 'No company activity for this customer yet.',
+                  limit: 12,
+                ),
               SizedBox(height: fieldGap),
-              SelloFormRow(
-                left: _ProfileField(
-                  label: 'Created',
-                  value: customer.createdAt != null
-                      ? SelloFormatters.date(customer.createdAt)
+                SelloFormRow(
+                  left: _ProfileField(
+                    label: 'Created',
+                    value: customer.createdAt != null
+                        ? SelloFormatters.date(customer.createdAt)
                       : _dash,
-                  mutedEmpty: customer.createdAt == null,
+                    mutedEmpty: customer.createdAt == null,
+                  ),
+                  right: _ProfileField(
+                    label: 'Updated',
+                    value: SelloFormatters.date(customer.updatedAt),
+                  ),
                 ),
-                right: _ProfileField(
-                  label: 'Updated',
-                  value: SelloFormatters.date(customer.updatedAt),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+          ],
     );
   }
 }
@@ -742,7 +742,7 @@ class _HubCustomerOrdersBodyState
             ],
           ],
         ],
-      ),
+                ),
     );
   }
 
@@ -1151,14 +1151,14 @@ class _SalesVisitFooter extends ConsumerWidget {
       primaryLabel: visitingThis
           ? 'Open visit'
           : active == null
-          ? 'Open visit'
-          : 'Busy',
+              ? 'Open visit'
+              : 'Busy',
       primaryEnabled: visitingThis || active == null,
       onPrimary: visitingThis
           ? complete
           : active == null
-          ? start
-          : null,
+              ? start
+              : null,
     );
   }
 }
@@ -1194,9 +1194,9 @@ class _CustomerVisitTimelineState
       final items = await ref
           .read(visitRepositoryProvider)
           .fetchCustomerVisitHistory(
-            companyId: session.company.id,
-            customerId: widget.customerId,
-          );
+                companyId: session.company.id,
+                customerId: widget.customerId,
+              );
       if (!mounted) return;
       setState(() {
         _items = items;
@@ -1238,8 +1238,8 @@ class _CustomerVisitTimelineState
             const SizedBox(height: AppSpacing.xxs),
             Text(
               'Completed field visits will appear here.',
-              style: _CustomerDetailType.label.copyWith(
-                color: AppColors.textFaint,
+        style: _CustomerDetailType.label.copyWith(
+          color: AppColors.textFaint,
                 fontSize: 13,
               ),
             ),
@@ -1637,8 +1637,8 @@ class _ProfileSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (showDivider) ...[
-          const Divider(height: 1, thickness: 1, color: AppColors.outlinePanel),
-          const SizedBox(height: 14),
+        const Divider(height: 1, thickness: 1, color: AppColors.outlinePanel),
+        const SizedBox(height: 14),
         ],
         Text(label.toUpperCase(), style: _CustomerDetailType.section),
         const SizedBox(height: AppSpacing.md),
@@ -1675,14 +1675,14 @@ class _ProfileField extends StatelessWidget {
           runSpacing: AppSpacing.xs,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text(
-              value,
-              style: mutedEmpty
-                  ? _CustomerDetailType.value.copyWith(
-                      color: AppColors.textFaint.withValues(alpha: 0.72),
-                      fontWeight: FontWeight.w500,
-                    )
-                  : _CustomerDetailType.value,
+        Text(
+          value,
+          style: mutedEmpty
+              ? _CustomerDetailType.value.copyWith(
+                  color: AppColors.textFaint.withValues(alpha: 0.72),
+                  fontWeight: FontWeight.w500,
+                )
+              : _CustomerDetailType.value,
             ),
             if (statusLabel != null)
               SelloStatusBadge(

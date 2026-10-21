@@ -30,6 +30,7 @@ class AnalyticsService {
   List<ReportKpi> buildKpis({
     required ReportsOverview overview,
     required String currencySymbol,
+    bool includeInventoryValuation = true,
   }) {
     String money(num v) =>
         SelloFormatters.currency(v, symbol: currencySymbol);
@@ -110,16 +111,17 @@ class AnalyticsService {
         drillRoute: RoutePaths.hubInventory,
         reportId: 'inventory_low',
       ),
-      ReportKpi(
-        id: 'inventory_value',
-        label: 'Inventory value',
-        value: money(overview.inventory.stockValue),
-        hint: 'At cost',
-        iconKey: 'warehouse',
-        tone: ReportKpiTone.success,
-        drillRoute: RoutePaths.hubInventory,
-        reportId: 'inventory_value',
-      ),
+      if (includeInventoryValuation)
+        ReportKpi(
+          id: 'inventory_value',
+          label: 'Inventory value',
+          value: money(overview.inventory.stockValue),
+          hint: 'At cost',
+          iconKey: 'warehouse',
+          tone: ReportKpiTone.success,
+          drillRoute: RoutePaths.hubInventory,
+          reportId: 'inventory_value',
+        ),
       ReportKpi(
         id: 'visits_completed',
         label: 'Visits completed',

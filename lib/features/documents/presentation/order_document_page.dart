@@ -115,13 +115,10 @@ class _OrderDocumentPageState extends ConsumerState<OrderDocumentPage> {
                         ),
                         if (compact) ...[
                           const SizedBox(height: 10),
-                          OverflowBox(
-                            maxWidth: MediaQuery.sizeOf(context).width,
-                            child: const Divider(
-                              height: 1,
-                              thickness: 1,
-                              color: AppColors.outlinePanel,
-                            ),
+                          const Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: AppColors.outlinePanel,
                           ),
                         ],
                         if (doc.issuerIdentity.hasContactBlock) ...[

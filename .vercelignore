@@ -5,3 +5,12 @@
 *.aab
 *.ipa
 supabase/.temp
+.dart_tool
+build
+dist
+coverage
+.cursor
+references
+visual
+windows
+android/.gradle

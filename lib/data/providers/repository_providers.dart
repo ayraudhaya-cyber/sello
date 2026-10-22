@@ -6,12 +6,14 @@ import 'package:sello/data/repositories/employee_repository.dart';
 import 'package:sello/data/repositories/inventory_repository.dart';
 import 'package:sello/data/repositories/order_document_repository.dart';
 import 'package:sello/data/repositories/order_repository.dart';
+import 'package:sello/data/repositories/order_return_repository.dart';
 import 'package:sello/data/repositories/payment_repository.dart';
 import 'package:sello/data/repositories/notification_repository.dart';
 import 'package:sello/data/repositories/product_fields_repository.dart';
 import 'package:sello/data/repositories/product_repository.dart';
 import 'package:sello/data/repositories/report_repository.dart';
 import 'package:sello/data/repositories/subscription_repository.dart';
+import 'package:sello/data/repositories/supplier_order_repository.dart';
 import 'package:sello/data/repositories/supplier_repository.dart';
 import 'package:sello/data/repositories/visit_repository.dart';
 import 'package:sello/services/iam/audit_service.dart';
@@ -177,6 +179,10 @@ final paymentReceivedDispatcherProvider = Provider<PaymentReceivedDispatcher>((
   );
 });
 
+final orderReturnRepositoryProvider = Provider<OrderReturnRepository>(
+  (ref) => OrderReturnRepository(),
+);
+
 final orderRepositoryProvider = Provider<OrderRepository>(
   (ref) => OrderRepository(
     events: ref.watch(businessEventBusProvider),
@@ -212,6 +218,10 @@ final employeeRepositoryProvider = Provider<EmployeeRepository>(
 
 final supplierRepositoryProvider = Provider<SupplierRepository>(
   (ref) => SupplierRepository(events: ref.watch(businessEventBusProvider)),
+);
+
+final supplierOrderRepositoryProvider = Provider<SupplierOrderRepository>(
+  (ref) => SupplierOrderRepository(),
 );
 
 final visitRepositoryProvider = Provider<VisitRepository>(

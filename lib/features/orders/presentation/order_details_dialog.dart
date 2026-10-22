@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
+import 'package:sello/shared/models/order_return.dart';
 import 'package:sello/features/payments/application/order_collection_rules.dart';
 import 'package:sello/features/payments/presentation/record_order_collection_sheet.dart';
 import 'package:sello/features/products/application/product_fields_provider.dart';
@@ -46,6 +47,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
     this.onFulfill,
     this.onFulfillAll,
     this.onCancelRemaining,
+    this.onReturn,
     this.onCancelOrder,
     this.onArchive,
     this.onViewInvoice,
@@ -66,6 +68,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
   final VoidCallback? onFulfill;
   final VoidCallback? onFulfillAll;
   final VoidCallback? onCancelRemaining;
+  final VoidCallback? onReturn;
   final VoidCallback? onCancelOrder;
   final VoidCallback? onArchive;
   final VoidCallback? onViewInvoice;
@@ -86,6 +89,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
 class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
   late OrderDetail _detail;
   OrderCollectionBalance? _collections;
+  List<OrderReturnSummary> _returns = const [];
   bool _recording = false;
 
   @override
@@ -93,6 +97,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     super.initState();
     _detail = widget.detail;
     Future.microtask(_loadCollections);
+    Future.microtask(_loadReturns);
   }
 
   @override
@@ -101,6 +106,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     if (oldWidget.detail.summary.id != widget.detail.summary.id) {
       _detail = widget.detail;
       Future.microtask(_loadCollections);
+      Future.microtask(_loadReturns);
     }
   }
 
@@ -120,6 +126,20 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
   VoidCallback? get onSmsInvoice => widget.onSmsInvoice;
   bool get readOnly => widget.readOnly;
   String get currencySymbol => widget.currencySymbol;
+
+  Future<void> _loadReturns() async {
+    if (order.isDraft) return;
+    try {
+      final rows = await ref
+          .read(orderReturnRepositoryProvider)
+          .fetchForOrder(order.id);
+      if (!mounted) return;
+      setState(() => _returns = rows);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _returns = const []);
+    }
+  }
 
   Future<void> _loadCollections() async {
     if (order.isDraft) return;
@@ -340,14 +360,29 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                           value: SelloFormatters.quantity(totalCancelled),
                         ),
                     ],
-                    trailing: canFulfill && onFulfillAll != null
+                    trailing: (canFulfill && onFulfillAll != null) ||
+                            widget.onReturn != null
                         ? Align(
                             alignment: Alignment.centerLeft,
-                            child: SelloButton(
-                              label: 'Deliver remaining',
-                              variant: SelloButtonVariant.outline,
-                              size: SelloButtonSize.small,
-                              onPressed: onFulfillAll,
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                if (widget.onReturn != null)
+                                  SelloButton(
+                                    label: 'Return items',
+                                    variant: SelloButtonVariant.outline,
+                                    size: SelloButtonSize.small,
+                                    onPressed: widget.onReturn,
+                                  ),
+                                if (canFulfill && onFulfillAll != null)
+                                  SelloButton(
+                                    label: 'Deliver remaining',
+                                    variant: SelloButtonVariant.outline,
+                                    size: SelloButtonSize.small,
+                                    onPressed: onFulfillAll,
+                                  ),
+                              ],
                             ),
                           )
                         : null,
@@ -385,6 +420,16 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               label: 'Collections',
               child: _CollectionsList(
                 entries: _collections!.entries,
+                currencySymbol: currencySymbol,
+              ),
+            ),
+          ],
+          if (_returns.isNotEmpty) ...[
+            const SizedBox(height: _OrderGrid.sectionGap),
+            _Section(
+              label: 'Returns',
+              child: _ReturnsList(
+                returns: _returns,
                 currencySymbol: currencySymbol,
               ),
             ),
@@ -1141,6 +1186,116 @@ String _deliveryLine(OrderLineItem line) {
   return '${SelloFormatters.quantity(line.deliveredQuantity)} delivered · '
       '${SelloFormatters.quantity(line.remainingQuantity)} remaining'
       '${line.cancelledQuantity > 0 ? ' · ${SelloFormatters.quantity(line.cancelledQuantity)} cancelled' : ''}';
+}
+
+class _ReturnsList extends StatelessWidget {
+  const _ReturnsList({required this.returns, required this.currencySymbol});
+
+  final List<OrderReturnSummary> returns;
+  final String currencySymbol;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < returns.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(returns[i].returnNumber, style: _Type.productName),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${SelloFormatters.date(returns[i].returnedAt)} · ${returns[i].moneyLabel}'
+                      '${returns[i].isCancelled ? ' · Cancelled' : ''}',
+                      style: _Type.meta,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                SelloFormatters.currency(
+                  returns[i].returnValue,
+                  symbol: currencySymbol,
+                ),
+                style: _Type.productName,
+              ),
+            ],
+          ),
+          if (returns[i].lines.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _ReturnLinesCard(
+              item: returns[i],
+              currencySymbol: currencySymbol,
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+class _ReturnLinesCard extends StatelessWidget {
+  const _ReturnLinesCard({required this.item, required this.currencySymbol});
+
+  final OrderReturnSummary item;
+  final String currencySymbol;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: const BoxDecoration(
+        color: AppColors.veil,
+        borderRadius: AppRadius.controlAll,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < item.lines.length; i++) ...[
+            if (i > 0) const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.lines[i].title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Type.tableCell,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  SelloFormatters.quantity(item.lines[i].quantity),
+                  style: _Type.tableCell,
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 96,
+                  child: Text(
+                    SelloFormatters.currency(
+                      item.lines[i].value,
+                      symbol: currencySymbol,
+                    ),
+                    textAlign: TextAlign.right,
+                    style: _Type.tableCell,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (!item.isCancelled) ...[
+            const SizedBox(height: 8),
+            Text(item.stockLabel, style: _Type.meta),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _CollectionsList extends StatelessWidget {

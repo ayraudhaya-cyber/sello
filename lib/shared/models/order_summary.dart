@@ -171,6 +171,7 @@ class OrderLineItem extends Equatable {
     this.variantId,
     this.variantLabel,
     this.deliveredQuantity = 0,
+    this.returnedQuantity = 0,
     this.cancelledQuantity = 0,
     this.productName,
     this.productSku,
@@ -197,6 +198,9 @@ class OrderLineItem extends Equatable {
   /// Cumulative quantity actually fulfilled (inventory deducted).
   final num deliveredQuantity;
 
+  /// Cumulative quantity already returned from what was delivered.
+  final num returnedQuantity;
+
   /// Cumulative quantity closed without delivery.
   final num cancelledQuantity;
   final num unitPrice;
@@ -221,6 +225,12 @@ class OrderLineItem extends Equatable {
   /// Outstanding quantity still open for delivery or cancel.
   num get remainingQuantity {
     final value = quantity - deliveredQuantity - cancelledQuantity;
+    return value < 0 ? 0 : value;
+  }
+
+  /// Delivered units that can still be returned.
+  num get returnableQuantity {
+    final value = deliveredQuantity - returnedQuantity;
     return value < 0 ? 0 : value;
   }
 
@@ -251,6 +261,7 @@ class OrderLineItem extends Equatable {
       variantLabel: _stringValue(json['variant_label']),
       quantity: _numValue(json['quantity']),
       deliveredQuantity: _numValue(json['delivered_quantity']),
+      returnedQuantity: _numValue(json['returned_quantity']),
       cancelledQuantity: _numValue(json['cancelled_quantity']),
       unitPrice: _numValue(json['unit_price']),
       lineTotal: _numValue(json['line_total']),
@@ -275,6 +286,7 @@ class OrderLineItem extends Equatable {
     variantId,
     quantity,
     deliveredQuantity,
+    returnedQuantity,
     cancelledQuantity,
     lineTotal,
   ];

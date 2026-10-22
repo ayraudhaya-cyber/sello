@@ -846,9 +846,9 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
         SelloInlineErrorBar(
           message: state.errorMessage,
           onRetry: () => ref.read(hubPaymentsProvider.notifier).refresh(),
-        ),
-        const SizedBox(height: AppSpacing.md),
-      ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
           if (state.isLoading && state.items.isEmpty) ...[
             if (context.isMobile)
               const SelloListSkeleton()
@@ -1888,7 +1888,7 @@ class _ChequesToolbar extends StatelessWidget {
         filters: [status, bank, dueToday],
         actions: [refresh, ?depositSelected, existing, record],
         onClearFilters: onClearFilters,
-      ),
+            ),
     );
   }
 }

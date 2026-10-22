@@ -119,6 +119,7 @@ class OrderRepository {
       sku,
       quantity,
       delivered_quantity,
+      returned_quantity,
       cancelled_quantity,
       unit_price,
       discount,

@@ -38,6 +38,7 @@ class _CollectionsReportDialogState
   bool _exportingPdf = false;
   bool _exportingExcel = false;
   String? _error;
+  int _loadToken = 0;
 
   String get _currencySymbol => SelloFormatters.currencySymbol(
     ref.read(companySettingsProvider).currency,
@@ -108,6 +109,7 @@ class _CollectionsReportDialogState
   }
 
   Future<void> _loadReport() async {
+    final token = ++_loadToken;
     setState(() {
       _loadingReport = true;
       _error = null;
@@ -124,19 +126,19 @@ class _CollectionsReportDialogState
                 .read(companySettingsProvider)
                 .collectionDueDays,
           );
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _snapshot = snapshot;
         _loadingReport = false;
       });
     } on AppFailure catch (failure) {
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _loadingReport = false;
         _error = failure.message;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _loadingReport = false;
         _error = 'Unable to load the collections report.';
@@ -158,7 +160,9 @@ class _CollectionsReportDialogState
   }
 
   void _selectAllReps() {
+    if (_selectedRepIds.isEmpty) return;
     setState(() => _selectedRepIds.clear());
+    _loadReport();
   }
 
   void _toggleRep(String id, bool selected) {
@@ -169,6 +173,7 @@ class _CollectionsReportDialogState
         _selectedRepIds.remove(id);
       }
     });
+    _loadReport();
   }
 
   Future<void> _exportExcel() async {

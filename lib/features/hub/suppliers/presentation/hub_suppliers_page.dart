@@ -8,8 +8,11 @@ import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
+import 'package:sello/features/hub/suppliers/application/hub_supplier_orders_provider.dart';
 import 'package:sello/features/hub/suppliers/application/hub_suppliers_provider.dart';
+import 'package:sello/features/hub/suppliers/presentation/hub_supplier_orders_panel.dart';
 import 'package:sello/features/hub/suppliers/presentation/supplier_details_dialog.dart';
+import 'package:sello/features/hub/suppliers/presentation/supplier_order_editor_dialog.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/supplier_summary.dart';
 import 'package:sello/shared/models/supplier_upsert_input.dart';
@@ -26,10 +29,13 @@ class HubSuppliersPage extends ConsumerStatefulWidget {
   ConsumerState<HubSuppliersPage> createState() => _HubSuppliersPageState();
 }
 
+enum _SuppliersWorkspaceTab { directory, orders }
+
 class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
     with QuickNewQueryMixin {
   final _searchController = TextEditingController();
   Timer? _debounce;
+  _SuppliersWorkspaceTab _tab = _SuppliersWorkspaceTab.directory;
 
   @override
   void didChangeDependencies() {
@@ -220,21 +226,40 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
 
     return AppPageScaffold(
       title: 'Suppliers',
-      subtitle:
-          'Procurement directory — vendors that supply products and will '
-          'power purchase orders and goods received.',
+      subtitle: _tab == _SuppliersWorkspaceTab.directory
+          ? 'Procurement directory — vendors that supply products and will '
+              'power purchase orders and goods received.'
+          : 'Orders you place with a supplier. Receive the goods on that same order.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       actions: [
-        SelloButton(
-          label: 'Add supplier',
-          icon: Icons.add_business_rounded,
-          onPressed: state.isSaving ? null : () => _openEditor(),
-        ),
+        if (_tab == _SuppliersWorkspaceTab.directory)
+          SelloButton(
+            label: 'Add supplier',
+            icon: Icons.add_business_rounded,
+            onPressed: state.isSaving ? null : () => _openEditor(),
+          )
+        else
+          SelloButton(
+            label: 'New order',
+            icon: Icons.add_rounded,
+            onPressed: () => _openOrderEditor(),
+          ),
       ],
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _SuppliersTabBar(
+            tab: _tab,
+            onChanged: (value) => setState(() => _tab = value),
+          ),
+          const SizedBox(height: AppSpacing.mdPlus),
+          if (_tab == _SuppliersWorkspaceTab.orders)
+            HubSupplierOrdersPanel(
+              currencySymbol: currencySymbol,
+              onCreate: _openOrderEditor,
+            )
+          else ...[
           _Toolbar(
             searchController: _searchController,
             state: state,
@@ -494,6 +519,63 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
                 ),
               ),
           ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openOrderEditor() async {
+    final id = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => SupplierOrderEditorDialog(
+        currencySymbol: _currencySymbol(),
+      ),
+    );
+    if (id == null || !mounted) return;
+    await ref.read(hubSupplierOrdersProvider.notifier).load(showLoading: false);
+    if (!mounted) return;
+    SelloSnackbars.success(context, 'Supplier order saved.');
+  }
+}
+
+class _SuppliersTabBar extends StatelessWidget {
+  const _SuppliersTabBar({required this.tab, required this.onChanged});
+
+  final _SuppliersWorkspaceTab tab;
+  final ValueChanged<_SuppliersWorkspaceTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip(String label, _SuppliersWorkspaceTab value) {
+      final selected = tab == value;
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onChanged(value),
+        selectedColor: context.brandAccentContainer,
+        labelStyle: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontWeight: FontWeight.w600,
+          color: selected ? context.brandAccent : AppColors.textSecondary,
+        ),
+        side: BorderSide(
+          color: selected
+              ? context.brandAccent.withValues(alpha: 0.35)
+              : AppColors.outlinePanel,
+        ),
+        backgroundColor: AppColors.surface,
+      );
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        children: [
+          chip('Directory', _SuppliersWorkspaceTab.directory),
+          chip('Orders', _SuppliersWorkspaceTab.orders),
         ],
       ),
     );

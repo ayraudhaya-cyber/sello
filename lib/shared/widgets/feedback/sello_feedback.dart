@@ -109,6 +109,48 @@ abstract final class SelloSnackbars {
   }
 }
 
+/// One-button explanation when an action is blocked, with what to do next.
+Future<void> showSelloNotice({
+  required BuildContext context,
+  required String title,
+  required String message,
+  String buttonLabel = 'OK',
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Text(message),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.sm,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        actionsPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        actions: [
+          SelloButton(
+            label: buttonLabel,
+            variant: SelloButtonVariant.primary,
+            expanded: true,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 Future<bool?> showSelloDialog({
   required BuildContext context,
   required String title,

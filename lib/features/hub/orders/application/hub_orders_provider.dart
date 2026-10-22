@@ -27,7 +27,7 @@ enum OrderStatusFilter {
   cancelled,
 }
 
-enum OrderPaymentFilter { all, unpaid, partial, paid }
+enum OrderPaymentFilter { all, unpaid, partial, paid, refunded }
 
 enum OrderDateFilter { all, today, last7Days, thisMonth }
 
@@ -265,6 +265,7 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         OrderPaymentFilter.unpaid => PaymentStatus.unpaid,
         OrderPaymentFilter.partial => PaymentStatus.partial,
         OrderPaymentFilter.paid => PaymentStatus.paid,
+        OrderPaymentFilter.refunded => PaymentStatus.refunded,
       },
       employeeId: state.employeeId,
       orderedFrom: orderedFrom,
@@ -491,6 +492,13 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);
       return failure.message;
     }
+  }
+
+  Future<void> refreshAfterReturn() async {
+    await loadOrders(showLoading: false);
+    unawaited(refreshHubInventoryQuietly(ref));
+    unawaited(refreshHubProductsQuietly(ref));
+    _refreshBalances();
   }
 
   void _refreshBalances() {

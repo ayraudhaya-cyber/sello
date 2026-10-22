@@ -87,6 +87,13 @@ class ReportRepository {
         employeeId: resolved.employeeId,
         customerId: resolved.customerId,
       );
+      final periodReturnsFuture = _fetchReturns(
+        from: bounds.from,
+        to: bounds.to,
+        branchId: effectiveBranch,
+        employeeId: resolved.employeeId,
+        customerId: resolved.customerId,
+      );
       final todayOrdersFuture = reuseToday
           ? null
           : _fetchCompletedOrders(
@@ -143,9 +150,19 @@ class ReportRepository {
       final orderCounts = await orderCountsFuture;
       final suppliers = await suppliersFuture;
       final periodOrders = await periodOrdersFuture;
+      final periodReturns = await periodReturnsFuture;
       final todayOrders = todayOrdersFuture == null
           ? periodOrders
           : await todayOrdersFuture;
+      final todayReturns = reuseToday
+          ? periodReturns
+          : await _fetchReturns(
+              from: todayBounds.from,
+              to: todayBounds.to,
+              branchId: effectiveBranch,
+              employeeId: resolved.employeeId,
+              customerId: resolved.customerId,
+            );
       final collectionsInPeriod = await collectionsFuture;
       final topProducts = await topProductsFuture;
       final topCategories = await topCategoriesFuture;
@@ -155,11 +172,12 @@ class ReportRepository {
       final paymentMethods = await paymentMethodsFuture;
       final productsBySupplier = await productsBySupplierFuture;
 
-      final salesInPeriod = periodOrders.fold<num>(
-        0,
-        (sum, o) => sum + o.total,
-      );
-      final salesToday = todayOrders.fold<num>(0, (sum, o) => sum + o.total);
+      final salesInPeriod =
+          periodOrders.fold<num>(0, (sum, o) => sum + o.total) -
+          periodReturns.fold<num>(0, (sum, row) => sum + row.value);
+      final salesToday =
+          todayOrders.fold<num>(0, (sum, o) => sum + o.total) -
+          todayReturns.fold<num>(0, (sum, row) => sum + row.value);
       final orderCount = periodOrders.length;
       final aov = orderCount == 0 ? 0 : salesInPeriod / orderCount;
 
@@ -223,18 +241,25 @@ class ReportRepository {
         payments: payments,
         orderCounts: orderCounts,
         suppliers: suppliers,
-        salesTrend: _buildTrend(periodOrders, bounds.from, bounds.to),
+        salesTrend: _buildTrend(
+          periodOrders,
+          bounds.from,
+          bounds.to,
+          returns: periodReturns,
+        ),
         topProducts: topProducts,
         topCategories: topCategories,
         topCustomers: _rankBySales(
           periodOrders,
           byCustomer: true,
           referenceType: 'customer',
+          returns: periodReturns,
         ),
         topSalesReps: _rankBySales(
           periodOrders,
           byCustomer: false,
           referenceType: 'employee',
+          returns: periodReturns,
         ),
         outstandingCustomers: outstandingCustomers,
         recentCustomers: recentCustomers,
@@ -389,6 +414,39 @@ class ReportRepository {
     } catch (_) {
       // Visit metrics are additive — reports still load if migration pending.
       return null;
+    }
+  }
+
+  Future<List<_ReturnAgg>> _fetchReturns({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+    String? employeeId,
+    String? customerId,
+  }) async {
+    try {
+      var query = _client
+          .from('order_returns')
+          .select('return_value, returned_at, customer_id, employee_id')
+          .isFilter('deleted_at', null)
+          .gte('returned_at', from.toIso8601String())
+          .lte('returned_at', to.toIso8601String());
+      if (branchId != null && branchId.isNotEmpty) {
+        query = query.eq('branch_id', branchId);
+      }
+      if (employeeId != null && employeeId.isNotEmpty) {
+        query = query.eq('employee_id', employeeId);
+      }
+      if (customerId != null && customerId.isNotEmpty) {
+        query = query.eq('customer_id', customerId);
+      }
+      final rows = await query;
+      return [
+        for (final raw in rows as List)
+          _ReturnAgg.fromJson(Map<String, dynamic>.from(raw as Map)),
+      ];
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -712,6 +770,7 @@ class ReportRepository {
     List<_OrderAgg> orders, {
     required bool byCustomer,
     String? referenceType,
+    List<_ReturnAgg> returns = const [],
     int limit = 8,
   }) {
     final totals = <String, _NamedAgg>{};
@@ -726,6 +785,12 @@ class ReportRepository {
       );
       agg.value += order.total;
       agg.count += 1;
+    }
+    for (final row in returns) {
+      final id = byCustomer ? row.customerId : row.employeeId;
+      final agg = id == null ? null : totals[id];
+      if (agg == null) continue;
+      agg.value -= row.value;
     }
     final ranked = totals.values.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -745,8 +810,9 @@ class ReportRepository {
   List<ReportTrendPoint> _buildTrend(
     List<_OrderAgg> orders,
     DateTime from,
-    DateTime to,
-  ) {
+    DateTime to, {
+    List<_ReturnAgg> returns = const [],
+  }) {
     final start = DateTime.utc(from.year, from.month, from.day);
     final end = DateTime.utc(to.year, to.month, to.day);
     final days = end.difference(start).inDays;
@@ -764,6 +830,17 @@ class ReportRepository {
       if (index < 0 || index >= bucketCount) continue;
       sales[index] += order.total;
       counts[index] += 1;
+    }
+
+    for (final row in returns) {
+      final day = DateTime.utc(
+        row.at.toUtc().year,
+        row.at.toUtc().month,
+        row.at.toUtc().day,
+      );
+      final index = day.difference(start).inDays;
+      if (index < 0 || index >= bucketCount) continue;
+      sales[index] -= row.value;
     }
 
     return [
@@ -954,6 +1031,29 @@ class ReportRepository {
           count: item.count,
         ),
     ];
+  }
+}
+
+class _ReturnAgg {
+  const _ReturnAgg({
+    required this.value,
+    required this.at,
+    this.customerId,
+    this.employeeId,
+  });
+
+  final num value;
+  final DateTime at;
+  final String? customerId;
+  final String? employeeId;
+
+  factory _ReturnAgg.fromJson(Map<String, dynamic> json) {
+    return _ReturnAgg(
+      value: _asNum(json['return_value']),
+      at: _asDate(json['returned_at']) ?? DateTime.now().toUtc(),
+      customerId: _asString(json['customer_id']),
+      employeeId: _asString(json['employee_id']),
+    );
   }
 }
 

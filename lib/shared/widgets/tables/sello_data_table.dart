@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:sello/core/theme/theme.dart';
 
@@ -33,8 +35,8 @@ class SelloDataTable extends StatelessWidget {
   final double columnSpacing;
 
   /// Column that absorbs leftover width. Identity (name / number), not a
-  /// leading checkbox.
-  final int flexColumnIndex;
+  /// leading checkbox. Null keeps every column at its content width.
+  final int? flexColumnIndex;
 
   /// Column showing the sort arrow. Pair with onSort on [selloDataColumn].
   final int? sortColumnIndex;
@@ -55,11 +57,17 @@ class SelloDataTable extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
               final tableWidth = constraints.maxWidth;
-              final resolvedMinWidth = minWidth ?? tableWidth;
+              final floor = minWidth ?? 0.0;
+              // A caller minWidth is only a scroll floor. A wider card still
+              // fills the panel so the table is not centered with a left gap.
+              final resolvedMinWidth = tableWidth < double.infinity
+                  ? math.max(tableWidth, floor)
+                  : floor;
               final expandedColumns = _columnsFillingWidth(
                 columns: columns,
                 tableWidth: resolvedMinWidth,
@@ -129,9 +137,12 @@ class SelloDataTable extends StatelessWidget {
   List<DataColumn> _columnsFillingWidth({
     required List<DataColumn> columns,
     required double tableWidth,
-    required int flexColumnIndex,
+    required int? flexColumnIndex,
   }) {
-    if (columns.isEmpty || !tableWidth.isFinite || tableWidth <= 0) {
+    if (columns.isEmpty ||
+        flexColumnIndex == null ||
+        !tableWidth.isFinite ||
+        tableWidth <= 0) {
       return columns;
     }
 

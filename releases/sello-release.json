@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.21",
-        "build": 22,
-        "released_at": "2026-10-21",
-        "notes": "A Saving indicator shows while a payment, order, or visit is still saving\nReceive payment separates what the customer owes now from unpaid orders\nAn applied order payment can text the customer a receipt that includes the discount\nDeliver remaining stays off until part of the order was already delivered"
+        "version": "1.0.22",
+        "build": 23,
+        "released_at": "2026-10-22",
+        "notes": "The office can now record customer returns and supplier orders. Visits, catalog, and orders on this app stay the same"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.21",
-        "build": 22,
-        "released_at": "2026-10-21",
-        "notes": "New orders can be created without delivering, with a separate Create and deliver action\nThe order screen stays open until the order is saved, and a Saving indicator shows while other saves finish\nReceive payment separates Outstanding on delivered orders from unpaid orders\nAn applied order payment texts the customer a receipt, including any discount\nOutstanding, customers, and orders update after a delivery, payment, or cheque without pressing Refresh\nDeliver remaining stays off until part of the order was already delivered\nPaid for shows the first order, with a count for the rest. Hover to see the full list"
+        "version": "1.0.22",
+        "build": 23,
+        "released_at": "2026-10-22",
+        "notes": "Return delivered items from an order, and choose whether paid money goes back or is saved for the next order\nThe order shows each returned item, its quantity, its value, and whether it went back into stock\nOrders lists every return, with each item and quantity on its own line, and a return can be cancelled\nPlace a supplier order, then receive the goods. Accepted goods add stock and increase what you owe\nPay a supplier in cash or from the bank now. A cheque stays pending until it clears\nPrint a supplier order, or share it on WhatsApp\nSales by representative is net of returns, and Collections updates as soon as you pick a representative"
       },
       "minimum": {
         "version": "1.0.0",

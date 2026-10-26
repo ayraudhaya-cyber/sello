@@ -276,19 +276,31 @@ void _writeOrderBody(
       if (doc.collectionMethodLabel != null) {
         _total(buffer, 'Method', doc.collectionMethodLabel!);
       }
-      if (doc.collectionPaymentAmount != null) {
+      if (doc.collectionDiscountAmount != null &&
+          doc.collectionDiscountAmount! > 0 &&
+          doc.collectionPaymentAmount != null) {
+        _total(
+          buffer,
+          'Original amount',
+          doc.money(
+            doc.collectionPaymentAmount! + doc.collectionDiscountAmount!,
+          ),
+        );
+        _total(
+          buffer,
+          'Discount granted',
+          '- ${doc.money(doc.collectionDiscountAmount!)}',
+        );
+        _total(
+          buffer,
+          'Net amount paid',
+          doc.money(doc.collectionPaymentAmount!),
+        );
+      } else if (doc.collectionPaymentAmount != null) {
         _total(
           buffer,
           'Amount received',
           doc.money(doc.collectionPaymentAmount!),
-        );
-      }
-      if (doc.collectionDiscountAmount != null &&
-          doc.collectionDiscountAmount! > 0) {
-        _total(
-          buffer,
-          'Discount',
-          '- ${doc.money(doc.collectionDiscountAmount!)}',
         );
       }
       if (doc.collectionReceivedAt != null) {
@@ -333,15 +345,30 @@ void _writePaymentBody(StringBuffer buffer, OrderDocument doc) {
     'Status',
     isPending ? 'Pending Review' : (doc.paymentStatus ?? 'Recorded'),
   );
-  _total(
-    buffer,
-    isPending ? 'Amount submitted' : 'Amount',
-    doc.money(doc.total),
-    emphasize: true,
-  );
   if (doc.discountAmount > 0) {
-    _total(buffer, 'Discount', '- ${doc.money(doc.discountAmount)}');
-    _total(buffer, 'Settles', doc.money(doc.total + doc.discountAmount));
+    _total(
+      buffer,
+      'Original amount',
+      doc.money(doc.total + doc.discountAmount),
+    );
+    _total(
+      buffer,
+      'Discount granted',
+      '- ${doc.money(doc.discountAmount)}',
+    );
+    _total(
+      buffer,
+      'Net amount paid',
+      doc.money(doc.total),
+      emphasize: true,
+    );
+  } else {
+    _total(
+      buffer,
+      isPending ? 'Amount submitted' : 'Amount',
+      doc.money(doc.total),
+      emphasize: true,
+    );
   }
   buffer.writeln('</div>');
 

@@ -10,7 +10,9 @@ import 'package:sello/services/auth/auth_email_personalization.dart';
 import 'package:sello/services/auth/auth_service.dart';
 import 'package:sello/services/auth/password_recovery_redirect.dart';
 import 'package:sello/services/provisioning/provisioning_coordinator.dart';
+import 'package:sello/services/session/session_profile_failure.dart';
 import 'package:sello/services/session/session_service.dart';
+import 'package:sello/services/session/session_snapshot_store.dart';
 import 'package:sello/shared/models/app_session.dart';
 import 'package:sello/shared/models/provision_business_request.dart';
 import 'package:sello/shared/models/user_role.dart';
@@ -21,14 +23,17 @@ export 'package:sello/data/providers/repository_providers.dart'
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
-final companyRepositoryProvider =
-    Provider<CompanyRepository>((ref) => CompanyRepository());
+final companyRepositoryProvider = Provider<CompanyRepository>(
+  (ref) => CompanyRepository(),
+);
 
-final branchRepositoryProvider =
-    Provider<BranchRepository>((ref) => BranchRepository());
+final branchRepositoryProvider = Provider<BranchRepository>(
+  (ref) => BranchRepository(),
+);
 
-final provisioningRepositoryProvider =
-    Provider<ProvisioningRepository>((ref) => ProvisioningRepository());
+final provisioningRepositoryProvider = Provider<ProvisioningRepository>(
+  (ref) => ProvisioningRepository(),
+);
 
 final sessionServiceProvider = Provider<SessionService>((ref) {
   return SessionService(
@@ -37,8 +42,13 @@ final sessionServiceProvider = Provider<SessionService>((ref) {
   );
 });
 
-final provisioningCoordinatorProvider =
-    Provider<ProvisioningCoordinator>((ref) {
+final sessionSnapshotStoreProvider = Provider<SessionSnapshotStore>((ref) {
+  return SessionSnapshotStore();
+});
+
+final provisioningCoordinatorProvider = Provider<ProvisioningCoordinator>((
+  ref,
+) {
   return ProvisioningCoordinator(
     authService: ref.watch(authServiceProvider),
     companyRepository: ref.watch(companyRepositoryProvider),
@@ -61,6 +71,7 @@ class AuthSessionState {
     this.awaitingEmailConfirmation = false,
     this.emailJustVerified = false,
     this.pendingEmail,
+    this.usingCachedProfile = false,
   });
 
   final AuthStatus status;
@@ -79,6 +90,11 @@ class AuthSessionState {
   final bool awaitingEmailConfirmation;
   final bool emailJustVerified;
   final String? pendingEmail;
+
+  /// Workspace identity came from the last confirmed profile, not this launch.
+  ///
+  /// It does not authorize sales, stock, payments, or other server writes.
+  final bool usingCachedProfile;
 
   bool get isAuthenticated =>
       status == AuthStatus.authenticated && session != null;
@@ -99,6 +115,7 @@ class AuthSessionState {
     bool? awaitingEmailConfirmation,
     bool? emailJustVerified,
     String? pendingEmail,
+    bool? usingCachedProfile,
     bool clearSession = false,
     bool clearError = false,
     bool clearInfo = false,
@@ -117,8 +134,12 @@ class AuthSessionState {
       awaitingEmailConfirmation:
           awaitingEmailConfirmation ?? this.awaitingEmailConfirmation,
       emailJustVerified: emailJustVerified ?? this.emailJustVerified,
-      pendingEmail:
-          clearPendingEmail ? null : (pendingEmail ?? this.pendingEmail),
+      pendingEmail: clearPendingEmail
+          ? null
+          : (pendingEmail ?? this.pendingEmail),
+      usingCachedProfile: clearSession
+          ? false
+          : (usingCachedProfile ?? this.usingCachedProfile),
     );
   }
 }
@@ -140,8 +161,12 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   /// or recovery mode takes over mid-flight.
   int _hydrateGeneration = 0;
 
+  static const cachedProfileMessage =
+      'Connection unavailable. Your access has not been rechecked.';
+
   AuthService get _auth => ref.read(authServiceProvider);
   SessionService get _sessions => ref.read(sessionServiceProvider);
+  SessionSnapshotStore get _snapshots => ref.read(sessionSnapshotStoreProvider);
   ProvisioningCoordinator get _provisioning =>
       ref.read(provisioningCoordinatorProvider);
 
@@ -156,10 +181,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   }
 
   Future<void> _bootstrap() async {
-    state = const AuthSessionState(
-      status: AuthStatus.unknown,
-      isLoading: true,
-    );
+    state = const AuthSessionState(status: AuthStatus.unknown, isLoading: true);
     _passwordRecoveryActive = false;
 
     _authSub?.cancel();
@@ -215,15 +237,16 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     _passwordRecoveryActive = false;
   }
 
-  bool get _recoveryHeld =>
-      _passwordRecoveryActive || state.isPasswordRecovery;
+  bool get _recoveryHeld => _passwordRecoveryActive || state.isPasswordRecovery;
 
   Future<void> _onAuthStateChanged(AuthState authState) async {
     if (_handlingAuthEvent) return;
 
     switch (authState.event) {
       case AuthChangeEvent.signedOut:
+        _hydrateGeneration++;
         _clearPasswordRecoveryLatch();
+        await _snapshots.clear();
         if (state.awaitingEmailConfirmation) {
           state = AuthSessionState(
             status: AuthStatus.unauthenticated,
@@ -237,7 +260,8 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
           state = AuthSessionState(
             status: AuthStatus.unauthenticated,
             emailJustVerified: true,
-            infoMessage: state.infoMessage ??
+            infoMessage:
+                state.infoMessage ??
                 'Email verified successfully. Please sign in to continue.',
           );
           return;
@@ -290,8 +314,8 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       status: state.isBootstrapping
           ? AuthStatus.unknown
           : (quietReload
-              ? AuthStatus.authenticated
-              : AuthStatus.authenticating),
+                ? AuthStatus.authenticated
+                : AuthStatus.authenticating),
       isLoading: true,
       clearError: true,
       clearInfo: true,
@@ -313,6 +337,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
       }
 
       _clearPasswordRecoveryLatch();
+      await _snapshots.save(session);
       state = AuthSessionState(
         status: AuthStatus.authenticated,
         session: session,
@@ -324,29 +349,95 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
         return;
       }
       await _handleUnlinkedEmployee();
-    } on AppFailure catch (failure) {
-      if (hydrateGeneration != _hydrateGeneration) return;
-      if (_recoveryHeld) {
-        _enterPasswordRecovery();
-        state = state.copyWith(
-          isLoading: false,
-          errorMessage: failure.message,
+    } on AuthFailure catch (failure) {
+      if (!_hydrateStillCurrent(hydrateGeneration)) return;
+      await _rejectHydrate(failure.message);
+    } on NetworkFailure catch (failure) {
+      if (!_hydrateStillCurrent(hydrateGeneration)) return;
+      await _openCachedOrHold(user, failure.message);
+    } on OfflineFailure catch (failure) {
+      if (!_hydrateStillCurrent(hydrateGeneration)) return;
+      await _openCachedOrHold(user, failure.message);
+    } on PostgrestException catch (error) {
+      if (!_hydrateStillCurrent(hydrateGeneration)) return;
+      if (SessionProfileFailure.canUseCachedProfile(error)) {
+        await _openCachedOrHold(user, cachedProfileMessage);
+      } else {
+        await _holdWithoutCache(
+          user,
+          'Unable to load your profile. Please try again.',
         );
-        return;
       }
-      await _failHydrate(failure.message);
-    } catch (_) {
-      if (hydrateGeneration != _hydrateGeneration) return;
-      if (_recoveryHeld) {
-        _enterPasswordRecovery();
-        state = state.copyWith(
-          isLoading: false,
-          errorMessage: 'Unable to load your profile. Please try again.',
+    } catch (error) {
+      if (!_hydrateStillCurrent(hydrateGeneration)) return;
+      if (SessionProfileFailure.canUseCachedProfile(error)) {
+        await _openCachedOrHold(user, cachedProfileMessage);
+      } else {
+        await _holdWithoutCache(
+          user,
+          'Unable to load your profile. Please try again.',
         );
-        return;
       }
-      await _failHydrate('Unable to load your profile. Please try again.');
     }
+  }
+
+  bool _hydrateStillCurrent(int hydrateGeneration) {
+    if (hydrateGeneration != _hydrateGeneration) return false;
+    if (_recoveryHeld) {
+      _enterPasswordRecovery();
+      return false;
+    }
+    return true;
+  }
+
+  /// Server confirmed this account cannot enter the workspace.
+  Future<void> _rejectHydrate(String message) async {
+    await _snapshots.clear();
+    await _failHydrate(message);
+  }
+
+  /// Keep the last workspace when this auth user still has a local session.
+  Future<void> _openCachedOrHold(User user, String message) async {
+    final live = state.session;
+    if (live != null && live.userId == user.id) {
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        isLoading: false,
+        usingCachedProfile: true,
+        infoMessage: cachedProfileMessage,
+        clearError: true,
+      );
+      return;
+    }
+
+    final cached = await _snapshots.loadFor(user);
+    if (cached != null) {
+      state = AuthSessionState(
+        status: AuthStatus.authenticated,
+        session: cached,
+        usingCachedProfile: true,
+        infoMessage: cachedProfileMessage,
+      );
+      return;
+    }
+
+    state = AuthSessionState(
+      status: AuthStatus.unauthenticated,
+      errorMessage: message,
+    );
+  }
+
+  /// Ambiguous failure. Do not sign out, and do not invent a workspace.
+  Future<void> _holdWithoutCache(User user, String message) async {
+    final live = state.session;
+    if (live != null && live.userId == user.id) {
+      state = state.copyWith(isLoading: false, errorMessage: message);
+      return;
+    }
+    state = AuthSessionState(
+      status: AuthStatus.unauthenticated,
+      errorMessage: message,
+    );
   }
 
   /// Auth user exists but no employee row yet.
@@ -421,8 +512,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
         status: AuthStatus.unauthenticated,
         emailJustVerified: true,
         errorMessage: state.errorMessage,
-        infoMessage:
-            'Email verified successfully. Please sign in to continue.',
+        infoMessage: 'Email verified successfully. Please sign in to continue.',
       );
     } else {
       state = AuthSessionState(
@@ -452,10 +542,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
   }
 
   /// Email + password login. Experience is derived from employee role.
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn({required String email, required String password}) async {
     _clearPasswordRecoveryLatch();
     state = state.copyWith(
       status: AuthStatus.authenticating,
@@ -569,10 +656,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
         infoMessage: 'Verification email sent again. Check your inbox.',
       );
     } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: failure.message,
-      );
+      state = state.copyWith(isLoading: false, errorMessage: failure.message);
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
@@ -581,9 +665,7 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     }
   }
 
-  Future<void> completePasswordRecovery({
-    required String password,
-  }) async {
+  Future<void> completePasswordRecovery({required String password}) async {
     final inviteSetup = state.isTeamInvitePasswordSetup;
     state = state.copyWith(
       status: AuthStatus.authenticating,
@@ -629,15 +711,13 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
     try {
       _handlingAuthEvent = true;
       await _auth.signOut();
-    } on AppFailure catch (failure) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: failure.message,
-      );
-      return;
+    } catch (_) {
+      // GoTrue removes the local session before the revoke call. A failed
+      // revoke must still leave the UI signed out.
     } finally {
       _handlingAuthEvent = false;
     }
+    await _snapshots.clear();
     _clearPasswordRecoveryLatch();
     state = const AuthSessionState(status: AuthStatus.unauthenticated);
   }
@@ -660,8 +740,8 @@ class AuthSessionNotifier extends Notifier<AuthSessionState> {
 
 final authSessionProvider =
     NotifierProvider<AuthSessionNotifier, AuthSessionState>(
-  AuthSessionNotifier.new,
-);
+      AuthSessionNotifier.new,
+    );
 
 final currentSessionProvider = Provider<AppSession?>((ref) {
   return ref.watch(authSessionProvider).session;

@@ -1518,12 +1518,12 @@ class _ProductEditorDialogState extends ConsumerState<ProductEditorDialog> {
     );
   }
 
-  void _onParentCodeEdited(String value) {
+  void _onParentCodeEdited(String _) {
     _skuFieldError = null;
-    _skuManuallyEdited = value.trim().isNotEmpty;
-    if (!_skuManuallyEdited) {
-      _onNameChanged(_name.text);
-    }
+    _parentCodeTimer?.cancel();
+    // Any edit, including clearing the field, is intentional. Do not write
+    // the name-based suggestion back while the user is replacing it.
+    _skuManuallyEdited = true;
     _scheduleVariantCodeRefresh();
   }
 

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:sello/core/constants/media_constants.dart';
 import 'package:sello/core/error/app_failure.dart';
 import 'package:sello/services/employees/employee_login_invite_response.dart';
+import 'package:sello/services/session/session_profile_failure.dart';
 import 'package:sello/services/media/media_service.dart';
 import 'package:sello/services/notifications/business_event_bus.dart';
 import 'package:sello/services/storage/media_storage_service.dart';
@@ -226,12 +227,19 @@ class EmployeeRepository {
     } on AuthFailure {
       rethrow;
     } on PostgrestException catch (error) {
-      throw AuthFailure(
-        error.message.trim().isEmpty
-            ? 'Unable to load your profile. Please try again.'
-            : error.message,
-      );
-    } catch (_) {
+      if (SessionProfileFailure.isTransport(error)) {
+        throw const NetworkFailure(
+          'Unable to reach Sello. Check your connection and try again.',
+        );
+      }
+      // JWT and other query errors are not an inactive-account decision.
+      rethrow;
+    } catch (error) {
+      if (SessionProfileFailure.isTransport(error)) {
+        throw const NetworkFailure(
+          'Unable to reach Sello. Check your connection and try again.',
+        );
+      }
       throw const UnexpectedFailure(
         'Unable to load your profile. Please try again.',
       );

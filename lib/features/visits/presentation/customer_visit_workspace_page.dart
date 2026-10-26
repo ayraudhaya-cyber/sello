@@ -12,6 +12,7 @@ import 'package:sello/features/mobile/orders/application/sello_orders_provider.d
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
 import 'package:sello/features/payments/presentation/receive_payment_dialog.dart';
+import 'package:sello/shared/models/cheque_status.dart';
 import 'package:sello/features/payments/presentation/record_cheque_dialog.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/shared/feedback/sello_activity.dart';
@@ -38,7 +39,6 @@ import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
-import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/models/visit_payment_arrangement.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -792,7 +792,7 @@ class _CustomerVisitWorkspacePageState
 
       if (_arrangement == VisitPaymentArrangement.paidToday) {
         if (!mounted) return;
-        final payment = await showDialog<ReceivePaymentInput>(
+        final submitted = await showDialog<ReceivePaymentDialogResult>(
           context: context,
           builder: (_) => ReceivePaymentDialog(
             currencySymbol: _currency,
@@ -802,10 +802,26 @@ class _CustomerVisitWorkspacePageState
           ),
         );
         if (!mounted) return;
-        if (payment != null) {
+        if (submitted?.cheque != null) {
+          try {
+            final cheque = await ref
+                .read(chequeRepositoryProvider)
+                .createCheque(submitted!.cheque!);
+            if (!mounted) return;
+            SelloSnackbars.success(
+              context,
+              cheque.status == ChequeStatus.awaitingCollection
+                  ? 'Saved. We do not have this cheque yet.'
+                  : 'Cheque received.',
+            );
+          } on AppFailure catch (error) {
+            if (!mounted) return;
+            SelloSnackbars.error(context, error.message);
+          }
+        } else if (submitted?.payment != null) {
           final result = await ref
               .read(paymentRepositoryProvider)
-              .receivePayment(payment);
+              .receivePayment(submitted!.payment!);
           if (!mounted) return;
           if (result.isPendingReview) {
             await presentCollectionAcknowledgement(

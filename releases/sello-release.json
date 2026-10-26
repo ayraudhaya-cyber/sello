@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.22",
-        "build": 23,
-        "released_at": "2026-10-22",
-        "notes": "The office can now record customer returns and supplier orders. Visits, catalog, and orders on this app stay the same"
+        "version": "1.0.23",
+        "build": 24,
+        "released_at": "2026-10-26",
+        "notes": "If the connection drops for a moment, Sello keeps your workspace open and says your access has not been rechecked\nReceive payment can record a cheque, including a partial amount on an order"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.22",
-        "build": 23,
-        "released_at": "2026-10-22",
-        "notes": "Return delivered items from an order, and choose whether paid money goes back or is saved for the next order\nThe order shows each returned item, its quantity, its value, and whether it went back into stock\nOrders lists every return, with each item and quantity on its own line, and a return can be cancelled\nPlace a supplier order, then receive the goods. Accepted goods add stock and increase what you owe\nPay a supplier in cash or from the bank now. A cheque stays pending until it clears\nPrint a supplier order, or share it on WhatsApp\nSales by representative is net of returns, and Collections updates as soon as you pick a representative"
+        "version": "1.0.23",
+        "build": 24,
+        "released_at": "2026-10-26",
+        "notes": "Receive payment can take a cheque. Enter the bank, number, name, and date, and say whether you already have the paper\nClick an order or opening-balance amount and type a partial payment. You do not have to tick the row first\nA discount on a cheque shows the original amount, the discount, and the net amount paid on the receipt and the text message\nIf the connection drops for a moment, Sello keeps your workspace open and says your access has not been rechecked\nClearing an item code leaves it empty so you can type a new one"
       },
       "minimum": {
         "version": "1.0.0",

@@ -10,6 +10,7 @@ import 'package:sello/services/iam/permission_service.dart';
 import 'package:sello/shared/providers/branding_provider.dart';
 import 'package:sello/shared/widgets/branding/branded_logo.dart';
 import 'package:sello/shared/widgets/branding/branded_shell_app_bar.dart';
+import 'package:sello/shared/widgets/chrome/cached_session_banner.dart';
 import 'package:sello/shared/widgets/chrome/quick_actions_button.dart';
 import 'package:sello/shared/widgets/chrome/shell_chrome.dart';
 import 'package:sello/shared/widgets/layout/app_page_scaffold.dart';
@@ -147,7 +148,12 @@ class _MobileSelloShell extends StatelessWidget {
           SizedBox(width: AppSpacing.xs),
         ],
       ),
-      body: navigationShell,
+      body: Column(
+        children: [
+          const CachedSessionBanner(),
+          Expanded(child: navigationShell),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: visibleSelected < 0 ? 0 : visibleSelected,
         onDestinationSelected: (i) {
@@ -236,6 +242,7 @@ class _RailSelloShell extends ConsumerWidget {
             child: Column(
               children: [
                 const ShellTopBar(showSearch: true, showQuickActions: true),
+                const CachedSessionBanner(),
                 Expanded(child: navigationShell),
               ],
             ),

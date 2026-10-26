@@ -12,6 +12,7 @@ import 'package:sello/features/hub/shell/sms_quota_chip.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/iam/permission_service.dart';
 import 'package:sello/shared/widgets/branding/branded_shell_app_bar.dart';
+import 'package:sello/shared/widgets/chrome/cached_session_banner.dart';
 import 'package:sello/shared/widgets/chrome/quick_actions_button.dart';
 import 'package:sello/shared/widgets/chrome/shell_chrome.dart';
 import 'package:sello/shared/widgets/icons/sello_nav_icons.dart';
@@ -277,7 +278,12 @@ class _DrawerHubShell extends StatelessWidget {
         ),
       ),
       body: brandedBar
-          ? navigationShell
+          ? Column(
+              children: [
+                const CachedSessionBanner(),
+                Expanded(child: navigationShell),
+              ],
+            )
           : Column(
               children: [
                 ShellTopBar(
@@ -291,6 +297,7 @@ class _DrawerHubShell extends StatelessWidget {
                   showSearch: true,
                   showQuickActions: true,
                 ),
+                const CachedSessionBanner(),
                 Expanded(child: QuickActionsShortcuts(child: navigationShell)),
               ],
             ),
@@ -335,6 +342,7 @@ class _SidebarHubShell extends StatelessWidget {
                     showQuickActions: true,
                     beforeQuickActions: SmsQuotaChip(),
                   ),
+                  const CachedSessionBanner(),
                   Expanded(
                     child: QuickActionsShortcuts(child: navigationShell),
                   ),

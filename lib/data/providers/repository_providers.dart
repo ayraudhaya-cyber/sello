@@ -205,6 +205,9 @@ final chequeRepositoryProvider = Provider<ChequeRepository>(
   (ref) => ChequeRepository(
     events: ref.watch(businessEventBusProvider),
     paymentReceived: ref.watch(paymentReceivedDispatcherProvider),
+    collectionAcknowledgements: ref.watch(
+      collectionAcknowledgementDispatcherProvider,
+    ),
   ),
 );
 

@@ -627,6 +627,12 @@ class CollectionAcknowledgementDispatcher {
     final discountLabel = prepared.discountAmount > 0.001
         ? SelloFormatters.currency(prepared.discountAmount, symbol: symbol)
         : null;
+    final originalLabel = discountLabel == null
+        ? null
+        : SelloFormatters.currency(
+            prepared.amount + prepared.discountAmount,
+            symbol: symbol,
+          );
 
     final actions = <OrderConfirmationAction>[];
     String messageBody = '';
@@ -648,6 +654,8 @@ class CollectionAcknowledgementDispatcher {
           'collection_amount': amountLabel,
           'amount': amountLabel,
           'discount_amount': discountLabel,
+          'original_amount': originalLabel,
+          'net_amount': discountLabel == null ? null : amountLabel,
           'collection_number': prepared.paymentNumber,
           'payment_number': prepared.paymentNumber,
           'payment_method': prepared.methodLabel,
@@ -1037,9 +1045,17 @@ class PaymentReceivedDispatcher {
     final discountLabel = prepared.discountAmount > 0.001
         ? SelloFormatters.currency(prepared.discountAmount, symbol: symbol)
         : null;
+    final originalLabel = discountLabel == null
+        ? null
+        : SelloFormatters.currency(
+            prepared.amount + prepared.discountAmount,
+            symbol: symbol,
+          );
     final body = OutboundMessageTemplate.openingBalancePaymentReceived(
       amountLabel: amountLabel,
       discountLabel: discountLabel,
+      originalLabel: originalLabel,
+      netLabel: discountLabel == null ? null : amountLabel,
       orderNumbers: prepared.orderNumbers,
       oldInvoiceReference: prepared.openingReference,
       businessName: prepared.companyName,

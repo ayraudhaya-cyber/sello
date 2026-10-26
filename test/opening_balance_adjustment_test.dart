@@ -541,11 +541,15 @@ void main() {
       final body = OutboundMessageTemplate.openingBalancePaymentReceived(
         amountLabel: 'Rs 4,200.00',
         discountLabel: 'Rs 200.00',
+        originalLabel: 'Rs 4,400.00',
+        netLabel: 'Rs 4,200.00',
         orderNumbers: 'SO-20261021-0004',
         businessName: 'Acme',
       );
       expect(body, contains('Payment received: Rs 4,200.00'));
-      expect(body, contains('Discount: Rs 200.00'));
+      expect(body, contains('Original amount: Rs 4,400.00'));
+      expect(body, contains('Discount granted: Rs 200.00'));
+      expect(body, contains('Net amount paid: Rs 4,200.00'));
       expect(body, contains('Order: SO-20261021-0004'));
     });
 

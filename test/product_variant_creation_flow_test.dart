@@ -476,12 +476,17 @@ void main() {
       expect(_text(tester, _field('Item code')), 'MYCODE');
     });
 
-    testWidgets('clearing the code lets the suggestion return', (tester) async {
+    testWidgets('clearing the code stays empty so a new code can be typed', (
+      tester,
+    ) async {
       await _openEditor(tester);
       await _type(tester, _field('Product name'), 'Rolex Tower Bolt');
       await _type(tester, _field('Item code'), 'MYCODE');
       await _type(tester, _field('Item code'), '');
-      expect(_text(tester, _field('Item code')), 'ROLEXTB');
+      expect(_text(tester, _field('Item code')), isEmpty);
+
+      await _type(tester, _field('Product name'), 'Completely Different Name');
+      expect(_text(tester, _field('Item code')), isEmpty);
     });
 
     testWidgets('variant codes follow the parent until edited by hand', (
@@ -504,6 +509,10 @@ void main() {
 
       await _type(tester, _field('Option name').at(1), '10 inches');
       expect(_text(tester, _field('Item code').at(1)), 'HAND-6');
+
+      await _type(tester, _field('Item code').at(1), '');
+      await _type(tester, _field('Option name').at(1), '12 inches');
+      expect(_text(tester, _field('Item code').at(1)), isEmpty);
     });
   });
 

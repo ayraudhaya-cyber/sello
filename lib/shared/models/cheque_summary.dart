@@ -45,6 +45,7 @@ class ChequeSummary extends Equatable {
     required this.employeeId,
     required this.chequeNumberLabel,
     required this.amount,
+    this.discountAmount = 0,
     required this.bankName,
     required this.chequeNumber,
     required this.holderName,
@@ -85,6 +86,9 @@ class ChequeSummary extends Equatable {
   final String employeeId;
   final String chequeNumberLabel;
   final num amount;
+
+  /// Write-off stored with this cheque. Applied once, with [amount], when collected.
+  final num discountAmount;
   final String bankName;
   final String chequeNumber;
   final String holderName;
@@ -194,6 +198,7 @@ class ChequeSummary extends Equatable {
       employeeId: json['employee_id'] as String,
       chequeNumberLabel: json['cheque_number_label'] as String? ?? '',
       amount: _numValue(json['amount']),
+      discountAmount: _numValue(json['discount_amount']),
       bankName: json['bank_name'] as String? ?? '',
       chequeNumber: json['cheque_number'] as String? ?? '',
       holderName: json['holder_name'] as String? ?? '',
@@ -232,7 +237,13 @@ class ChequeSummary extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, status, amount, source, updatedKey];
+  List<Object?> get props => [id, status, amount, discountAmount, source, updatedKey];
+
+  /// Face value plus discount. This is the outstanding the collection covers.
+  num get settlementAmount {
+    final discount = discountAmount < 0 ? 0 : discountAmount;
+    return amount + discount;
+  }
 
   String get updatedKey =>
       '${balanceAppliedAt?.millisecondsSinceEpoch}-'
@@ -311,6 +322,7 @@ class CreateChequeInput {
     this.allocations = const [],
     this.visitId,
     this.markCollected = false,
+    this.discountAmount = 0,
   });
 
   final String customerId;
@@ -325,6 +337,7 @@ class CreateChequeInput {
   final List<PaymentAllocationInput> allocations;
   final String? visitId;
   final bool markCollected;
+  final num discountAmount;
 }
 
 class CollectChequeInput {

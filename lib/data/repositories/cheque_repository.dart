@@ -23,15 +23,18 @@ class ChequeRepository {
     BusinessEventBus? events,
     MediaStorageService? storage,
     PaymentReceivedDispatcher? paymentReceived,
+    CollectionAcknowledgementDispatcher? collectionAcknowledgements,
   }) : _client = client ?? SupabaseService.client,
        _events = events ?? BusinessEventBus(),
        _storage = storage ?? MediaStorageService(),
-       _paymentReceived = paymentReceived;
+       _paymentReceived = paymentReceived,
+       _collectionAcknowledgements = collectionAcknowledgements;
 
   final SupabaseClient _client;
   final BusinessEventBus _events;
   final MediaStorageService _storage;
   final PaymentReceivedDispatcher? _paymentReceived;
+  final CollectionAcknowledgementDispatcher? _collectionAcknowledgements;
 
   static const _listSelect = '''
     id,
@@ -40,6 +43,7 @@ class ChequeRepository {
     employee_id,
     cheque_number_label,
     amount,
+    discount_amount,
     bank_name,
     cheque_number,
     holder_name,
@@ -285,6 +289,9 @@ class ChequeRepository {
           ],
           'p_visit_id': input.visitId,
           'p_mark_collected': input.markCollected,
+          'p_discount_amount': input.discountAmount <= 0
+              ? 0
+              : input.discountAmount,
         },
       );
       final chequeId = result is String ? result : result.toString();
@@ -295,6 +302,7 @@ class ChequeRepository {
         );
       }
       await _notifyCreated(detail);
+      await _dispatchCollectionNotices(detail);
       return detail;
     } on PostgrestException catch (error) {
       throw ValidationFailure(_mapChequeError(error.message));
@@ -562,6 +570,18 @@ class ChequeRepository {
     } catch (error) {
       if (error is AppFailure) rethrow;
       throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  Future<void> _dispatchCollectionNotices(ChequeSummary cheque) async {
+    final id = cheque.paymentId?.trim();
+    if (id == null || id.isEmpty) return;
+    final pending = cheque.isPendingApproval;
+    try {
+      await _collectionAcknowledgements?.dispatch(id, pendingReview: pending);
+    } catch (_) {}
+    if (!pending) {
+      await _dispatchAppliedPaymentSms(id);
     }
   }
 

@@ -599,21 +599,24 @@ class _PaymentBillCard extends StatelessWidget {
                 : (doc.paymentStatus ?? 'Recorded'),
           ),
           const SizedBox(height: 12),
-            _GrandTotal(
-            label: isPending ? 'Amount submitted' : 'Amount',
-            value: doc.money(doc.total),
-            ),
-          if (doc.discountAmount > 0) ...[
-            const SizedBox(height: 8),
+            if (doc.discountAmount > 0) ...[
             _MetaLine(
-              label: 'Discount',
-              value: '- ${doc.money(doc.discountAmount)}',
-            ),
-            _MetaLine(
-              label: 'Settles',
+              label: 'Original amount',
               value: doc.money(doc.total + doc.discountAmount),
             ),
-          ],
+            _MetaLine(
+              label: 'Discount granted',
+              value: '- ${doc.money(doc.discountAmount)}',
+            ),
+            _GrandTotal(
+              label: 'Net amount paid',
+              value: doc.money(doc.total),
+            ),
+          ] else
+            _GrandTotal(
+              label: isPending ? 'Amount submitted' : 'Amount',
+              value: doc.money(doc.total),
+            ),
             if (doc.notes != null) _Notes(doc.notes!),
           ],
         ),
@@ -969,16 +972,27 @@ class _PaymentDetails extends StatelessWidget {
             _MetaLine(label: 'Payment', value: doc.collectionPaymentNumber!),
           if (doc.collectionMethodLabel != null)
             _MetaLine(label: 'Method', value: doc.collectionMethodLabel!),
-          if (doc.collectionPaymentAmount != null)
+          if (doc.collectionDiscountAmount != null &&
+              doc.collectionDiscountAmount! > 0 &&
+              doc.collectionPaymentAmount != null) ...[
+            _MetaLine(
+              label: 'Original amount',
+              value: doc.money(
+                doc.collectionPaymentAmount! + doc.collectionDiscountAmount!,
+              ),
+            ),
+            _MetaLine(
+              label: 'Discount granted',
+              value: '- ${doc.money(doc.collectionDiscountAmount!)}',
+            ),
+            _MetaLine(
+              label: 'Net amount paid',
+              value: doc.money(doc.collectionPaymentAmount!),
+            ),
+          ] else if (doc.collectionPaymentAmount != null)
             _MetaLine(
               label: 'Amount received',
               value: doc.money(doc.collectionPaymentAmount!),
-            ),
-          if (doc.collectionDiscountAmount != null &&
-              doc.collectionDiscountAmount! > 0)
-            _MetaLine(
-              label: 'Discount',
-              value: '- ${doc.money(doc.collectionDiscountAmount!)}',
             ),
           if (doc.collectionReceivedAt != null)
             _MetaLine(

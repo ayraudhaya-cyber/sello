@@ -482,8 +482,8 @@ class _OptionCard extends StatelessWidget {
                 controller: row.sku,
                 label: 'Item code',
                 required: true,
-                onChanged: (value) {
-                  row.skuManuallyEdited = value.trim().isNotEmpty;
+                onChanged: (_) {
+                  row.skuManuallyEdited = true;
                   onCodeEdited?.call(row);
                   onChanged();
                 },

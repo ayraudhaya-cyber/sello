@@ -41,7 +41,9 @@ abstract final class OutboundMessageTemplate {
       'Collection {{collection_number}} received\n'
       '\n'
       'Hi {{customer_name}}, we recorded {{collection_amount}}.\n'
-      '{{#discount_amount}}Discount: {{discount_amount}}\n{{/discount_amount}}'
+      '{{#discount_amount}}Original amount: {{original_amount}}\n'
+      'Discount granted: {{discount_amount}}\n'
+      'Net amount paid: {{net_amount}}\n{{/discount_amount}}'
       'This is pending owner/manager review — your balance is not updated yet.'
       '{{#sales_rep_name}}\nSales Rep: {{sales_rep_name}}{{/sales_rep_name}}'
       '{{#receipt_link}}\n\nView receipt: {{receipt_link}}{{/receipt_link}}';
@@ -53,7 +55,9 @@ abstract final class OutboundMessageTemplate {
       'Customer: {{customer_name}}'
       '{{#sales_rep_name}}\nCollected by: {{sales_rep_name}}{{/sales_rep_name}}\n'
       'Amount: {{collection_amount}}\n'
-      '{{#discount_amount}}Discount: {{discount_amount}}\n{{/discount_amount}}'
+      '{{#discount_amount}}Original amount: {{original_amount}}\n'
+      'Discount granted: {{discount_amount}}\n'
+      'Net amount paid: {{net_amount}}\n{{/discount_amount}}'
       '{{#approval_note}}\n{{approval_note}}{{/approval_note}}'
       '{{#receipt_link}}\n\nView receipt: {{receipt_link}}{{/receipt_link}}';
 
@@ -78,14 +82,18 @@ abstract final class OutboundMessageTemplate {
       '\n'
       'Customer: {{customer_name}}\n'
       'Amount: {{collection_amount}}\n'
-      '{{#discount_amount}}Discount: {{discount_amount}}\n{{/discount_amount}}'
+      '{{#discount_amount}}Original amount: {{original_amount}}\n'
+      'Discount granted: {{discount_amount}}\n'
+      'Net amount paid: {{net_amount}}\n{{/discount_amount}}'
       '{{#receipt_link}}\nView receipt: {{receipt_link}}{{/receipt_link}}';
 
   /// Applied opening-balance collection. Intentionally omits Sello invoice,
   /// order date, aging, adjustment id, sales-rep, and allocation details.
   static const openingBalancePaymentReceivedDefault =
       'Payment received: {{collection_amount}}\n'
-      '{{#discount_amount}}Discount: {{discount_amount}}\n{{/discount_amount}}'
+      '{{#discount_amount}}Original amount: {{original_amount}}\n'
+      'Discount granted: {{discount_amount}}\n'
+      'Net amount paid: {{net_amount}}\n{{/discount_amount}}'
       '{{#order_numbers}}Order: {{order_numbers}}\n{{/order_numbers}}'
       '{{#old_invoice_reference}}Reference: {{old_invoice_reference}}\n{{/old_invoice_reference}}'
       '{{#business_name}}\n{{business_name}}{{/business_name}}';
@@ -104,6 +112,8 @@ abstract final class OutboundMessageTemplate {
   static String openingBalancePaymentReceived({
     required String amountLabel,
     String? discountLabel,
+    String? originalLabel,
+    String? netLabel,
     String? orderNumbers,
     String? oldInvoiceReference,
     String? businessName,
@@ -113,6 +123,8 @@ abstract final class OutboundMessageTemplate {
       values: {
         'collection_amount': amountLabel,
         'discount_amount': discountLabel,
+        'original_amount': originalLabel,
+        'net_amount': netLabel,
         'order_numbers': orderNumbers,
         'old_invoice_reference': oldInvoiceReference,
         'business_name': businessName,

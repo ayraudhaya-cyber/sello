@@ -13,12 +13,23 @@ import 'package:sello/features/payments/application/order_collection_rules.dart'
 import 'package:sello/features/payments/application/receive_payment_allocation.dart';
 import 'package:sello/features/payments/presentation/receivable_picker_copy.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
+
+/// Cash-like collection, or a cheque that stays on the cheque ledger.
+class ReceivePaymentDialogResult {
+  const ReceivePaymentDialogResult.payment(this.payment) : cheque = null;
+
+  const ReceivePaymentDialogResult.cheque(this.cheque) : payment = null;
+
+  final ReceivePaymentInput? payment;
+  final CreateChequeInput? cheque;
+}
 
 /// Premium receive-payment workspace dialog.
 class ReceivePaymentDialog extends ConsumerStatefulWidget {
@@ -53,6 +64,11 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   final _discountPercent = TextEditingController();
   final _reference = TextEditingController();
   final _notes = TextEditingController();
+  final _bank = TextEditingController();
+  final _chequeNumber = TextEditingController();
+  final _holder = TextEditingController();
+  DateTime _chequeDate = DateTime.now();
+  bool _chequeInHand = true;
   bool _loadingOrders = false;
   String? _error;
 
@@ -74,6 +90,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     _discountPercent.dispose();
     _reference.dispose();
     _notes.dispose();
+    _bank.dispose();
+    _chequeNumber.dispose();
+    _holder.dispose();
     super.dispose();
   }
 
@@ -132,6 +151,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
           _CustomerPicker(currencySymbol: widget.currencySymbol),
     );
     if (selected == null || !mounted) return;
+    if (_holder.text.trim().isEmpty) {
+      _holder.text = selected.name;
+    }
     await _applyCustomer(selected);
   }
 
@@ -192,17 +214,15 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   void _editReceivableAmount(ReceivableOrder receivable, num amount) {
     setState(() {
       _error = null;
-      final clamped = ReceivePaymentAllocation.clampAmount(
-        amount: amount,
-        remaining: receivable.remaining,
-      );
-      if (clamped <= 0) {
-        _selectedIds.remove(receivable.id);
-        _allocations.remove(receivable.id);
-      } else {
-        _selectedIds.add(receivable.id);
-        _allocations[receivable.id] = clamped;
-      }
+      // An empty field is 0 while the user is still typing. Keep the row
+      // selected so the amount box stays editable.
+      _selectedIds.add(receivable.id);
+      _allocations[receivable.id] = amount <= 0
+          ? 0
+          : ReceivePaymentAllocation.clampAmount(
+              amount: amount,
+              remaining: receivable.remaining,
+            );
       _syncAmountFromAllocations();
     });
   }
@@ -243,6 +263,17 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
         amount > (_customer?.walletBalance ?? 0)) {
       setState(() => _error = 'Wallet balance is insufficient.');
       return null;
+    }
+    if (_method == PaymentMethod.cheque) {
+      final chequeError = OrderCollectionRules.validateCheque(
+        bankName: _bank.text,
+        chequeNumber: _chequeNumber.text,
+        holderName: _holder.text,
+      );
+      if (chequeError != null) {
+        setState(() => _error = chequeError);
+        return null;
+      }
     }
     final discount = _resolvedDiscount;
     // Cap against selected receivables — not global customer AR (delivered-only).
@@ -291,7 +322,43 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   void _confirm() {
     final input = _buildInput();
     if (input == null) return;
-    Navigator.of(context).pop(input);
+    if (_method == PaymentMethod.cheque) {
+      final notes = [
+        if (input.reference != null) input.reference!,
+        if (input.notes != null) input.notes!,
+      ].join('\n');
+      Navigator.of(context).pop(
+        ReceivePaymentDialogResult.cheque(
+          CreateChequeInput(
+            customerId: input.customerId,
+            amount: input.amount,
+            discountAmount: input.discountAmount,
+            bankName: _bank.text.trim(),
+            chequeNumber: _chequeNumber.text.trim(),
+            holderName: _holder.text.trim(),
+            chequeDate: _chequeDate,
+            collectionDate: _chequeInHand ? DateTime.now() : null,
+            notes: notes.trim().isEmpty ? null : notes.trim(),
+            allocations: _chequeInHand ? input.allocations : const [],
+            visitId: input.visitId,
+            markCollected: _chequeInHand,
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).pop(ReceivePaymentDialogResult.payment(input));
+  }
+
+  Future<void> _pickChequeDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _chequeDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _chequeDate = picked);
   }
 
   @override
@@ -381,7 +448,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
             children: [
               SelloTextField(
                 controller: _amount,
-                label: 'Amount',
+                label: _method == PaymentMethod.cheque
+                    ? 'Cheque amount'
+                    : 'Amount',
                 required: true,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
@@ -458,7 +527,10 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final method in PaymentMethod.settlementMethods)
+                  for (final method in [
+                    ...PaymentMethod.settlementMethods,
+                    PaymentMethod.cheque,
+                  ])
                     ChoiceChip(
                       label: Text(method.label),
                       selected: _method == method,
@@ -485,6 +557,83 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                     ),
                 ],
               ),
+              if (_method == PaymentMethod.cheque) ...[
+                const SizedBox(height: 14),
+                SelloSriLankaBankField(
+                  controller: _bank,
+                  onChanged: (_) => setState(() => _error = null),
+                ),
+                const SizedBox(height: 12),
+                SelloTextField(
+                  controller: _chequeNumber,
+                  label: 'Cheque number',
+                  required: true,
+                  onChanged: (_) => setState(() => _error = null),
+                ),
+                const SizedBox(height: 12),
+                SelloTextField(
+                  controller: _holder,
+                  label: 'Name on cheque',
+                  required: true,
+                  onChanged: (_) => setState(() => _error = null),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SelloButton(
+                    label: 'Cheque date ${SelloFormatters.date(_chequeDate)}',
+                    variant: SelloButtonVariant.outline,
+                    onPressed: _pickChequeDate,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMuted,
+                    borderRadius: BorderRadius.circular(AppRadius.panel),
+                    border: Border.all(color: AppColors.outlinePanel),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'I already have this cheque',
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Turn this off if the customer has not given the paper yet. Outstanding stays the same until you have it.',
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 12.5,
+                                height: 1.35,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SelloSwitch(
+                        value: _chequeInHand,
+                        onChanged: (value) => setState(() {
+                          _chequeInHand = value;
+                          _error = null;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           SelloDialogSection(
@@ -512,7 +661,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       ),
       footer: SelloDialogFooter(
         cancelLabel: 'Cancel',
-        primaryLabel: 'Confirm payment',
+        primaryLabel: _method == PaymentMethod.cheque
+            ? 'Save cheque'
+            : 'Confirm payment',
         onPrimary: _confirm,
       ),
     );
@@ -968,8 +1119,13 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
   @override
   void initState() {
     super.initState();
-    _amountFocus = FocusNode();
+    _amountFocus = FocusNode()..addListener(_selectWhenFocused);
     _controller = TextEditingController(text: _displayAmount(widget));
+  }
+
+  void _selectWhenFocused() {
+    if (!_amountFocus.hasFocus || widget.selected) return;
+    widget.onAmountChanged(0);
   }
 
   @override
@@ -989,6 +1145,7 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
 
   @override
   void dispose() {
+    _amountFocus.removeListener(_selectWhenFocused);
     _amountFocus.dispose();
     _controller.dispose();
     super.dispose();
@@ -1078,7 +1235,6 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
               child: TextField(
                 controller: _controller,
                 focusNode: _amountFocus,
-                enabled: selected,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),

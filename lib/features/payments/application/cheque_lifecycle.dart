@@ -262,7 +262,10 @@ List<PaymentAllocationInput> allocationsForCollect({
   if (chequeCollectPreservesExistingAllocation(cheque)) {
     return const [];
   }
-  return fifoChequeAllocations(amount: cheque.amount, orders: receivables);
+  return fifoChequeAllocations(
+    amount: cheque.settlementAmount,
+    orders: receivables,
+  );
 }
 
 /// Holder defaults to the customer name until the user types a different value.
@@ -278,6 +281,28 @@ String defaultChequeHolderName({
     return selectedCustomerName;
   }
   return currentHolder;
+}
+
+/// How much outstanding a collected cheque removes.
+///
+/// The face value and the discount are counted once. A cheque that is still
+/// awaiting collection, cancelled, or bounced does not reduce what is owed.
+/// Cleared is a later bank step and does not add the amount again.
+num chequeOutstandingReduction({
+  required ChequeStatus status,
+  required num netPaid,
+  required num discount,
+  required bool balanceApplied,
+}) {
+  if (!balanceApplied) return 0;
+  if (status == ChequeStatus.awaitingCollection ||
+      status == ChequeStatus.cancelled ||
+      status == ChequeStatus.bounced) {
+    return 0;
+  }
+  final net = netPaid < 0 ? 0 : netPaid;
+  final off = discount < 0 ? 0 : discount;
+  return net + off;
 }
 
 bool chequeEligibleForBatchDeposit(ChequeSummary cheque) => cheque.canDeposit;

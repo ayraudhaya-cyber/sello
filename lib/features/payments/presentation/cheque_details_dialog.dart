@@ -194,7 +194,7 @@ class _ChequeDetailsDialogState extends ConsumerState<ChequeDetailsDialog> {
             .read(paymentRepositoryProvider)
             .fetchReceivableOrders(_cheque.customerId);
         allocations = fifoChequeAllocations(
-          amount: _cheque.amount,
+          amount: _cheque.settlementAmount,
           orders: orders,
         );
       } on AppFailure catch (failure) {

@@ -9,6 +9,7 @@ import 'package:sello/features/hub/customers/presentation/hub_customers_page.dar
     show CustomerEditorDialog;
 import 'package:sello/features/hub/inventory/application/hub_inventory_provider.dart';
 import 'package:sello/features/hub/orders/application/hub_orders_provider.dart';
+import 'package:sello/features/hub/payments/application/hub_cheques_provider.dart';
 import 'package:sello/features/hub/payments/application/hub_payments_provider.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/inventory/presentation/stock_adjust_dialog.dart';
@@ -22,7 +23,8 @@ import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_upsert_input.dart';
 import 'package:sello/shared/models/inventory_item.dart';
-import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/models/cheque_status.dart';
+import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/quick_action.dart';
 import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
@@ -122,7 +124,7 @@ abstract final class QuickActionsLauncher {
   }) async {
     final role = ref.read(currentSessionProvider)?.appRole;
     if (role == null) return;
-    final input = await showDialog<ReceivePaymentInput>(
+    final submitted = await showDialog<ReceivePaymentDialogResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) => ReceivePaymentDialog(
@@ -131,7 +133,13 @@ abstract final class QuickActionsLauncher {
         preferredOrderId: preferredOrderId,
       ),
     );
-    if (input == null || !context.mounted) return;
+    if (submitted == null || !context.mounted) return;
+
+    if (submitted.cheque != null) {
+      await _saveReceivedCheque(context, ref, submitted.cheque!, role);
+      return;
+    }
+    final input = submitted.payment!;
 
     if (role.usesHub) {
       final result = await ref
@@ -159,6 +167,34 @@ abstract final class QuickActionsLauncher {
       } else {
         SelloSnackbars.success(context, 'Payment recorded.');
       }
+    } on AppFailure catch (error) {
+      if (!context.mounted) return;
+      SelloSnackbars.error(context, error.message);
+    }
+  }
+
+  static Future<void> _saveReceivedCheque(
+    BuildContext context,
+    WidgetRef ref,
+    CreateChequeInput input,
+    UserRole role,
+  ) async {
+    try {
+      final cheque = role.usesHub
+          ? await ref.read(hubChequesProvider.notifier).createCheque(input)
+          : await ref.read(chequeRepositoryProvider).createCheque(input);
+      if (!context.mounted) return;
+      if (cheque == null) {
+        final message = ref.read(hubChequesProvider).errorMessage;
+        SelloSnackbars.error(context, message ?? 'Unable to record cheque.');
+        return;
+      }
+      SelloSnackbars.success(
+        context,
+        cheque.status == ChequeStatus.awaitingCollection
+            ? 'Saved. We do not have this cheque yet.'
+            : 'Cheque received.',
+      );
     } on AppFailure catch (error) {
       if (!context.mounted) return;
       SelloSnackbars.error(context, error.message);

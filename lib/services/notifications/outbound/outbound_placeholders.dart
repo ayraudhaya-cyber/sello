@@ -49,7 +49,15 @@ abstract final class OutboundPlaceholders {
   );
   static const collectionAmount = OutboundPlaceholder(
     token: 'collection_amount',
-    label: 'Collection amount',
+    label: 'Net amount paid',
+  );
+  static const originalAmount = OutboundPlaceholder(
+    token: 'original_amount',
+    label: 'Original amount',
+  );
+  static const netAmount = OutboundPlaceholder(
+    token: 'net_amount',
+    label: 'Net amount paid',
   );
   static const collectionNumber = OutboundPlaceholder(
     token: 'collection_number',
@@ -81,8 +89,10 @@ abstract final class OutboundPlaceholders {
 
   static const collectionFields = <OutboundPlaceholder>[
     customerName,
-    collectionAmount,
+    originalAmount,
     discountAmount,
+    netAmount,
+    collectionAmount,
     collectionNumber,
     businessName,
     salesRep,
@@ -146,6 +156,8 @@ abstract final class OutboundPlaceholders {
       'collection_number': 'PAY-0001',
       'collection_amount': 'Rs 5,000.00',
       'amount': 'Rs 5,000.00',
+      'original_amount': 'Rs 5,200.00',
+      'net_amount': 'Rs 5,000.00',
       'discount_amount': 'Rs 200.00',
       'collection_status': 'submitted for review',
       'approval_note': 'Balances update only after owner/manager approval.',

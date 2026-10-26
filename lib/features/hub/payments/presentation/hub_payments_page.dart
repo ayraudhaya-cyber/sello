@@ -121,17 +121,35 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
   }
 
   Future<void> _receivePayment() async {
-    final input = await showDialog<ReceivePaymentInput>(
+    final submitted = await showDialog<ReceivePaymentDialogResult>(
       context: context,
       barrierDismissible: false,
       builder: (context) =>
           ReceivePaymentDialog(currencySymbol: _currencySymbol()),
     );
-    if (input == null) return;
+    if (submitted == null) return;
+    if (submitted.cheque != null) {
+      final cheque = await ref
+          .read(hubChequesProvider.notifier)
+          .createCheque(submitted.cheque!);
+      if (!mounted) return;
+      if (cheque == null) {
+        final message = ref.read(hubChequesProvider).errorMessage;
+        SelloSnackbars.error(context, message ?? 'Unable to record cheque.');
+      } else {
+        SelloSnackbars.success(
+          context,
+          cheque.status == ChequeStatus.awaitingCollection
+              ? 'Saved. We do not have this cheque yet.'
+              : 'Cheque received.',
+        );
+      }
+      return;
+    }
 
     final result = await ref
         .read(hubPaymentsProvider.notifier)
-        .receivePayment(input);
+        .receivePayment(submitted.payment!);
     if (!mounted) return;
     if (result == null) {
       final message = ref.read(hubPaymentsProvider).errorMessage;
@@ -477,7 +495,7 @@ class _HubPaymentsPageState extends ConsumerState<HubPaymentsPage> {
             .read(paymentRepositoryProvider)
             .fetchReceivableOrders(cheque.customerId);
         allocations = fifoChequeAllocations(
-          amount: cheque.amount,
+          amount: cheque.settlementAmount,
           orders: orders,
         );
       } on AppFailure catch (failure) {

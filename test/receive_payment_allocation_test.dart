@@ -127,7 +127,7 @@ void main() {
             allocations: const {},
             receivables: [small, mid],
           ),
-          contains('Allocate the payment'),
+          ReceivePaymentAllocation.extraBeforeEveryOrder,
         );
         expect(
           ReceivePaymentAllocation.validate(
@@ -139,5 +139,39 @@ void main() {
         );
       },
     );
+
+    test('extra cash is wallet credit only after every order is ticked', () {
+      expect(
+        ReceivePaymentAllocation.compareGiving(
+          giving: 1500,
+          covered: 1120,
+          allocations: {'so-1': 640, 'so-2': 480},
+          receivables: [small, mid],
+        ),
+        ReceivePaymentGiving.extraToWallet,
+      );
+      expect(
+        ReceivePaymentAllocation.compareGiving(
+          giving: 1500,
+          covered: 640,
+          allocations: {'so-1': 640},
+          receivables: [small, mid],
+        ),
+        ReceivePaymentGiving.extraBeforeAll,
+      );
+      expect(
+        ReceivePaymentAllocation.compareGiving(
+          giving: 400,
+          covered: 640,
+          allocations: {'so-1': 640},
+          receivables: [small, mid],
+        ),
+        ReceivePaymentGiving.short,
+      );
+      expect(
+        ReceivePaymentAllocation.extraToWalletMessage('Rs 380'),
+        'Rs 380 extra will be saved in their wallet.',
+      );
+    });
   });
 }

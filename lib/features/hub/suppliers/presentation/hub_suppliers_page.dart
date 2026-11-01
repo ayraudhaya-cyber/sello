@@ -963,7 +963,10 @@ class _SupplierEditorDialogState extends State<_SupplierEditorDialog> {
                 hint: 'e.g. Net 30',
               ),
               SelloFormRow(
-                left: SelloTextField(controller: _bankName, label: 'Bank name'),
+                left: SelloSriLankaBankField(
+                  controller: _bankName,
+                  required: false,
+                ),
                 right: SelloTextField(
                   controller: _bankAccount,
                   label: 'Bank account',

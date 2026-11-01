@@ -59,7 +59,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   final Map<String, num> _allocations = {};
   final Set<String> _selectedIds = {};
   PaymentMethod? _method = PaymentMethod.cash;
+  final _covered = TextEditingController();
   final _amount = TextEditingController();
+  num _followedCovered = 0;
   final _discountAmount = TextEditingController();
   final _discountPercent = TextEditingController();
   final _reference = TextEditingController();
@@ -85,6 +87,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
 
   @override
   void dispose() {
+    _covered.dispose();
     _amount.dispose();
     _discountAmount.dispose();
     _discountPercent.dispose();
@@ -128,20 +131,117 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     );
   }
 
-  void _writePaymentAmount(num value) {
+  void _writeAmount(TextEditingController controller, num value) {
     if (value <= 0) {
-      _amount.clear();
+      controller.clear();
       return;
     }
-    _amount.text = value == value.roundToDouble()
+    controller.text = value == value.roundToDouble()
         ? value.toStringAsFixed(0)
         : value.toStringAsFixed(2);
   }
 
+  /// Ticked amounts, after discount. This is what the payment covers.
+  num get _coveredCash {
+    final cash = _allocatedTotal - _resolvedDiscount;
+    return cash < 0 ? 0 : cash;
+  }
+
+  bool get _givingLocked {
+    if (_method == PaymentMethod.wallet) return true;
+    return _receivables.isNotEmpty && _coveredCash <= 0.001;
+  }
+
   void _syncAmountFromAllocations() {
-    final discount = _resolvedDiscount;
-    final cash = _allocatedTotal - discount;
-    _writePaymentAmount(cash < 0 ? 0 : cash);
+    final covered = _coveredCash;
+    final current = num.tryParse(_amount.text.trim()) ?? 0;
+    final wasFollowing = _amount.text.trim().isEmpty ||
+        (current - _followedCovered).abs() < 0.001;
+    _followedCovered = covered;
+    _writeAmount(_covered, covered);
+    if (_givingLocked || wasFollowing || current + 0.001 < covered) {
+      _writeAmount(_amount, covered);
+    }
+  }
+
+  String get _givingLabel {
+    if (_method == PaymentMethod.cheque) return 'Amount on the cheque';
+    if (_method == PaymentMethod.wallet) return 'From their wallet';
+    return 'Customer is giving now';
+  }
+
+  String get _givingHelper {
+    if (_method == PaymentMethod.wallet) {
+      return 'This uses money already in their wallet. It matches the ticked orders.';
+    }
+    if (_receivables.isEmpty) {
+      return 'Type the money they are giving.';
+    }
+    if (_coveredCash <= 0.001) {
+      return 'Tick an unpaid order first. Then type a higher number here only if they gave extra.';
+    }
+    if (_method == PaymentMethod.cheque) {
+      return 'The number written on the cheque. Type a higher number only if the cheque is bigger than the ticked orders.';
+    }
+    return 'Leave this, or type a higher number if they gave more than the ticked orders.';
+  }
+
+  num get _walletCredit {
+    if (_method == PaymentMethod.wallet) return 0;
+    final giving = num.tryParse(_amount.text.trim()) ?? 0;
+    final covered = _coveredCash;
+    final state = ReceivePaymentAllocation.compareGiving(
+      giving: giving,
+      covered: covered,
+      allocations: _allocations,
+      receivables: _receivables,
+    );
+    if (state != ReceivePaymentGiving.extraToWallet) return 0;
+    final extra = giving - covered;
+    return extra < 0 ? 0 : extra;
+  }
+
+  ({String text, bool isProblem})? _givingNote(String symbol) {
+    if (_method == PaymentMethod.wallet || _receivables.isEmpty) return null;
+    final giving = num.tryParse(_amount.text.trim()) ?? 0;
+    final covered = _coveredCash;
+    final state = ReceivePaymentAllocation.compareGiving(
+      giving: giving,
+      covered: covered,
+      allocations: _allocations,
+      receivables: _receivables,
+    );
+    switch (state) {
+      case ReceivePaymentGiving.same:
+        return null;
+      case ReceivePaymentGiving.short:
+        return (
+          text: _resolvedDiscount > 0.001
+              ? ReceivePaymentAllocation.lessThanTickedWithDiscount
+              : ReceivePaymentAllocation.lessThanTicked,
+          isProblem: true,
+        );
+      case ReceivePaymentGiving.extraBeforeAll:
+        return (
+          text: ReceivePaymentAllocation.extraBeforeEveryOrder,
+          isProblem: true,
+        );
+      case ReceivePaymentGiving.extraToWallet:
+        if (_method == PaymentMethod.cheque && _resolvedDiscount > 0.001) {
+          return (
+            text: ReceivePaymentAllocation.chequeExtraWithDiscount,
+            isProblem: true,
+          );
+        }
+        return (
+          text: ReceivePaymentAllocation.extraToWalletMessage(
+            SelloFormatters.currency(giving - covered, symbol: symbol),
+            whenChequeArrives:
+                _method == PaymentMethod.cheque && !_chequeInHand,
+          ),
+          isProblem: false,
+        );
+    }
   }
 
   Future<void> _pickCustomer() async {
@@ -162,7 +262,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       _customer = selected;
       _allocations.clear();
       _selectedIds.clear();
+      _covered.clear();
       _amount.clear();
+      _followedCovered = 0;
       _discountAmount.clear();
       _discountPercent.clear();
       _error = null;
@@ -252,7 +354,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     }
     final amount = num.tryParse(_amount.text.trim()) ?? 0;
     if (amount <= 0) {
-      setState(() => _error = 'Enter a payment amount.');
+      setState(() => _error = 'Type how much the customer is giving.');
       return null;
     }
     if (_method == null) {
@@ -261,7 +363,15 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     }
     if (_method == PaymentMethod.wallet &&
         amount > (_customer?.walletBalance ?? 0)) {
-      setState(() => _error = 'Wallet balance is insufficient.');
+      setState(() => _error = 'Their wallet does not have this much.');
+      return null;
+    }
+    if (_method == PaymentMethod.cheque &&
+        _resolvedDiscount > 0.001 &&
+        _walletCredit > 0.001) {
+      setState(
+        () => _error = ReceivePaymentAllocation.chequeExtraWithDiscount,
+      );
       return null;
     }
     if (_method == PaymentMethod.cheque) {
@@ -276,19 +386,6 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
       }
     }
     final discount = _resolvedDiscount;
-    // Cap against selected receivables — not global customer AR (delivered-only).
-    final discountError = OrderCollectionRules.validateDiscount(
-      discount: discount,
-      moneyReceived: amount,
-      outstanding: _allocatedTotal > 0.001
-          ? _allocatedTotal
-          : (_customer?.outstandingBalance ?? 0),
-      allowed: _discountAllowed(),
-    );
-    if (discountError != null) {
-      setState(() => _error = discountError);
-      return null;
-    }
     final allocationError = ReceivePaymentAllocation.validate(
       paymentAmount: amount,
       discountAmount: discount,
@@ -297,6 +394,21 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     );
     if (allocationError != null) {
       setState(() => _error = allocationError);
+      return null;
+    }
+    // Extra cash is wallet credit, so the discount is checked only against
+    // the part that pays the ticked orders.
+    final cashForOrders = amount - _walletCredit;
+    final discountError = OrderCollectionRules.validateDiscount(
+      discount: discount,
+      moneyReceived: cashForOrders < 0 ? 0 : cashForOrders,
+      outstanding: _allocatedTotal > 0.001
+          ? _allocatedTotal
+          : (_customer?.outstandingBalance ?? 0),
+      allowed: _discountAllowed(),
+    );
+    if (discountError != null) {
+      setState(() => _error = discountError);
       return null;
     }
 
@@ -373,7 +485,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     return SelloFormDialog(
       title: 'Receive payment',
       subtitle:
-          'Collect money the customer already owes. Tick the orders or opening balance this payment should cover.',
+          'Take money the customer owes. Tick each order or opening balance, then check how much they are giving.',
       maxWidth: kSelloFormDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -423,8 +535,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                   const LinearProgressIndicator(minHeight: 2)
                 else if (_receivables.isEmpty)
                   const Text(
-                    'No unpaid orders or opening balances. Payment will reduce '
-                    'Outstanding, or add to Wallet if you collect more than they owe.',
+                    'Nothing is unpaid. Type the money they are giving. It goes to their wallet.',
                     style: TextStyle(
                       fontFamily: AppTypography.fontFamily,
                       fontSize: 13.5,
@@ -444,21 +555,50 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
               ],
             ),
           SelloDialogSection(
-            title: 'Payment amount',
+            title: 'Money',
             children: [
+              if (_receivables.isNotEmpty) ...[
+                SelloTextField(
+                  controller: _covered,
+                  label: 'This payment covers',
+                  readOnly: true,
+                  helperText: _resolvedDiscount > 0.001
+                      ? 'Total of the ticked amounts, after the discount.'
+                      : 'Total of the amounts you ticked.',
+                ),
+                const SizedBox(height: 12),
+              ],
               SelloTextField(
                 controller: _amount,
-                label: _method == PaymentMethod.cheque
-                    ? 'Cheque amount'
-                    : 'Amount',
+                label: _givingLabel,
                 required: true,
+                readOnly: _givingLocked,
+                helperText: _givingHelper,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                onChanged: (_) {
-                  setState(() => _error = null);
-                },
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                onChanged: _givingLocked
+                    ? null
+                    : (_) => setState(() => _error = null),
               ),
+              if (_givingNote(symbol) case final note?) ...[
+                const SizedBox(height: 8),
+                Text(
+                  note.text,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: note.isProblem
+                        ? AppColors.error
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ],
               if (canDiscount) ...[
                 const SizedBox(height: 12),
                 SelloFormRow(
@@ -497,8 +637,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Use amount, percent, or both. Percent applies first to the '
-                  'selected outstanding, then the amount.',
+                  'Fill one or both. The percent is used first, then the amount.',
                   style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 12,
@@ -515,6 +654,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                     discountPercent: _discountPercentValue,
                     discountAmount: _discountAmountValue,
                     moneyReceived: num.tryParse(_amount.text.trim()) ?? 0,
+                    walletCredit: _walletCredit,
                   ),
                 ],
               ],
@@ -534,12 +674,13 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                     ChoiceChip(
                       label: Text(method.label),
                       selected: _method == method,
-                      onSelected: (selected) {
-                        setState(() {
-                          _method = selected ? method : null;
-                          _error = null;
-                        });
-                      },
+                        onSelected: (selected) {
+                          setState(() {
+                            _method = selected ? method : null;
+                            _error = null;
+                            _syncAmountFromAllocations();
+                          });
+                        },
                       selectedColor: context.brandAccentContainer,
                       labelStyle: TextStyle(
                         fontFamily: AppTypography.fontFamily,
@@ -678,6 +819,7 @@ class _ReceiveDiscountSummary extends StatelessWidget {
     required this.discountPercent,
     required this.discountAmount,
     required this.moneyReceived,
+    required this.walletCredit,
   });
 
   final String currencySymbol;
@@ -686,6 +828,7 @@ class _ReceiveDiscountSummary extends StatelessWidget {
   final num discountPercent;
   final num discountAmount;
   final num moneyReceived;
+  final num walletCredit;
 
   String _money(num value) =>
       SelloFormatters.currency(value, symbol: currencySymbol);
@@ -696,7 +839,7 @@ class _ReceiveDiscountSummary extends StatelessWidget {
       final pct = discountPercent == discountPercent.roundToDouble()
           ? discountPercent.toStringAsFixed(0)
           : discountPercent.toString();
-      parts.add('$pct% of selected');
+      parts.add('$pct% of the ticked amount');
     }
     if (discountAmount > 0.001) {
       parts.add(_money(discountAmount));
@@ -706,8 +849,9 @@ class _ReceiveDiscountSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settles = moneyReceived + discount;
-    final remaining = allocated - settles;
+    final paysOrders = moneyReceived + discount - walletCredit;
+    final pays = paysOrders < 0 ? 0 : paysOrders;
+    final remaining = allocated - pays;
     final remainingClamped = remaining < 0 ? 0 : remaining;
 
     return Container(
@@ -727,20 +871,27 @@ class _ReceiveDiscountSummary extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _ReceiveSummaryRow(
-            label: 'Amount received',
+            label: 'Customer is giving',
             value: _money(moneyReceived),
           ),
+          if (walletCredit > 0.001) ...[
+            const SizedBox(height: 8),
+            _ReceiveSummaryRow(
+              label: 'Saved in their wallet',
+              value: _money(walletCredit),
+            ),
+          ],
           const SizedBox(height: 8),
           const Divider(height: 1),
           const SizedBox(height: 8),
           _ReceiveSummaryRow(
-            label: 'Total applied',
-            value: _money(settles),
+            label: 'Pays the ticked orders',
+            value: _money(pays),
             emphasize: true,
           ),
           const SizedBox(height: 8),
           _ReceiveSummaryRow(
-            label: 'Unpaid left',
+            label: 'Still unpaid',
             value: _money(remainingClamped),
           ),
         ],
@@ -1248,7 +1399,7 @@ class _OrderAllocRowState extends State<_OrderAllocRow> {
                   color: AppColors.textPrimary,
                 ),
                 decoration: InputDecoration(
-                  label: const SelloFieldLabel(label: 'Amount'),
+                  label: const SelloFieldLabel(label: 'Pay this much'),
                   isDense: true,
                   filled: true,
                   fillColor: AppColors.surface,

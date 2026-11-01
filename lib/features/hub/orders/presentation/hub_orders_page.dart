@@ -15,6 +15,7 @@ import 'package:sello/features/hub/settings/application/hub_settings_provider.da
 import 'package:sello/features/corrections/application/correction_rules.dart';
 import 'package:sello/features/corrections/presentation/reassign_order_sales_rep_dialog.dart';
 import 'package:sello/features/orders/application/orders_excel_exporter.dart';
+import 'package:sello/features/orders/presentation/cancel_order_dialog.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
@@ -44,13 +45,14 @@ class HubOrdersPage extends ConsumerStatefulWidget {
   ConsumerState<HubOrdersPage> createState() => _HubOrdersPageState();
 }
 
-enum _OrdersWorkspaceTab { orders, returns }
+enum _OrdersWorkspaceTab { orders, returns, cancelled }
 
 class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     with QuickNewQueryMixin {
   final _searchController = TextEditingController();
   Timer? _searchDebounce;
   _OrdersWorkspaceTab _tab = _OrdersWorkspaceTab.orders;
+  OrderStatusFilter? _statusBeforeCancelled;
 
   @override
   void didChangeDependencies() {
@@ -319,14 +321,18 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                 await _cancelRemaining(detail.summary);
               }
             : null,
-        onCancelOrder:
-            detail.summary.isEditable ||
-                detail.summary.status == OrderStatus.placed
+        onMarkNotDelivered: _canMarkNotDelivered(detail)
             ? () async {
                 Navigator.of(context).pop();
-                await _cancel(detail.summary);
+                await _markNotDelivered(detail.summary);
               }
             : null,
+        onCancelOrder: detail.summary.status == OrderStatus.cancelled
+            ? null
+            : () async {
+                Navigator.of(context).pop();
+                await _cancel(detail.summary);
+              },
         onViewInvoice: detail.summary.status.canShareInvoice
             ? () => _viewInvoice(detail.summary)
             : null,
@@ -736,7 +742,69 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     }
   }
 
+  bool _canMarkNotDelivered(OrderDetail detail) {
+    final status = detail.summary.status;
+    if (status != OrderStatus.partiallyDelivered &&
+        status != OrderStatus.completed) {
+      return false;
+    }
+    final delivered = detail.lines.any((line) => line.deliveredQuantity > 0);
+    final returned = detail.lines.any((line) => line.returnedQuantity > 0);
+    return delivered && !returned;
+  }
+
+  Future<void> _markNotDelivered(OrderSummary order) async {
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: 'Not delivered yet?',
+      message:
+          '${order.orderNumber} goes back to Placed. The delivered items return to stock. '
+          'What the customer owes drops by the value of those items. '
+          'Money already received stays on this order. You can deliver it again later.',
+      confirmLabel: 'Mark as not delivered',
+      cancelLabel: 'Keep delivered',
+    );
+    if (confirmed != true || !mounted) return;
+    final error = await ref
+        .read(hubOrdersProvider.notifier)
+        .markOrderNotDelivered(order.id);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+    } else {
+      SelloSnackbars.success(
+        context,
+        '${order.orderNumber} is placed again. You can deliver it later.',
+      );
+    }
+  }
+
   Future<void> _cancel(OrderSummary order) async {
+    if (order.status != OrderStatus.draft) {
+      final repo = ref.read(orderReturnRepositoryProvider);
+      final saved = await CancelOrderDialog.show(
+        context: context,
+        order: order,
+        currencySymbol: _currencySymbol(),
+        loadContext: () => repo.fetchContext(order.id),
+        submit: ({required reason, required destination}) async {
+          final error = await ref
+              .read(hubOrdersProvider.notifier)
+              .cancelSalesOrder(
+                order: order,
+                reason: reason,
+                destination: destination.dbValue,
+              );
+          if (error != null) {
+            throw ValidationFailure(error);
+          }
+        },
+      );
+      if (!mounted || !saved) return;
+      SelloSnackbars.success(context, '${order.orderNumber} is cancelled.');
+      return;
+    }
+
     final confirmed = await showSelloDialog(
       context: context,
       title: 'Cancel order?',
@@ -778,9 +846,13 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
 
     return AppPageScaffold(
       title: 'Orders',
-      subtitle: _tab == _OrdersWorkspaceTab.returns
-          ? 'Every return, newest first.'
-          : 'Your sales workspace — create drafts, complete sales, and keep stock in sync.',
+      subtitle: switch (_tab) {
+        _OrdersWorkspaceTab.returns => 'Every return, newest first.',
+        _OrdersWorkspaceTab.cancelled =>
+          'Orders that were stopped. Stock and money were updated when each one was cancelled.',
+        _OrdersWorkspaceTab.orders =>
+          'Your sales workspace — create drafts, complete sales, and keep stock in sync.',
+      },
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(
@@ -788,7 +860,22 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         children: [
           _OrdersTabBar(
             tab: _tab,
-            onChanged: (value) => setState(() => _tab = value),
+            onChanged: (value) {
+              if (value == _tab) return;
+              final previous = _tab;
+              setState(() => _tab = value);
+              final notifier = ref.read(hubOrdersProvider.notifier);
+              if (value == _OrdersWorkspaceTab.cancelled) {
+                _statusBeforeCancelled = ref
+                    .read(hubOrdersProvider)
+                    .statusFilter;
+                notifier.setStatusFilter(OrderStatusFilter.cancelled);
+              } else if (previous == _OrdersWorkspaceTab.cancelled) {
+                notifier.setStatusFilter(
+                  _statusBeforeCancelled ?? OrderStatusFilter.all,
+                );
+              }
+            },
           ),
           const SizedBox(height: AppSpacing.md),
           if (_tab == _OrdersWorkspaceTab.returns)
@@ -797,6 +884,7 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
           _OrdersToolbar(
             searchController: _searchController,
             state: state,
+            showStatusFilter: _tab != _OrdersWorkspaceTab.cancelled,
             onSearchChanged: (value) {
               _searchDebounce?.cancel();
               _searchDebounce = Timer(
@@ -1126,6 +1214,7 @@ class _OrdersTabBar extends StatelessWidget {
         children: [
           chip('Orders', _OrdersWorkspaceTab.orders),
           chip('Returns', _OrdersWorkspaceTab.returns),
+          chip('Cancelled', _OrdersWorkspaceTab.cancelled),
         ],
       ),
     );
@@ -1174,6 +1263,7 @@ class _OrdersToolbar extends StatelessWidget {
     required this.isExporting,
     required this.onAdd,
     this.onClearFilters,
+    this.showStatusFilter = true,
   });
 
   final TextEditingController searchController;
@@ -1189,6 +1279,7 @@ class _OrdersToolbar extends StatelessWidget {
   final bool isExporting;
   final VoidCallback? onAdd;
   final VoidCallback? onClearFilters;
+  final bool showStatusFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -1334,7 +1425,12 @@ class _OrdersToolbar extends StatelessWidget {
       ),
       child: SelloToolbarBody(
         search: search,
-        filters: [status, payment, date, rep],
+        filters: [
+          if (showStatusFilter) status,
+          payment,
+          date,
+          rep,
+        ],
         actions: [refresh, export, add],
         filtersOnOwnRow: true,
         onClearFilters: onClearFilters,

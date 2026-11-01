@@ -10,6 +10,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/documents/presentation/order_document_print.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/mobile/orders/application/sello_orders_provider.dart';
+import 'package:sello/features/orders/presentation/cancel_order_dialog.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
 import 'package:sello/features/orders/presentation/order_details_dialog.dart';
 import 'package:sello/features/orders/presentation/order_editor_dialog.dart';
@@ -162,13 +163,20 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
               }
             : null,
         completeLabel: 'Submit order',
-        onCancelOrder: detail.summary.isEditable
+        onMarkNotDelivered: _canMarkNotDelivered(detail)
             ? () async {
                 final nav = Navigator.of(context);
                 nav.pop();
-                await _cancel(detail.summary);
+                await _markNotDelivered(detail.summary);
               }
             : null,
+        onCancelOrder: detail.summary.status == OrderStatus.cancelled
+            ? null
+            : () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                await _cancel(detail.summary);
+              },
         onViewInvoice: detail.summary.status.canShareInvoice
             ? () => _viewInvoice(detail.summary)
             : null,
@@ -433,7 +441,69 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
     await _openDetails(order);
   }
 
+  bool _canMarkNotDelivered(OrderDetail detail) {
+    final status = detail.summary.status;
+    if (status != OrderStatus.partiallyDelivered &&
+        status != OrderStatus.completed) {
+      return false;
+    }
+    final delivered = detail.lines.any((line) => line.deliveredQuantity > 0);
+    final returned = detail.lines.any((line) => line.returnedQuantity > 0);
+    return delivered && !returned;
+  }
+
+  Future<void> _markNotDelivered(OrderSummary order) async {
+    final confirmed = await showSelloDialog(
+      context: context,
+      title: 'Not delivered yet?',
+      message:
+          '${order.orderNumber} goes back to Placed. The delivered items return to stock. '
+          'What the customer owes drops by the value of those items. '
+          'Money already received stays on this order. You can deliver it again later.',
+      confirmLabel: 'Mark as not delivered',
+      cancelLabel: 'Keep delivered',
+    );
+    if (confirmed != true || !mounted) return;
+    final error = await ref
+        .read(selloOrdersProvider.notifier)
+        .markOrderNotDelivered(order.id);
+    if (!mounted) return;
+    if (error != null) {
+      SelloSnackbars.error(context, error);
+    } else {
+      SelloSnackbars.success(
+        context,
+        '${order.orderNumber} is placed again. You can deliver it later.',
+      );
+    }
+  }
+
   Future<void> _cancel(OrderSummary order) async {
+    if (order.status != OrderStatus.draft) {
+      final repo = ref.read(orderReturnRepositoryProvider);
+      final saved = await CancelOrderDialog.show(
+        context: context,
+        order: order,
+        currencySymbol: _currencySymbol,
+        loadContext: () => repo.fetchContext(order.id),
+        submit: ({required reason, required destination}) async {
+          final error = await ref
+              .read(selloOrdersProvider.notifier)
+              .cancelSalesOrder(
+                order: order,
+                reason: reason,
+                destination: destination.dbValue,
+              );
+          if (error != null) {
+            throw ValidationFailure(error);
+          }
+        },
+      );
+      if (!mounted || !saved) return;
+      SelloSnackbars.success(context, '${order.orderNumber} is cancelled.');
+      return;
+    }
+
     final confirmed = await showSelloDialog(
       context: context,
       title: 'Cancel order?',

@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.23",
-        "build": 24,
-        "released_at": "2026-10-26",
-        "notes": "If the connection drops for a moment, Sello keeps your workspace open and says your access has not been rechecked\nReceive payment can record a cheque, including a partial amount on an order"
+        "version": "1.0.24",
+        "build": 25,
+        "released_at": "2026-11-01",
+        "notes": "Receive payment shows what the payment covers and how much the customer is giving. Extra money can go to their wallet\nAn order marked delivered by mistake can be set back to Placed with Not delivered yet\nCancel a placed or delivered order, put goods back in stock, and give the money back or add it to their wallet\nBank fields use a searchable list of Sri Lankan banks"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.23",
-        "build": 24,
-        "released_at": "2026-10-26",
-        "notes": "Receive payment can take a cheque. Enter the bank, number, name, and date, and say whether you already have the paper\nClick an order or opening-balance amount and type a partial payment. You do not have to tick the row first\nA discount on a cheque shows the original amount, the discount, and the net amount paid on the receipt and the text message\nIf the connection drops for a moment, Sello keeps your workspace open and says your access has not been rechecked\nClearing an item code leaves it empty so you can type a new one"
+        "version": "1.0.24",
+        "build": 25,
+        "released_at": "2026-11-01",
+        "notes": "Receive payment keeps the ticked total fixed and lets you type how much the customer is giving. Extra money above every unpaid order goes to their wallet\nNot delivered yet puts a mistaken delivery back to Placed. Stock and what they owe update; money already received stays on the order\nCancel an order at any time. Delivered goods go back to stock, what they still owe is cleared, and paid money can be given back or added to their wallet\nOrders has a Cancelled tab for stopped orders\nBank fields use a searchable list of Sri Lankan banks when you edit a cheque, record a cheque, or set a supplier bank"
       },
       "minimum": {
         "version": "1.0.0",

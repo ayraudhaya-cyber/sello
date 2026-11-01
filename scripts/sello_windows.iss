@@ -2,7 +2,7 @@
 ; Compile after Inno Setup 6 is installed:
 ;   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts\sello_windows.iss
 
-#define AppVersion "1.0.21"
+#define AppVersion "1.0.24"
 #define ReleaseDir "..\build\windows\x64\runner\Release"
 
 [Setup]

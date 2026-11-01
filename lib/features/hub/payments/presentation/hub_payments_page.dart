@@ -1830,11 +1830,12 @@ class _ChequesToolbar extends StatelessWidget {
     );
 
     final bank = SizedBox(
-      width: context.isMobile ? double.infinity : 140,
-      child: SelloTextField(
+      width: context.isMobile ? double.infinity : 220,
+      child: SelloSriLankaBankField(
         controller: bankController,
+        required: false,
         label: null,
-        hint: 'Bank…',
+        hint: 'Search bank…',
         onChanged: onBankChanged,
       ),
     );

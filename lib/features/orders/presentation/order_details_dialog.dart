@@ -48,6 +48,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
     this.onFulfillAll,
     this.onCancelRemaining,
     this.onReturn,
+    this.onMarkNotDelivered,
     this.onCancelOrder,
     this.onArchive,
     this.onViewInvoice,
@@ -69,6 +70,7 @@ class OrderDetailsDialog extends ConsumerStatefulWidget {
   final VoidCallback? onFulfillAll;
   final VoidCallback? onCancelRemaining;
   final VoidCallback? onReturn;
+  final VoidCallback? onMarkNotDelivered;
   final VoidCallback? onCancelOrder;
   final VoidCallback? onArchive;
   final VoidCallback? onViewInvoice;
@@ -160,6 +162,26 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
   num get _outstanding =>
       _collections?.outstandingFor(order.total) ??
       (order.paymentStatus == PaymentStatus.paid ? 0 : order.total);
+
+  bool get _showCancelInBody =>
+      widget.onCancelOrder != null &&
+      (order.status == OrderStatus.partiallyDelivered ||
+          order.status == OrderStatus.completed);
+
+  String _cancelledMessage(OrderSummary order, String symbol) {
+    final reason = order.cancellationReason?.trim();
+    final paid = order.cancellationPaidAmount;
+    final money = SelloFormatters.currency(paid, symbol: symbol);
+    final outcome = switch (order.cancellationPaidDestination) {
+      'cash' when paid > 0.001 => '$money was given back.',
+      'wallet' when paid > 0.001 => '$money was added to their wallet.',
+      _ => 'It stays in the list under Cancelled.',
+    };
+    if (reason != null && reason.isNotEmpty) {
+      return 'This order is cancelled. $outcome Reason: $reason';
+    }
+    return 'This order is cancelled. $outcome';
+  }
 
   bool get _canCollect =>
       !readOnly &&
@@ -257,12 +279,11 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (order.status == OrderStatus.cancelled) ...[
-            const _NoticeBanner(
+            _NoticeBanner(
               icon: Icons.info_outline_rounded,
               tone: AppColors.info,
               background: AppColors.infoContainer,
-              message:
-                  'Cancelled orders do not affect inventory. Historical totals stay available for reporting.',
+              message: _cancelledMessage(order, currencySymbol),
             ),
             const SizedBox(height: _OrderGrid.sectionGap),
           ] else if (!order.isDraft && totalRemaining > 0) ...[
@@ -361,19 +382,35 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                         ),
                     ],
                     trailing: (canFulfill && onFulfillAll != null) ||
-                            widget.onReturn != null
+                            widget.onReturn != null ||
+                            widget.onMarkNotDelivered != null ||
+                            _showCancelInBody
                         ? Align(
                             alignment: Alignment.centerLeft,
                             child: Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: [
+                                if (widget.onMarkNotDelivered != null)
+                                  SelloButton(
+                                    label: 'Not delivered yet',
+                                    variant: SelloButtonVariant.outline,
+                                    size: SelloButtonSize.small,
+                                    onPressed: widget.onMarkNotDelivered,
+                                  ),
                                 if (widget.onReturn != null)
                                   SelloButton(
                                     label: 'Return items',
                                     variant: SelloButtonVariant.outline,
                                     size: SelloButtonSize.small,
                                     onPressed: widget.onReturn,
+                                  ),
+                                if (_showCancelInBody)
+                                  SelloButton(
+                                    label: 'Cancel order',
+                                    variant: SelloButtonVariant.danger,
+                                    size: SelloButtonSize.small,
+                                    onPressed: widget.onCancelOrder,
                                   ),
                                 if (canFulfill && onFulfillAll != null)
                                   SelloButton(

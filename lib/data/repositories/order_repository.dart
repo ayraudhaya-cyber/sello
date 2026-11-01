@@ -61,6 +61,9 @@ class OrderRepository {
     ordered_at,
     completed_at,
     cancelled_at,
+    cancellation_reason,
+    cancellation_paid_destination,
+    cancellation_paid_amount,
     created_at,
     updated_at,
     customers!customer_id (
@@ -95,6 +98,9 @@ class OrderRepository {
     ordered_at,
     completed_at,
     cancelled_at,
+    cancellation_reason,
+    cancellation_paid_destination,
+    cancellation_paid_amount,
     created_at,
     updated_at,
     customers!customer_id (
@@ -1161,6 +1167,72 @@ class OrderRepository {
     final dispatcher = deliveries;
     if (dispatcher == null) return;
     await dispatcher.dispatch(orderId, deliveredQuantity: deliveredQuantity);
+  }
+
+  /// Puts delivered units back in stock and returns the order to placed.
+  ///
+  /// Payments stay on the order. This does not cancel it.
+  Future<void> markOrderNotDelivered({required String orderId}) async {
+    try {
+      await _client.rpc(
+        'mark_order_not_delivered',
+        params: {'p_order_id': orderId},
+      );
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } catch (error) {
+      if (error is AppFailure) rethrow;
+      throw UnexpectedFailure(error.toString());
+    }
+  }
+
+  /// Cancels the order and settles stock and money in one step.
+  ///
+  /// [destination] is `none`, `cash`, or `wallet`.
+  Future<void> cancelSalesOrder({
+    required String orderId,
+    required String employeeId,
+    required String reason,
+    required String destination,
+    String? companyId,
+  }) async {
+    try {
+      final existing = await _client
+          .from('orders')
+          .select('id, company_id, order_number, status, deleted_at')
+          .eq('id', orderId)
+          .maybeSingle();
+      if (existing == null || existing['deleted_at'] != null) {
+        throw const ValidationFailure('Order not found.');
+      }
+      await _client.rpc(
+        'cancel_sales_order',
+        params: {
+          'p_order_id': orderId,
+          'p_destination': destination,
+          'p_reason': reason,
+        },
+      );
+      final resolvedCompanyId = companyId ?? existing['company_id'] as String?;
+      final orderNumber = existing['order_number'] as String? ?? orderId;
+      if (resolvedCompanyId != null) {
+        await _events.publish(
+          companyId: resolvedCompanyId,
+          actorEmployeeId: employeeId,
+          event: BusinessEvents.orderCancelled(
+            orderId: orderId,
+            orderNumber: orderNumber,
+            excludeEmployeeId: employeeId,
+          ),
+        );
+      }
+    } on PostgrestException catch (error) {
+      throw ValidationFailure(_mapOrderError(error.message));
+    } on AppFailure {
+      rethrow;
+    } catch (error) {
+      throw UnexpectedFailure(error.toString());
+    }
   }
 
   /// Cancel outstanding remaining quantity (no inventory impact).

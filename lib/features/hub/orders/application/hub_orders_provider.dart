@@ -405,6 +405,50 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     }
   }
 
+  Future<String?> markOrderNotDelivered(String orderId) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.markOrderNotDelivered(orderId: orderId);
+      await loadOrders(showLoading: false);
+      unawaited(refreshHubInventoryQuietly(ref));
+      unawaited(refreshHubProductsQuietly(ref));
+      _refreshBalances();
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
+  Future<String?> cancelSalesOrder({
+    required OrderSummary order,
+    required String reason,
+    required String destination,
+  }) async {
+    final session = ref.read(currentSessionProvider);
+    if (session == null) return 'No active session found.';
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _repo.cancelSalesOrder(
+        orderId: order.id,
+        employeeId: session.employee.id,
+        companyId: session.company.id,
+        reason: reason,
+        destination: destination,
+      );
+      await loadOrders(showLoading: false);
+      unawaited(refreshHubInventoryQuietly(ref));
+      unawaited(refreshHubProductsQuietly(ref));
+      _refreshBalances();
+      state = state.copyWith(isSaving: false, clearError: true);
+      return null;
+    } on AppFailure catch (failure) {
+      state = state.copyWith(isSaving: false, errorMessage: failure.message);
+      return failure.message;
+    }
+  }
+
   Future<String?> cancelOrder(OrderSummary order) async {
     final session = ref.read(currentSessionProvider);
     if (session == null) return 'No active session found.';

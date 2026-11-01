@@ -10,6 +10,8 @@ class SelloSriLankaBankField extends StatelessWidget {
     this.onChanged,
     this.required = true,
     this.enabled = true,
+    this.label = 'Bank',
+    this.hint = 'Search bank…',
     this.optionsViewOpenDirection = OptionsViewOpenDirection.down,
   });
 
@@ -17,6 +19,8 @@ class SelloSriLankaBankField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final bool required;
   final bool enabled;
+  final String? label;
+  final String? hint;
   final OptionsViewOpenDirection optionsViewOpenDirection;
 
   @override
@@ -24,12 +28,12 @@ class SelloSriLankaBankField extends StatelessWidget {
     return SelloAutocompleteField(
       controller: controller,
       value: controller.text,
-      label: 'Bank',
-      hint: 'Search bank…',
+      label: label,
+      hint: hint,
       required: required,
       enabled: enabled,
       suggestions: sriLankaBankNames,
-      maxSuggestions: 24,
+      maxSuggestions: sriLankaBankNames.length,
       suggestWhenEmpty: true,
       optionsViewOpenDirection: optionsViewOpenDirection,
       suggestionFilter: (query, _) => filterSriLankaBanks(query),

@@ -10,7 +10,7 @@ void main() {
 
   test('empty query shows banks as a dropdown list', () {
     final results = filterSriLankaBanks('');
-    expect(results, isNotEmpty);
+    expect(results, sriLankaBankNames);
     expect(results.first, 'Bank of Ceylon');
   });
 

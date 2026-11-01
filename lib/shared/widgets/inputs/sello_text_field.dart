@@ -27,6 +27,7 @@ class SelloTextField extends StatelessWidget {
     this.autovalidateMode = AutovalidateMode.onUserInteraction,
     this.focusNode,
     this.onFieldSubmitted,
+    this.readOnly = false,
   });
 
   final TextEditingController? controller;
@@ -55,6 +56,9 @@ class SelloTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<String>? onFieldSubmitted;
 
+  /// Visible and selectable, but not editable.
+  final bool readOnly;
+
   @override
   Widget build(BuildContext context) {
     final hasTooltip = tooltip != null && tooltip!.trim().isNotEmpty;
@@ -70,6 +74,7 @@ class SelloTextField extends StatelessWidget {
       onFieldSubmitted: onFieldSubmitted,
       validator: validator,
       enabled: enabled,
+      readOnly: readOnly,
       autofillHints: autofillHints,
       maxLines: obscureText ? 1 : maxLines,
       inputFormatters: inputFormatters,

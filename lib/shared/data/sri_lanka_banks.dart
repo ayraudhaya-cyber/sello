@@ -34,11 +34,12 @@ List<String> get sriLankaBankNames => [
       for (final bank in kSriLankaBanks) bank.name,
     ];
 
-/// Prefix matches first (name or alias), then contains. Empty query lists banks.
-List<String> filterSriLankaBanks(String query, {int limit = 24}) {
+/// Prefix matches first (name or alias), then contains. Empty query lists every bank.
+List<String> filterSriLankaBanks(String query, {int? limit}) {
+  final cap = limit ?? kSriLankaBanks.length;
   final q = query.trim().toLowerCase();
   if (q.isEmpty) {
-    return sriLankaBankNames.take(limit).toList(growable: false);
+    return sriLankaBankNames.take(cap).toList(growable: false);
   }
 
   final starts = <String>[];
@@ -56,5 +57,5 @@ List<String> filterSriLankaBanks(String query, {int limit = 24}) {
       contains.add(bank.name);
     }
   }
-  return [...starts, ...contains].take(limit).toList(growable: false);
+  return [...starts, ...contains].take(cap).toList(growable: false);
 }

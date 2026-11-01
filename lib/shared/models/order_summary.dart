@@ -70,6 +70,9 @@ class OrderSummary extends Equatable {
     this.visitId,
     this.completedAt,
     this.cancelledAt,
+    this.cancellationReason,
+    this.cancellationPaidDestination,
+    this.cancellationPaidAmount = 0,
   });
 
   final String id;
@@ -104,6 +107,11 @@ class OrderSummary extends Equatable {
   final String? visitId;
   final DateTime? completedAt;
   final DateTime? cancelledAt;
+  final String? cancellationReason;
+
+  /// none | cash | wallet. Set when the order was cancelled.
+  final String? cancellationPaidDestination;
+  final num cancellationPaidAmount;
 
   /// Combined discount for display (percent first, then amount).
   num get displayDiscountAmount {
@@ -154,6 +162,11 @@ class OrderSummary extends Equatable {
       visitId: _stringValue(json['visit_id']),
       completedAt: _dateValue(json['completed_at']),
       cancelledAt: _dateValue(json['cancelled_at']),
+      cancellationReason: _stringValue(json['cancellation_reason']),
+      cancellationPaidDestination: _stringValue(
+        json['cancellation_paid_destination'],
+      ),
+      cancellationPaidAmount: _numValue(json['cancellation_paid_amount']),
     );
   }
 

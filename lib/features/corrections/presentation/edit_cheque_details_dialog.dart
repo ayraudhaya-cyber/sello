@@ -118,10 +118,11 @@ class _EditChequeDetailsDialogState
             ),
             const SizedBox(height: 12),
           ],
-          SelloTextField(
+          SelloSriLankaBankField(
             controller: _bank,
-            label: 'Bank',
-            required: true,
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
           ),
           const SizedBox(height: 16),
           SelloFormRow(

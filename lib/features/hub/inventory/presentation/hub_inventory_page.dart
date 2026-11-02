@@ -150,6 +150,69 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
     return rows;
   }
 
+  bool get _showShortageColumns =>
+      ref.read(hubInventoryProvider).statusFilter ==
+      StockStatusFilter.shortage;
+
+  String _stockSummary({
+    required num onHand,
+    required num reserved,
+    required num shortage,
+  }) {
+    final stock = 'Stock ${SelloFormatters.quantity(onHand)}';
+    if (!_showShortageColumns) return stock;
+    final short = shortage > 0
+        ? ' · Shortage ${SelloFormatters.quantity(shortage)}'
+        : '';
+    return '$stock · Reserved ${SelloFormatters.quantity(reserved)}$short';
+  }
+
+  List<DataCell> _quantityCells({
+    required num onHand,
+    required num reserved,
+    required num available,
+    required num shortage,
+  }) {
+    return [
+      DataCell(
+        SelloTableText(
+          SelloFormatters.quantity(onHand),
+          tone: SelloTableTone.strong,
+          numeric: true,
+        ),
+      ),
+      if (_showShortageColumns) ...[
+        DataCell(
+          SelloTableText(
+            SelloFormatters.quantity(reserved),
+            numeric: true,
+          ),
+        ),
+        DataCell(
+          shortage > 0
+              ? SelloTableText(
+                  SelloFormatters.quantity(shortage),
+                  tone: SelloTableTone.strong,
+                  numeric: true,
+                  color: AppColors.warning,
+                )
+              : const SelloTableText(
+                  '—',
+                  tone: SelloTableTone.muted,
+                  numeric: true,
+                ),
+        ),
+      ],
+      DataCell(
+        SelloTableText(
+          SelloFormatters.quantity(available),
+          tone: SelloTableTone.normal,
+          numeric: true,
+        ),
+      ),
+    ];
+  }
+
   DataRow _flatRow(InventoryItem item) {
     return DataRow(
       onSelectChanged: (_) => _openDetails(item),
@@ -184,19 +247,11 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(SelloTableText(item.sku)),
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(item.quantity),
-            tone: SelloTableTone.strong,
-            numeric: true,
-          ),
-        ),
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(item.availableQuantity),
-            tone: SelloTableTone.normal,
-            numeric: true,
-          ),
+        ..._quantityCells(
+          onHand: item.quantity,
+          reserved: item.reservedQuantity,
+          available: item.availableQuantity,
+          shortage: item.shortageQuantity,
         ),
         DataCell(
           SelloTableText(
@@ -272,19 +327,11 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(SelloTableText(item.sku)),
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(group.totalQuantity),
-            tone: SelloTableTone.strong,
-            numeric: true,
-          ),
-        ),
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(group.totalAvailableQuantity),
-            tone: SelloTableTone.normal,
-            numeric: true,
-          ),
+        ..._quantityCells(
+          onHand: group.totalQuantity,
+          reserved: group.totalReservedQuantity,
+          available: group.totalAvailableQuantity,
+          shortage: group.shortageQuantity,
         ),
         DataCell(
           SelloTableText(
@@ -356,19 +403,11 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(SelloTableText(sku)),
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(item.quantity),
-            tone: SelloTableTone.strong,
-            numeric: true,
-          ),
-        ),
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(item.availableQuantity),
-            tone: SelloTableTone.normal,
-            numeric: true,
-          ),
+        ..._quantityCells(
+          onHand: item.quantity,
+          reserved: item.reservedQuantity,
+          available: item.availableQuantity,
+          shortage: item.shortageQuantity,
         ),
         DataCell(
           SelloTableText(
@@ -472,7 +511,11 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             if (context.isMobile)
               const SelloListSkeleton()
             else
-              const SelloTableSkeleton(columns: 8),
+              SelloTableSkeleton(
+                columns: state.statusFilter == StockStatusFilter.shortage
+                    ? 10
+                    : 8,
+              ),
           ] else ...[
             _SummaryRow(
               stats: state.stats,
@@ -542,7 +585,11 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Stock ${SelloFormatters.quantity(group.primary.quantity)}',
+                                      _stockSummary(
+                                        onHand: group.primary.quantity,
+                                        reserved: group.primary.reservedQuantity,
+                                        shortage: group.primary.shortageQuantity,
+                                      ),
                                       style: const TextStyle(
                                         fontFamily: AppTypography.fontFamily,
                                         color: AppColors.textSecondary,
@@ -581,7 +628,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${group.items.length} options · Stock ${SelloFormatters.quantity(group.totalQuantity)}',
+                                      '${group.items.length} options · ${_stockSummary(onHand: group.totalQuantity, reserved: group.totalReservedQuantity, shortage: group.shortageQuantity)}',
                                       style: const TextStyle(
                                         fontFamily: AppTypography.fontFamily,
                                         color: AppColors.textSecondary,
@@ -631,7 +678,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            'SKU ${item.variantSku ?? item.sku} · Stock ${SelloFormatters.quantity(item.quantity)}',
+                                            'SKU ${item.variantSku ?? item.sku} · ${_stockSummary(onHand: item.quantity, reserved: item.reservedQuantity, shortage: item.shortageQuantity)}',
                                             style: const TextStyle(
                                               fontFamily:
                                                   AppTypography.fontFamily,
@@ -680,6 +727,10 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                     selloDataColumn('Product'),
                     selloDataColumn('SKU'),
                     selloDataColumn('On hand', numeric: true),
+                    if (state.statusFilter == StockStatusFilter.shortage) ...[
+                      selloDataColumn('Reserved', numeric: true),
+                      selloDataColumn('Shortage', numeric: true),
+                    ],
                     selloDataColumn('Available', numeric: true),
                     selloDataColumn('Reorder', numeric: true),
                     selloDataColumn('Status'),
@@ -785,6 +836,10 @@ class _Toolbar extends StatelessWidget {
           DropdownMenuItem(
             value: StockStatusFilter.negativeStock,
             child: Text('Negative stock'),
+          ),
+          DropdownMenuItem(
+            value: StockStatusFilter.shortage,
+            child: Text('Shortage only'),
           ),
           DropdownMenuItem(
             value: StockStatusFilter.recentlyUpdated,

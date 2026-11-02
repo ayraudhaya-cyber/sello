@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /$
+Disallow: /hub
+Disallow: /sello
+Disallow: /login
+Disallow: /onboarding
+Disallow: /setup
+Disallow: /d

@@ -44,6 +44,36 @@ void main() {
       );
     });
 
+    test('correction can keep a held quantity and add only free stock', () {
+      expect(
+        OrderStockPolicy.maxCorrectedOrderQuantity(
+          allowOrdersAboveAvailableStock: false,
+          availableStock: 0,
+          deliveredQuantity: 2,
+          heldQuantity: 8,
+        ),
+        10,
+      );
+      expect(
+        OrderStockPolicy.maxCorrectedOrderQuantity(
+          allowOrdersAboveAvailableStock: false,
+          availableStock: 3,
+          deliveredQuantity: 2,
+          heldQuantity: 8,
+        ),
+        13,
+      );
+      expect(
+        OrderStockPolicy.maxCorrectedOrderQuantity(
+          allowOrdersAboveAvailableStock: true,
+          availableStock: 0,
+          deliveredQuantity: 2,
+          heldQuantity: 8,
+        ),
+        isNull,
+      );
+    });
+
     test('onlyAvailableMessage formats counts', () {
       expect(
         OrderStockPolicy.onlyAvailableMessage(23),

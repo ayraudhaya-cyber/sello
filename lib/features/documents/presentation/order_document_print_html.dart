@@ -260,6 +260,15 @@ void _writeOrderBody(
   if (doc.taxAmount > 0) {
     _total(buffer, 'Tax', doc.money(doc.taxAmount));
   }
+  if (doc.transportationCost > 0) {
+    _total(
+      buffer,
+      doc.transportationPayer == 'receiver'
+          ? 'Transportation'
+          : 'Transportation (paid by seller)',
+      doc.money(doc.transportationCost),
+    );
+  }
   _total(buffer, 'Total', doc.money(doc.total), emphasize: true);
   buffer.writeln('</div>');
 

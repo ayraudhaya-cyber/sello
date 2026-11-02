@@ -31,7 +31,10 @@ void main() {
     });
 
     test('preserves Hub routes while session is bootstrapping', () {
-      const auth = AuthSessionState(status: AuthStatus.unknown, isLoading: true);
+      const auth = AuthSessionState(
+        status: AuthStatus.unknown,
+        isLoading: true,
+      );
 
       expect(
         RouteGuards.resolve(auth: auth, location: RoutePaths.hubSettings),
@@ -48,7 +51,10 @@ void main() {
     });
 
     test('preserves Sales routes while session is bootstrapping', () {
-      const auth = AuthSessionState(status: AuthStatus.unknown, isLoading: true);
+      const auth = AuthSessionState(
+        status: AuthStatus.unknown,
+        isLoading: true,
+      );
 
       expect(
         RouteGuards.resolve(auth: auth, location: RoutePaths.selloOrders),
@@ -61,7 +67,10 @@ void main() {
     });
 
     test('allows splash and login during bootstrap', () {
-      const auth = AuthSessionState(status: AuthStatus.unknown, isLoading: true);
+      const auth = AuthSessionState(
+        status: AuthStatus.unknown,
+        isLoading: true,
+      );
 
       expect(
         RouteGuards.resolve(auth: auth, location: RoutePaths.splash),
@@ -95,24 +104,30 @@ void main() {
       );
     });
 
-    test('authenticating without session still redirects workspace to login', () {
-      const auth = AuthSessionState(
-        status: AuthStatus.authenticating,
-        isLoading: true,
-      );
+    test(
+      'authenticating without session still redirects workspace to login',
+      () {
+        const auth = AuthSessionState(
+          status: AuthStatus.authenticating,
+          isLoading: true,
+        );
 
-      expect(
-        RouteGuards.resolve(auth: auth, location: RoutePaths.hubDashboard),
-        RoutePaths.login,
-      );
-      expect(
-        RouteGuards.resolve(auth: auth, location: RoutePaths.ownerSetup),
-        RoutePaths.login,
-      );
-    });
+        expect(
+          RouteGuards.resolve(auth: auth, location: RoutePaths.hubDashboard),
+          RoutePaths.login,
+        );
+        expect(
+          RouteGuards.resolve(auth: auth, location: RoutePaths.ownerSetup),
+          RoutePaths.login,
+        );
+      },
+    );
 
     test('authenticating with existing session does not flash login', () {
-      final session = _authenticated(role: 'owner', setupCompleted: false).session!;
+      final session = _authenticated(
+        role: 'owner',
+        setupCompleted: false,
+      ).session!;
       final auth = AuthSessionState(
         status: AuthStatus.authenticating,
         session: session,
@@ -135,6 +150,65 @@ void main() {
       expect(
         RouteGuards.resolve(auth: auth, location: RoutePaths.splash),
         RoutePaths.hubDashboard,
+      );
+    });
+
+    test('web marketing stays available at the root', () {
+      const signedOut = AuthSessionState(status: AuthStatus.unauthenticated);
+      final signedIn = _authenticated(role: 'owner', setupCompleted: true);
+      final newOwner = _authenticated(role: 'owner', setupCompleted: false);
+      const recovery = AuthSessionState(
+        status: AuthStatus.unauthenticated,
+        isPasswordRecovery: true,
+      );
+
+      expect(
+        RouteGuards.resolve(
+          auth: signedOut,
+          location: RoutePaths.splash,
+          publicMarketing: true,
+        ),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: signedIn,
+          location: RoutePaths.splash,
+          publicMarketing: true,
+        ),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: signedIn,
+          location: RoutePaths.login,
+          publicMarketing: true,
+        ),
+        RoutePaths.hubDashboard,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: signedOut,
+          location: RoutePaths.hubOrders,
+          publicMarketing: true,
+        ),
+        RoutePaths.login,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: newOwner,
+          location: RoutePaths.splash,
+          publicMarketing: true,
+        ),
+        RoutePaths.ownerSetup,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: recovery,
+          location: RoutePaths.splash,
+          publicMarketing: true,
+        ),
+        RoutePaths.login,
       );
     });
   });

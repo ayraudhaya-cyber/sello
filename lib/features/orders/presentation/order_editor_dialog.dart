@@ -253,16 +253,19 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
     final available = product == null
         ? line?.availableStock
         : _availableForVariant(product, variant);
-    final cap = OrderStockPolicy.maxOrderQuantity(
+    if (!widget.correcting) {
+      return OrderStockPolicy.maxOrderQuantity(
+        allowOrdersAboveAvailableStock:
+            _settings.allowOrdersAboveAvailableStock,
+        availableStock: available,
+      );
+    }
+    return OrderStockPolicy.maxCorrectedOrderQuantity(
       allowOrdersAboveAvailableStock: _settings.allowOrdersAboveAvailableStock,
       availableStock: available,
+      deliveredQuantity: line?.deliveredQuantity ?? 0,
+      heldQuantity: line?.heldQuantity ?? 0,
     );
-    if (!widget.correcting || cap == null) return cap;
-    final ordered = line?.quantity ?? 0;
-    final delivered = line?.deliveredQuantity ?? 0;
-    final undelivered = ordered - delivered < 0 ? 0 : ordered - delivered;
-    final headroom = cap > undelivered ? cap : undelivered;
-    return delivered + headroom;
   }
 
   void _showStockLimitFeedback(num? available) {
@@ -303,6 +306,7 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
             discountType: line.discountType,
             existingItemId: line.id,
             deliveredQuantity: line.deliveredQuantity,
+            heldQuantity: widget.correcting ? line.remainingQuantity : 0,
             productBrand: line.productBrand,
             productAttributes: Map<String, String>.from(line.productAttributes),
           ),
@@ -611,17 +615,20 @@ class OrderEditorDialogState extends ConsumerState<OrderEditorDialog> {
 
   void _addOrIncrementVariant(ProductSummary product, ProductVariant variant) {
     final available = _availableForVariant(product, variant);
-    final max = OrderStockPolicy.maxOrderQuantity(
-      allowOrdersAboveAvailableStock: _settings.allowOrdersAboveAvailableStock,
-      availableStock: available,
-    );
+    final key = variant.id;
+    final index = _lines.indexWhere((l) => l.lineKey == key);
+    final max = index >= 0
+        ? _maxQuantityForVariant(key)
+        : OrderStockPolicy.maxOrderQuantity(
+            allowOrdersAboveAvailableStock:
+                _settings.allowOrdersAboveAvailableStock,
+            availableStock: available,
+          );
     if (max != null && max <= 0) {
       _showStockLimitFeedback(0);
       return;
     }
 
-    final key = variant.id;
-    final index = _lines.indexWhere((l) => l.lineKey == key);
     if (index >= 0) {
       final next = _lines[index].quantity + 1;
       if (max != null && next > max) {

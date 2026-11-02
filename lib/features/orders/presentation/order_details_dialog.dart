@@ -10,6 +10,7 @@ import 'package:sello/features/products/application/product_fields_provider.dart
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/models/order_summary.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 import 'package:sello/shared/models/order_timeline.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_status.dart';
@@ -93,6 +94,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
   OrderCollectionBalance? _collections;
   List<OrderReturnSummary> _returns = const [];
   bool _recording = false;
+  bool _shortOfStock = false;
 
   @override
   void initState() {
@@ -100,6 +102,7 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     _detail = widget.detail;
     Future.microtask(_loadCollections);
     Future.microtask(_loadReturns);
+    Future.microtask(_loadPackingStock);
   }
 
   @override
@@ -107,8 +110,10 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.detail.summary.id != widget.detail.summary.id) {
       _detail = widget.detail;
+      _shortOfStock = false;
       Future.microtask(_loadCollections);
       Future.microtask(_loadReturns);
+      Future.microtask(_loadPackingStock);
     }
   }
 
@@ -140,6 +145,26 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _returns = const []);
+    }
+  }
+
+  Future<void> _loadPackingStock() async {
+    final status = order.status;
+    if (status != OrderStatus.placed &&
+        status != OrderStatus.partiallyDelivered) {
+      if (_shortOfStock) setState(() => _shortOfStock = false);
+      return;
+    }
+    try {
+      final attention = await ref
+          .read(orderRepositoryProvider)
+          .fetchFulfillmentAttention();
+      if (!mounted) return;
+      setState(() {
+        _shortOfStock = attention.waitingOrderIds.contains(order.id);
+      });
+    } catch (_) {
+      if (!mounted) return;
     }
   }
 
@@ -209,6 +234,8 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
       amountPending: _collections?.amountPending ?? 0,
       priorEntries: _collections?.entries ?? const [],
       orderPaymentMethod: order.paymentMethod,
+      transportationCost: order.transportationCost,
+      transportationPayer: order.transportationPayer,
     );
     if (!mounted) return;
     if (!saved) {
@@ -294,6 +321,16 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               message:
                   'Goods still to deliver. This order is added to the customer’s Outstanding when you record delivery — not when the order was saved.',
             ),
+            if (_shortOfStock) ...[
+              const SizedBox(height: 10),
+              const _NoticeBanner(
+                icon: Icons.inventory_2_outlined,
+                tone: AppColors.warning,
+                background: AppColors.warningContainer,
+                message:
+                    'There is not enough on hand to pack this order. Older open orders are supplied first. Deliver what you can, cancel what you will not fulfill, or receive more stock. Placing the order did not remove units from the branch.',
+              ),
+            ],
             const SizedBox(height: _OrderGrid.sectionGap),
           ],
           _InfoGrid(
@@ -445,6 +482,9 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               subtotal: order.subtotal,
               discount: order.displayDiscountAmount,
               tax: order.taxAmount,
+              transportationCost: order.transportationCost,
+              customerPaysTransportation:
+                  order.transportationPayer == TransportationPayer.receiver,
               total: order.total,
               amountPaid: order.isDraft ? null : _amountPaid,
               outstanding: order.isDraft ? null : _outstanding,
@@ -514,7 +554,8 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               onDestructive: canFulfill
                   ? (totalDelivered > 0 ? onCancelRemaining : onCancelOrder)
                   : (canArchive ? onArchive : null),
-              leading: _InvoiceFooterLinks(
+              leading: _OrderFooterLeading(
+                onMarkNotDelivered: widget.onMarkNotDelivered,
                 onCorrectInvoice: widget.onCorrectInvoice,
                 onViewInvoice: onViewInvoice,
                 onPrintInvoice: onPrintInvoice,
@@ -538,7 +579,8 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               onDestructive: totalDelivered > 0
                   ? onCancelRemaining
                   : onCancelOrder,
-              leading: _InvoiceFooterLinks(
+              leading: _OrderFooterLeading(
+                onMarkNotDelivered: widget.onMarkNotDelivered,
                 onCorrectInvoice: widget.onCorrectInvoice,
                 onViewInvoice: onViewInvoice,
                 onPrintInvoice: onPrintInvoice,
@@ -554,7 +596,8 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
           : SelloDialogFooter(
               destructiveLabel: canArchive ? 'Archive' : null,
               onDestructive: canArchive ? onArchive : null,
-              leading: _InvoiceFooterLinks(
+              leading: _OrderFooterLeading(
+                onMarkNotDelivered: widget.onMarkNotDelivered,
                 onCorrectInvoice: widget.onCorrectInvoice,
                 onViewInvoice: onViewInvoice,
                 onPrintInvoice: onPrintInvoice,
@@ -567,6 +610,49 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               primaryLabel: 'Done',
               onPrimary: () => Navigator.of(context).maybePop(),
             ),
+    );
+  }
+}
+
+class _OrderFooterLeading extends StatelessWidget {
+  const _OrderFooterLeading({
+    this.onMarkNotDelivered,
+    this.onCorrectInvoice,
+    this.onViewInvoice,
+    this.onPrintInvoice,
+    this.onWhatsAppInvoice,
+    this.onSmsInvoice,
+  });
+
+  final VoidCallback? onMarkNotDelivered;
+  final VoidCallback? onCorrectInvoice;
+  final VoidCallback? onViewInvoice;
+  final VoidCallback? onPrintInvoice;
+  final VoidCallback? onWhatsAppInvoice;
+  final VoidCallback? onSmsInvoice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (onMarkNotDelivered != null)
+          SelloButton(
+            label: 'Not delivered yet',
+            variant: SelloButtonVariant.outline,
+            size: SelloButtonSize.small,
+            onPressed: onMarkNotDelivered,
+          ),
+        _InvoiceFooterLinks(
+          onCorrectInvoice: onCorrectInvoice,
+          onViewInvoice: onViewInvoice,
+          onPrintInvoice: onPrintInvoice,
+          onWhatsAppInvoice: onWhatsAppInvoice,
+          onSmsInvoice: onSmsInvoice,
+        ),
+      ],
     );
   }
 }
@@ -1389,6 +1475,8 @@ class _TotalsBlock extends StatelessWidget {
     required this.subtotal,
     required this.discount,
     required this.tax,
+    this.transportationCost = 0,
+    this.customerPaysTransportation = false,
     required this.total,
     this.amountPaid,
     this.outstanding,
@@ -1398,6 +1486,8 @@ class _TotalsBlock extends StatelessWidget {
   final num subtotal;
   final num discount;
   final num tax;
+  final num transportationCost;
+  final bool customerPaysTransportation;
   final num total;
   final num? amountPaid;
   final num? outstanding;
@@ -1428,6 +1518,18 @@ class _TotalsBlock extends StatelessWidget {
                   : '—',
               muted: tax <= 0,
             ),
+            if (transportationCost > 0) ...[
+              const SizedBox(height: 8),
+              _TotalLine(
+                label: customerPaysTransportation
+                    ? 'Transportation'
+                    : 'Transportation (paid by seller)',
+                value: SelloFormatters.currency(
+                  transportationCost,
+                  symbol: currencySymbol,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             const Divider(height: 1, color: AppColors.outlinePanel),
             const SizedBox(height: 10),

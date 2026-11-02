@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +21,7 @@ import 'package:sello/features/hub/settings/presentation/hub_settings_page.dart'
 import 'package:sello/features/hub/shared/hub_feature_page.dart';
 import 'package:sello/features/hub/shell/hub_shell.dart';
 import 'package:sello/features/hub/suppliers/presentation/hub_suppliers_page.dart';
+import 'package:sello/features/marketing/presentation/marketing_home_page.dart';
 import 'package:sello/features/mobile/authentication/presentation/login_page.dart';
 import 'package:sello/features/mobile/customers/presentation/sello_customers_page.dart';
 import 'package:sello/features/mobile/dashboard/presentation/sello_dashboard_page.dart';
@@ -49,6 +51,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return RouteGuards.resolve(
         auth: ref.read(authSessionProvider),
         location: location,
+        publicMarketing: kIsWeb,
       );
     },
     errorBuilder: (context, state) => const NotFoundPage(),
@@ -56,7 +59,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: RoutePaths.splash,
         name: 'splash',
-        builder: (context, state) => const SplashPage(),
+        builder: (context, state) =>
+            kIsWeb ? const MarketingHomePage() : const SplashPage(),
       ),
       GoRoute(
         path: RoutePaths.login,

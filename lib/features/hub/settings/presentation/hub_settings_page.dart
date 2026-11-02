@@ -584,7 +584,7 @@ class _InventorySection extends StatelessWidget {
                     value: draft.allowOrdersAboveAvailableStock,
                     label: 'Allow orders beyond available stock',
                     helper:
-                        'Let sales reps place orders even when current stock is insufficient.',
+                        'Let sales reps place orders even when current stock is insufficient. The order still holds that quantity, so available stock for everyone else goes down.',
                     onChanged: (value) async {
                       if (value) {
                         final confirmed = await showSelloDialog(

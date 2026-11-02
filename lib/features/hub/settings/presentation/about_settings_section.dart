@@ -1,6 +1,7 @@
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/help/presentation/sello_help_dialog.dart';
 import 'package:sello/features/hub/settings/presentation/widgets/settings_chrome.dart';
+import 'package:sello/features/updates/presentation/whats_new_dialog.dart';
 import 'package:sello/services/updates/update_check_messages.dart';
 import 'package:sello/services/updates/update_providers.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
@@ -43,7 +44,22 @@ class AboutSettingsSection extends ConsumerWidget {
           description:
               'Version details for this installation. Sello is updated '
               'regularly with improvements for your business.',
-          child: const SelloAppInfoPanel(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SelloAppInfoPanel(),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SelloButton(
+                  label: 'What’s new',
+                  icon: Icons.auto_awesome_outlined,
+                  variant: SelloButtonVariant.secondary,
+                  onPressed: () => showWhatsNewDialog(context, ref),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
         SettingsGroupCard(

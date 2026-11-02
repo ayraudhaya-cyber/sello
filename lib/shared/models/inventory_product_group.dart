@@ -19,6 +19,13 @@ class InventoryProductGroup {
   num get totalQuantity =>
       items.fold<num>(0, (sum, item) => sum + item.quantity);
 
+  num get totalReservedQuantity =>
+      items.fold<num>(0, (sum, item) => sum + item.reservedQuantity);
+
+  /// Sum of each variant's own shortage, so one option's surplus does not hide another.
+  num get shortageQuantity =>
+      items.fold<num>(0, (sum, item) => sum + item.shortageQuantity);
+
   num get totalAvailableQuantity =>
       items.fold<num>(0, (sum, item) => sum + item.availableQuantity);
 

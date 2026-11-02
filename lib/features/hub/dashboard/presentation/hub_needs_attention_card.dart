@@ -112,6 +112,10 @@ class HubNeedsAttentionCard extends ConsumerWidget {
             .setStatusFilter(StockStatusFilter.negativeStock);
         if (!context.mounted) return;
         context.go(RoutePaths.hubInventory);
+      case NeedsAttentionKind.stockShortage:
+        await ref.read(hubInventoryProvider.notifier).openReservedShortage();
+        if (!context.mounted) return;
+        context.go(RoutePaths.hubInventory);
       case NeedsAttentionKind.waitingForStock:
         await _openOrders(ref, context, OrderStatusFilter.openFulfillment);
       case NeedsAttentionKind.placedAwaitingFulfillment:
@@ -158,6 +162,7 @@ class _NeedsAttentionRowState extends State<_NeedsAttentionRow> {
     final icon = switch (widget.item.kind) {
       NeedsAttentionKind.pendingCollections => Icons.fact_check_outlined,
       NeedsAttentionKind.negativeStock => Icons.error_outline_rounded,
+      NeedsAttentionKind.stockShortage => Icons.inventory_2_outlined,
       NeedsAttentionKind.waitingForStock => Icons.inventory_2_outlined,
       NeedsAttentionKind.placedAwaitingFulfillment =>
         Icons.local_shipping_outlined,

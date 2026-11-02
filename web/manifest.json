@@ -1,12 +1,12 @@
 {
     "name": "Sello",
     "short_name": "Sello",
-    "start_url": "/",
+    "start_url": "/login",
     "scope": "/",
     "display": "standalone",
     "background_color": "#ECEDFB",
     "theme_color": "#6C4FF2",
-    "description": "Sello — sales order management for wholesalers and distributors.",
+    "description": "Sello — business operations platform for orders, inventory, customers, payments, and teams.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

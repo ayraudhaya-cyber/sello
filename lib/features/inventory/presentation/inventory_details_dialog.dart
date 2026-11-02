@@ -45,6 +45,13 @@ class InventoryDetailsDialog extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (item.reservedQuantity > item.quantity) ...[
+            const SelloIntelligenceBanner(
+              message:
+                  'Open orders promise more than is on hand. Deliver what you can, cancel the rest, or receive stock. The on-hand quantity is still what is in the branch.',
+            ),
+            const SizedBox(height: _gap),
+          ],
           const SelloIntelligenceBanner(
             message:
                 'Reorder suggestions, velocity alerts, and supplier hints '

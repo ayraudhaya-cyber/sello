@@ -136,9 +136,11 @@ abstract final class SelloHelpContent {
       priority: SelloHelpPriority.medium,
       audience: SelloHelpAudience.all,
       steps: [
-        'Submit order does not reduce stock.',
-        'Record delivery reduces stock and updates Outstanding for unpaid goods.',
-        'Ordering above available stock is allowed only if the Owner turned that setting on.',
+        'Placing an order holds the quantity. On-hand stock does not change until delivery.',
+        'Available stock is what is on hand minus what open orders are holding.',
+        'Record delivery takes the goods out of stock and releases that hold. Outstanding for unpaid goods is updated then.',
+        'Ordering above available stock is allowed only if the Owner turned that setting on. Those orders still hold the quantity.',
+        'If open orders need more than is on hand, deliver what you can, cancel the rest, or receive stock.',
       ],
     ),
   ];

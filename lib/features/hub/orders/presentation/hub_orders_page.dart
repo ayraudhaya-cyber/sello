@@ -402,6 +402,8 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
         amountPending: balance.amountPending,
         priorEntries: balance.entries,
         orderPaymentMethod: order.paymentMethod,
+        transportationCost: order.transportationCost,
+        transportationPayer: order.transportationPayer,
       );
       if (saved && mounted) {
         ref.read(hubOrdersProvider.notifier).refresh();
@@ -644,6 +646,26 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     );
     if (result == null || !mounted) return;
 
+    final summary = detail.summary;
+    final transportChanged =
+        (result.transportationCost - summary.transportationCost).abs() >
+            0.001 ||
+        result.transportationPayer != summary.transportationPayer;
+    if (transportChanged) {
+      try {
+        await ref.read(orderRepositoryProvider).setOrderTransportation(
+          orderId: summary.id,
+          amount: result.transportationCost,
+          payer: result.transportationPayer.dbValue,
+        );
+      } on AppFailure catch (failure) {
+        if (!mounted) return;
+        SelloSnackbars.error(context, failure.message);
+        return;
+      }
+    }
+    if (!mounted) return;
+
     final error = await ref
         .read(hubOrdersProvider.notifier)
         .fulfillOrderItems(orderId: detail.summary.id, lines: result.lines);
@@ -758,7 +780,7 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
       context: context,
       title: 'Not delivered yet?',
       message:
-          '${order.orderNumber} goes back to Placed. The delivered items return to stock. '
+          '${order.orderNumber} goes back to Placed. The delivered items return to stock and are held for this order again. '
           'What the customer owes drops by the value of those items. '
           'Money already received stays on this order. You can deliver it again later.',
       confirmLabel: 'Mark as not delivered',

@@ -60,6 +60,7 @@ enum StockStatusFilter {
   lowStock,
   outOfStock,
   negativeStock,
+  shortage,
   recentlyUpdated,
   archived,
 }

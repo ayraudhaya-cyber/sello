@@ -9,6 +9,7 @@ import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PaymentPageResult {
@@ -711,7 +712,7 @@ class PaymentRepository {
         _client
             .from('orders')
             .select(
-              'id, order_number, total, ordered_at, payment_status, status',
+              'id, order_number, total, ordered_at, payment_status, status, transportation_cost, transportation_payer',
             )
             .eq('customer_id', customerId)
             .inFilter('status', ['placed', 'partially_delivered', 'completed'])
@@ -758,6 +759,10 @@ class PaymentRepository {
             orderedAt:
                 DateTime.tryParse(map['ordered_at'] as String? ?? '') ??
                 DateTime.now().toUtc(),
+            transportationCost: _asNum(map['transportation_cost']),
+            transportationPayer: TransportationPayer.fromDb(
+              map['transportation_payer'] as String?,
+            ),
           ),
         );
       }

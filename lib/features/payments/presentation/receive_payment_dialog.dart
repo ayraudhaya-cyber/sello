@@ -12,11 +12,13 @@ import 'package:sello/features/mobile/dashboard/application/sello_company_settin
 import 'package:sello/features/payments/application/order_collection_rules.dart';
 import 'package:sello/features/payments/application/receive_payment_allocation.dart';
 import 'package:sello/features/payments/presentation/receivable_picker_copy.dart';
+import 'package:sello/features/orders/presentation/transportation_cost_fields.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -69,6 +71,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
   final _bank = TextEditingController();
   final _chequeNumber = TextEditingController();
   final _holder = TextEditingController();
+  final _transportation = TextEditingController();
+  TransportationPayer _transportPayer = TransportationPayer.seller;
+  String? _transportForId;
   DateTime _chequeDate = DateTime.now();
   bool _chequeInHand = true;
   bool _loadingOrders = false;
@@ -96,6 +101,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     _bank.dispose();
     _chequeNumber.dispose();
     _holder.dispose();
+    _transportation.dispose();
     super.dispose();
   }
 
@@ -310,6 +316,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
         _allocations.remove(receivable.id);
       }
       _syncAmountFromAllocations();
+      _primeTransport();
     });
   }
 
@@ -329,6 +336,94 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     });
   }
 
+  ReceivableOrder? get _focusedOrder {
+    final selected = [
+      for (final receivable in _receivables)
+        if (_selectedIds.contains(receivable.id) && !receivable.isOpeningBalance)
+          receivable,
+    ];
+    if (selected.length != 1) return null;
+    return selected.first;
+  }
+
+  void _primeTransport() {
+    final order = _focusedOrder;
+    if (order == null) {
+      _transportForId = null;
+      return;
+    }
+    if (_transportForId == order.id) return;
+    _transportForId = order.id;
+    _transportPayer = order.transportationPayer;
+    _transportation.text = order.transportationCost > 0
+        ? (order.transportationCost == order.transportationCost.roundToDouble()
+              ? order.transportationCost.toStringAsFixed(0)
+              : order.transportationCost.toString())
+        : '';
+  }
+
+  Future<bool> _applyTransport() async {
+    final order = _focusedOrder;
+    if (order == null) return true;
+    final amount = num.tryParse(_transportation.text.trim()) ?? 0;
+    if (amount < 0) {
+      setState(() => _error = 'Transportation cannot be negative.');
+      return false;
+    }
+    final payer = amount <= 0
+        ? TransportationPayer.seller
+        : _transportPayer;
+    final unchanged =
+        (amount - order.transportationCost).abs() < 0.001 &&
+        payer == order.transportationPayer;
+    if (unchanged) return true;
+    try {
+      await ref.read(orderRepositoryProvider).setOrderTransportation(
+        orderId: order.id,
+        amount: amount,
+        payer: payer.dbValue,
+      );
+    } on AppFailure catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+      return false;
+    }
+    if (!mounted) return false;
+    final oldBill = order.transportationPayer == TransportationPayer.receiver
+        ? order.transportationCost
+        : 0;
+    final newBill = payer == TransportationPayer.receiver ? amount : 0;
+    final delta = newBill - oldBill;
+    setState(() {
+      final index = _receivables.indexWhere((row) => row.id == order.id);
+      if (index >= 0) {
+        final current = _receivables[index];
+        _receivables = [
+          for (var i = 0; i < _receivables.length; i++)
+            if (i == index)
+              ReceivableOrder(
+                id: current.id,
+                orderNumber: current.orderNumber,
+                total: current.total + delta,
+                amountPaid: current.amountPaid,
+                orderedAt: current.orderedAt,
+                kind: current.kind,
+                referenceNumber: current.referenceNumber,
+                transportationCost: amount,
+                transportationPayer: payer,
+              )
+            else
+              _receivables[i],
+        ];
+      }
+      final allocated = _allocations[order.id];
+      if (allocated != null && (allocated - order.remaining).abs() < 0.02) {
+        _allocations[order.id] = allocated + delta;
+        _syncAmountFromAllocations();
+      }
+    });
+    return true;
+  }
+
   void _toggleSelectAll(bool? value) {
     setState(() {
       _error = null;
@@ -344,6 +439,7 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
         _selectedIds.clear();
       }
       _syncAmountFromAllocations();
+      _primeTransport();
     });
   }
 
@@ -431,7 +527,9 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
     );
   }
 
-  void _confirm() {
+  Future<void> _confirm() async {
+    final saved = await _applyTransport();
+    if (!saved || !mounted) return;
     final input = _buildInput();
     if (input == null) return;
     if (_method == PaymentMethod.cheque) {
@@ -552,6 +650,18 @@ class _ReceivePaymentDialogState extends ConsumerState<ReceivePaymentDialog> {
                     onSelected: _toggleReceivable,
                     onAmountChanged: _editReceivableAmount,
                   ),
+              ],
+            ),
+          if (_focusedOrder != null)
+            SelloDialogSection(
+              title: 'Transportation',
+              children: [
+                TransportationCostFields(
+                  amountController: _transportation,
+                  payer: _transportPayer,
+                  onPayerChanged: (value) =>
+                      setState(() => _transportPayer = value),
+                ),
               ],
             ),
           SelloDialogSection(

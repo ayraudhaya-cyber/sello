@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,7 +18,22 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Sello — sales order management for wholesalers and distributors.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sello — Business Operations Management Platform</title>
+  <meta name="description" content="Manage orders, inventory, customers, payments, invoicing and your team with Sello, a connected business operations platform.">
+  <link rel="canonical" href="https://sello.cashro.pro">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sello">
+  <meta property="og:url" content="https://sello.cashro.pro">
+  <meta property="og:title" content="Sello — Business Operations Management Platform">
+  <meta property="og:description" content="Manage orders, inventory, customers, payments, invoicing and your team with Sello, a connected business operations platform.">
+  <meta property="og:image" content="https://sello.cashro.pro/email/sello-mark.png">
+  <meta property="og:image:alt" content="Sello logo">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Sello — Business Operations Management Platform">
+  <meta name="twitter:description" content="Manage orders, inventory, customers, payments, invoicing and your team with Sello, a connected business operations platform.">
+  <meta name="twitter:image" content="https://sello.cashro.pro/email/sello-mark.png">
+  <meta name="twitter:image:alt" content="Sello logo">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -29,11 +44,15 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Sello</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#6C4FF2">
 </head>
 <body>
+  <noscript>
+    <h1>Sello — Business Operations Management Platform</h1>
+    <p>Manage orders, inventory, customers, payments, invoicing and your team with Sello, a connected business operations platform.</p>
+    <p><a href="/login">Sign in</a> · <a href="/onboarding">Get started</a></p>
+  </noscript>
   <!--
     Public invoices (/d/…) opened on iPhone skip the Flutter canvas engine.
     Safari’s advanced privacy protection blocks that engine and leaves a
@@ -42,6 +61,17 @@
   <script>
     (function () {
       var path = location.pathname || "/";
+      var isHome = path === "/" || path === "";
+      if (!isHome) {
+        var robots = document.createElement("meta");
+        robots.name = "robots";
+        robots.content = "noindex, nofollow";
+        document.head.appendChild(robots);
+        var canonical = document.querySelector('link[rel="canonical"]');
+        if (canonical && canonical.parentNode) {
+          canonical.parentNode.removeChild(canonical);
+        }
+      }
       var isDocument = path === "/d" || path.indexOf("/d/") === 0;
       var apple =
         /iPhone|iPad|iPod/.test(navigator.userAgent || "") ||

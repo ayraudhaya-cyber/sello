@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.24",
-        "build": 25,
-        "released_at": "2026-11-01",
-        "notes": "Receive payment shows what the payment covers and how much the customer is giving. Extra money can go to their wallet\nAn order marked delivered by mistake can be set back to Placed with Not delivered yet\nCancel a placed or delivered order, put goods back in stock, and give the money back or add it to their wallet\nBank fields use a searchable list of Sri Lankan banks"
+        "version": "1.0.25",
+        "build": 26,
+        "released_at": "2026-11-03",
+        "notes": "Placing an order holds the stock. What is on the shelf stays the same until the delivery is recorded\nAvailable stock is what you have on hand minus what open orders still need\nWhen stock is tight, older open orders are delivered first\nAn order can include a transportation cost, and who pays it"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.24",
-        "build": 25,
-        "released_at": "2026-11-01",
-        "notes": "Receive payment keeps the ticked total fixed and lets you type how much the customer is giving. Extra money above every unpaid order goes to their wallet\nNot delivered yet puts a mistaken delivery back to Placed. Stock and what they owe update; money already received stays on the order\nCancel an order at any time. Delivered goods go back to stock, what they still owe is cleared, and paid money can be given back or added to their wallet\nOrders has a Cancelled tab for stopped orders\nBank fields use a searchable list of Sri Lankan banks when you edit a cheque, record a cheque, or set a supplier bank"
+        "version": "1.0.25",
+        "build": 26,
+        "released_at": "2026-11-03",
+        "notes": "Placing an order holds the stock. What is on the shelf stays the same until you record the delivery\nAvailable stock is what you have on hand minus what open orders still need\nWhen stock is tight, older open orders are delivered first\nInventory has Shortage only, with reserved, on hand, and how many are short. The dashboard opens that list\nAn order can include a transportation cost, and who pays it"
       },
       "minimum": {
         "version": "1.0.0",

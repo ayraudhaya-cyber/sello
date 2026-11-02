@@ -19,6 +19,23 @@ String? _stringValue(dynamic value) {
   return trimmed.isEmpty ? null : trimmed;
 }
 
+/// Every word must appear in the product name, parent SKU, variant label, or variant SKU.
+bool inventoryRowMatchesSearch(InventoryItem item, String needle) {
+  final terms = needle
+      .trim()
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((term) => term.isNotEmpty);
+  if (terms.isEmpty) return true;
+  final haystack = [
+    item.name,
+    item.sku,
+    item.variantLabel ?? '',
+    item.variantSku ?? '',
+  ].join(' ').toLowerCase();
+  return terms.every(haystack.contains);
+}
+
 /// Branch-scoped stock row joined with product identity for Hub Inventory.
 class InventoryItem extends Equatable {
   const InventoryItem({
@@ -113,6 +130,30 @@ class InventoryItem extends Equatable {
 
   bool get isLowStock => stockStatus == StockStatus.low;
   bool get isOutOfStock => stockStatus == StockStatus.out;
+
+  /// Open orders hold more than this branch currently has on hand.
+  bool get isOverReserved => reservedQuantity > quantity;
+
+  /// Units promised beyond what this branch variant has on hand.
+  num get shortageQuantity {
+    final gap = reservedQuantity - quantity;
+    return gap > 0 ? gap : 0;
+  }
+
+  /// One stock-status dropdown choice. Each status uses only its own condition.
+  bool matchesStatus(StockStatusFilter status) {
+    return switch (status) {
+      StockStatusFilter.all => true,
+      StockStatusFilter.archived => !isActive,
+      StockStatusFilter.outOfStock => isActive && quantity <= 0,
+      StockStatusFilter.negativeStock => isActive && quantity < 0,
+      StockStatusFilter.lowStock => isActive && isLowStock,
+      StockStatusFilter.shortage => isActive && isOverReserved,
+      StockStatusFilter.inStock =>
+        isActive && stockStatus == StockStatus.healthy,
+      StockStatusFilter.recentlyUpdated => isActive,
+    };
+  }
 
   InventoryItem copyWith({
     String? imageUrl,

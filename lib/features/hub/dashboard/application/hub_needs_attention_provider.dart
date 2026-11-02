@@ -17,9 +17,13 @@ final hubNeedsAttentionProvider =
       final inventoryFuture = inventoryRepo.fetchDashboardStats(
         branchId: branchId,
       );
+      final shortageFuture = inventoryRepo.countShortageProducts(
+        branchId: branchId,
+      );
       final pending = ref.watch(pendingCollectionsCountProvider);
       final fulfillment = await fulfillmentFuture;
       final inventoryStats = await inventoryFuture;
+      final shortage = await shortageFuture;
 
       return NeedsAttentionCounts(
         placed: fulfillment.placed,
@@ -27,6 +31,7 @@ final hubNeedsAttentionProvider =
         waitingPlaced: fulfillment.waitingPlaced,
         waitingPartial: fulfillment.waitingPartial,
         negativeStock: inventoryStats.negativeStock,
+        stockShortage: shortage,
         pendingCollections: pending,
       );
     });

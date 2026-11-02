@@ -202,10 +202,14 @@ class SelloTableText extends StatelessWidget {
     this.tone = SelloTableTone.normal,
     this.numeric = false,
     this.maxLines = 1,
+    this.color,
   });
 
   final String value;
   final SelloTableTone tone;
+
+  /// Overrides the tone color for a single emphasized value.
+  final Color? color;
 
   /// Uses tabular figures so numeric columns align vertically.
   final bool numeric;
@@ -224,12 +228,13 @@ class SelloTableText extends StatelessWidget {
       ),
     };
 
+    final style = numeric ? AppTypography.numeric(base) : base;
     return Text(
       value,
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
       textAlign: numeric ? TextAlign.right : TextAlign.start,
-      style: numeric ? AppTypography.numeric(base) : base,
+      style: color == null ? style : style?.copyWith(color: color),
     );
   }
 }

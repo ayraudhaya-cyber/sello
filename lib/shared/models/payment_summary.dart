@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:sello/shared/models/order_confirmation.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 
 num _numValue(dynamic value) {
   if (value is num) return value;
@@ -422,6 +423,8 @@ class ReceivableOrder {
     required this.orderedAt,
     this.kind = ReceivableKind.order,
     this.referenceNumber,
+    this.transportationCost = 0,
+    this.transportationPayer = TransportationPayer.seller,
   });
 
   final String id;
@@ -435,6 +438,8 @@ class ReceivableOrder {
 
   /// Pre-Sello invoice / reference on opening-balance receivables.
   final String? referenceNumber;
+  final num transportationCost;
+  final TransportationPayer transportationPayer;
 
   bool get isOpeningBalance => kind == ReceivableKind.openingBalance;
 

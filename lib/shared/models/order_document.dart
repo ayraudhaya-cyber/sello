@@ -88,6 +88,8 @@ class OrderDocument extends Equatable {
     this.subtotal = 0,
     this.discountAmount = 0,
     this.taxAmount = 0,
+    this.transportationCost = 0,
+    this.transportationPayer = 'seller',
     this.paymentStatus,
     this.paymentMethod,
     this.notes,
@@ -130,6 +132,8 @@ class OrderDocument extends Equatable {
   final num subtotal;
   final num discountAmount;
   final num taxAmount;
+  final num transportationCost;
+  final String transportationPayer;
   final num total;
   final String? paymentStatus;
   final String? paymentMethod;
@@ -284,6 +288,9 @@ class OrderDocument extends Equatable {
       subtotal: _numValue(json['subtotal']),
       discountAmount: _numValue(json['discount_amount']),
       taxAmount: _numValue(json['tax_amount']),
+      transportationCost: _numValue(json['transportation_cost']),
+      transportationPayer:
+          _stringValue(json['transportation_payer']) ?? 'seller',
       total: amount ?? _numValue(json['total']),
       paymentStatus:
           _stringValue(json['payment_status']) ?? _stringValue(json['status']),

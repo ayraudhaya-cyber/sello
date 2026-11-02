@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sello/core/animations/app_durations.dart';
+import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/shared/providers/branding_provider.dart';
 import 'package:sello/shared/widgets/branding/branded_logo.dart';
@@ -56,8 +57,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
   @override
   Widget build(BuildContext context) {
     final branding = ref.watch(brandingProvider);
-    final branded =
-        branding.hasCustomLogo || branding.hasCustomNavBackground;
+    final branded = branding.hasCustomLogo || branding.hasCustomNavBackground;
 
     final lockup = FadeTransition(
       opacity: _fade,
@@ -92,19 +92,13 @@ class _SplashPageState extends ConsumerState<SplashPage>
     }
 
     return Scaffold(
-      body: BrandedDarkSurface(
-        expand: true,
-        child: Center(child: lockup),
-      ),
+      body: BrandedDarkSurface(expand: true, child: Center(child: lockup)),
     );
   }
 }
 
 class AppLoadingPage extends StatelessWidget {
-  const AppLoadingPage({
-    super.key,
-    this.message = 'Loading…',
-  });
+  const AppLoadingPage({super.key, this.message = 'Loading…'});
 
   final String message;
 
@@ -248,7 +242,7 @@ class NotFoundPage extends StatelessWidget {
                     if (context.canPop()) {
                       context.pop();
                     } else {
-                      context.go('/');
+                      context.go(RoutePaths.login);
                     }
                   },
                 ),

@@ -1,8 +1,8 @@
 /// When inventory quantity is reduced for a sale.
 ///
-/// Stock deduction today still runs inside `complete_sales_order`. This policy
-/// is the product seam so businesses can choose timing without hardcoding it in
-/// field UX. Wire RPC branches when the setting is persisted and enforced.
+/// Stored company preference. Open orders reserve stock when they are placed,
+/// and on-hand quantity drops when delivery is recorded. This value is not a
+/// live switch.
 enum InventoryMovementPolicy {
   /// Hold stock when the order is saved (draft or confirmed).
   reserveOnOrder,
@@ -36,7 +36,7 @@ enum InventoryMovementPolicy {
         InventoryMovementPolicy.deductOnApproval =>
           'Reduce stock when someone approves the order.',
         InventoryMovementPolicy.deductOnInvoice =>
-          'Reduce stock when the sale is completed (current Sello behaviour).',
+          'On-hand stock drops when delivery is recorded. Open orders hold available stock from the moment they are placed.',
         InventoryMovementPolicy.deductOnDispatch =>
           'Reduce stock when goods are dispatched from the warehouse.',
       };

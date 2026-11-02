@@ -529,6 +529,13 @@ class _OrderBillCard extends StatelessWidget {
                   ),
                 if (doc.taxAmount > 0)
                   _TotalRow(label: 'Tax', value: doc.money(doc.taxAmount)),
+                if (doc.transportationCost > 0)
+                  _TotalRow(
+                    label: doc.transportationPayer == 'receiver'
+                        ? 'Transportation'
+                        : 'Transportation (paid by seller)',
+                    value: doc.money(doc.transportationCost),
+                  ),
                 const SizedBox(height: 8),
                 _GrandTotal(label: 'Total', value: doc.money(doc.total)),
               ],

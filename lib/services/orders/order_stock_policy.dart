@@ -2,6 +2,24 @@ import 'package:sello/shared/utils/formatters.dart';
 
 /// Client-side order quantity limits against known available stock.
 abstract final class OrderStockPolicy {
+  /// Correction cap. [heldQuantity] is the undelivered amount already reserved
+  /// for this saved line. [availableStock] is free stock after that hold.
+  static num? maxCorrectedOrderQuantity({
+    required bool allowOrdersAboveAvailableStock,
+    required num? availableStock,
+    required num deliveredQuantity,
+    required num heldQuantity,
+  }) {
+    final extra = maxOrderQuantity(
+      allowOrdersAboveAvailableStock: allowOrdersAboveAvailableStock,
+      availableStock: availableStock,
+    );
+    if (extra == null) return null;
+    final delivered = deliveredQuantity < 0 ? 0 : deliveredQuantity;
+    final held = heldQuantity < 0 ? 0 : heldQuantity;
+    return delivered + held + extra;
+  }
+
   /// Returns null when no client-side cap applies.
   static num? maxOrderQuantity({
     required bool allowOrdersAboveAvailableStock,

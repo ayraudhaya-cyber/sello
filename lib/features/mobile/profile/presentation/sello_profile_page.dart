@@ -7,6 +7,7 @@ import 'package:sello/features/help/presentation/sello_help_dialog.dart';
 import 'package:sello/features/profile/presentation/my_profile_form.dart';
 import 'package:sello/features/mobile/profile/presentation/sello_pwa_install_card.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/features/updates/presentation/whats_new_dialog.dart';
 import 'package:sello/services/updates/update_check_messages.dart';
 import 'package:sello/services/updates/update_providers.dart';
 import 'package:sello/shared/models/sello_release_manifest.dart';
@@ -177,33 +178,42 @@ class _SelloAboutCard extends ConsumerWidget {
         children: [
           const SelloAppInfoPanel(compact: true),
           const SizedBox(height: AppSpacing.md),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelloButton(
-              label: checking ? 'Checking…' : 'Check for updates',
-              variant: SelloButtonVariant.ghost,
-              size: SelloButtonSize.small,
-              onPressed: checking
-                  ? null
-                  : () async {
-                      final result = await ref
-                          .read(updateCheckControllerProvider.notifier)
-                          .checkNow();
-                      if (!context.mounted) return;
-                      if (result.status == UpdateCheckStatus.upToDate) {
-                        SelloSnackbars.success(
-                          context,
-                          UpdateCheckMessages.manualResult(result),
-                        );
-                      } else if (result.status ==
-                          UpdateCheckStatus.checkFailed) {
-                        SelloSnackbars.info(
-                          context,
-                          UpdateCheckMessages.manualResult(result),
-                        );
-                      }
-                    },
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              SelloButton(
+                label: 'What’s new',
+                variant: SelloButtonVariant.ghost,
+                size: SelloButtonSize.small,
+                onPressed: () => showWhatsNewDialog(context, ref),
+              ),
+              SelloButton(
+                label: checking ? 'Checking…' : 'Check for updates',
+                variant: SelloButtonVariant.ghost,
+                size: SelloButtonSize.small,
+                onPressed: checking
+                    ? null
+                    : () async {
+                        final result = await ref
+                            .read(updateCheckControllerProvider.notifier)
+                            .checkNow();
+                        if (!context.mounted) return;
+                        if (result.status == UpdateCheckStatus.upToDate) {
+                          SelloSnackbars.success(
+                            context,
+                            UpdateCheckMessages.manualResult(result),
+                          );
+                        } else if (result.status ==
+                            UpdateCheckStatus.checkFailed) {
+                          SelloSnackbars.info(
+                            context,
+                            UpdateCheckMessages.manualResult(result),
+                          );
+                        }
+                      },
+              ),
+            ],
           ),
         ],
       ),

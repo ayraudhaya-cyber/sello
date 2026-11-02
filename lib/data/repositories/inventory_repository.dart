@@ -136,17 +136,28 @@ class InventoryRepository {
               .gte('updated_at', cutoff);
         case StockStatusFilter.all:
           break;
+        case StockStatusFilter.shortage:
+          // Only rows that can be short. Scanning every stock row hits the
+          // API page cap and drops later products such as Smart Lock.
+          query = query
+              .eq('products.is_active', true)
+              .or('reserved_quantity.gt.0,quantity.lt.0');
         case StockStatusFilter.inStock:
         case StockStatusFilter.lowStock:
           query = query.eq('products.is_active', true).gt('quantity', 0);
       }
 
       final needle = search.trim();
-      // Search the catalog tables directly, then load those stock rows.
-      // Filtering the embedded product from inventory (`products.or`) does not
-      // narrow the stock list, so typing in Inventory looked like a no-op.
+      // Shortage must see every stock row at the branch. A single newest-N
+      // page drops rows that share the migration timestamp, so a real shortage
+      // can disappear while another one still shows.
       final List<dynamic> response;
-      if (needle.isNotEmpty) {
+      if (status == StockStatusFilter.shortage) {
+        response = await _rangeAll(
+          (from, to) => query.order('id').range(from, to),
+          unlimited: true,
+        );
+      } else if (needle.isNotEmpty) {
         final productIds = await _productIdsForSearch(needle);
         if (productIds.isEmpty) {
           return const InventoryPageResult(items: [], hasMore: false);
@@ -175,18 +186,12 @@ class InventoryRepository {
           return bAt.compareTo(aAt);
         });
 
-      items = items.where((item) {
-        return switch (status) {
-          StockStatusFilter.all => true,
-          StockStatusFilter.archived => !item.isActive,
-          StockStatusFilter.outOfStock => item.isActive && item.quantity <= 0,
-          StockStatusFilter.negativeStock => item.isActive && item.quantity < 0,
-          StockStatusFilter.lowStock => item.isActive && item.isLowStock,
-          StockStatusFilter.inStock =>
-            item.isActive && item.stockStatus == StockStatus.healthy,
-          StockStatusFilter.recentlyUpdated => item.isActive,
-        };
-      }).toList();
+      items = items.where((item) => item.matchesStatus(status)).toList();
+      if (status == StockStatusFilter.shortage && needle.isNotEmpty) {
+        items = items
+            .where((item) => inventoryRowMatchesSearch(item, needle))
+            .toList();
+      }
 
       final paged = paginateGroupedInventory(
         items: items,
@@ -351,20 +356,27 @@ class InventoryRepository {
   }
 
   Future<List<Map<String, dynamic>>> _rangeAll(
-    Future<dynamic> Function(int from, int to) fetch,
-  ) async {
+    Future<dynamic> Function(int from, int to) fetch, {
+    bool unlimited = false,
+  }) async {
     final rows = <Map<String, dynamic>>[];
+    final seen = <String>{};
     const page = 1000;
     var from = 0;
     while (true) {
       final chunk = await fetch(from, from + page - 1);
       final list = chunk as List;
+      var added = 0;
       for (final row in list) {
-        rows.add(Map<String, dynamic>.from(row as Map));
+        final map = Map<String, dynamic>.from(row as Map);
+        final id = map['id'] as String?;
+        if (id != null && !seen.add(id)) continue;
+        rows.add(map);
+        added++;
       }
-      if (list.length < page) break;
+      if (list.isEmpty || list.length < page || added == 0) break;
       from += page;
-      if (from >= 50000) break;
+      if (!unlimited && from >= 50000) break;
     }
     return rows;
   }
@@ -434,21 +446,14 @@ class InventoryRepository {
       );
     }
     items = items.where((item) {
-      return switch (status) {
-        StockStatusFilter.all => true,
-        StockStatusFilter.archived => !item.isActive,
-        StockStatusFilter.outOfStock => item.isActive && item.quantity <= 0,
-        StockStatusFilter.negativeStock => item.isActive && item.quantity < 0,
-        StockStatusFilter.lowStock => item.isActive && item.isLowStock,
-        StockStatusFilter.inStock =>
-          item.isActive && item.stockStatus == StockStatus.healthy,
-        StockStatusFilter.recentlyUpdated =>
-          item.isActive &&
-              item.updatedAt != null &&
-              item.updatedAt!.isAfter(
-                DateTime.now().toUtc().subtract(const Duration(days: 7)),
-              ),
-      };
+      if (status == StockStatusFilter.recentlyUpdated) {
+        return item.isActive &&
+            item.updatedAt != null &&
+            item.updatedAt!.isAfter(
+              DateTime.now().toUtc().subtract(const Duration(days: 7)),
+            );
+      }
+      return item.matchesStatus(status);
     }).toList();
 
     final paged = paginateGroupedInventory(
@@ -498,6 +503,37 @@ class InventoryRepository {
         else
           item,
     ];
+  }
+
+  /// Products at [branchId] where reserved quantity exceeds on-hand.
+  Future<int> countShortageProducts({String? branchId}) async {
+    try {
+      final rows = await _rangeAll((from, to) {
+        var query = _client
+            .from('inventory')
+            .select(
+              'id, product_id, quantity, reserved_quantity, products!inner(deleted_at, is_active)',
+            )
+            .isFilter('products.deleted_at', null)
+            .eq('products.is_active', true)
+            .or('reserved_quantity.gt.0,quantity.lt.0');
+        if (branchId != null && branchId.isNotEmpty) {
+          query = query.eq('branch_id', branchId);
+        }
+        return query.order('id').range(from, to);
+      }, unlimited: true);
+      final products = <String>{};
+      for (final row in rows) {
+        final productId = row['product_id'] as String?;
+        if (productId == null) continue;
+        final quantity = _asNum(row['quantity']);
+        final reserved = _asNum(row['reserved_quantity']);
+        if (reserved > quantity) products.add(productId);
+      }
+      return products.length;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<InventoryDashboardStats> fetchDashboardStats({

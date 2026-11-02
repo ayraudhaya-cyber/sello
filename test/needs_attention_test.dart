@@ -52,6 +52,16 @@ void main() {
       expect(items.single.title, '1 product has negative stock');
     });
 
+    test('reserved shortage opens the inventory shortage list', () {
+      final items = NeedsAttentionLogic.build(
+        const NeedsAttentionCounts(stockShortage: 2),
+      );
+      expect(items.single.kind, NeedsAttentionKind.stockShortage);
+      expect(items.single.priority, NeedsAttentionPriority.high);
+      expect(items.single.route, RoutePaths.hubInventory);
+      expect(items.single.title, '2 products are short of reserved stock');
+    });
+
     test('zero or positive stock does not create negative-stock alert', () {
       expect(
         NeedsAttentionLogic.build(const NeedsAttentionCounts(negativeStock: 0)),

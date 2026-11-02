@@ -8,6 +8,7 @@ enum NeedsAttentionPriority { high, medium }
 enum NeedsAttentionKind {
   pendingCollections,
   negativeStock,
+  stockShortage,
   waitingForStock,
   placedAwaitingFulfillment,
   partiallyDelivered,
@@ -43,6 +44,7 @@ class NeedsAttentionCounts extends Equatable {
     this.waitingPlaced = 0,
     this.waitingPartial = 0,
     this.negativeStock = 0,
+    this.stockShortage = 0,
     this.pendingCollections = 0,
   });
 
@@ -60,6 +62,9 @@ class NeedsAttentionCounts extends Equatable {
 
   /// Active products with physical `inventory.quantity < 0` (branch-scoped).
   final int negativeStock;
+
+  /// Active products whose reserved quantity exceeds on-hand (branch-scoped).
+  final int stockShortage;
 
   /// Sales Rep collections waiting for Owner / Manager approval.
   final int pendingCollections;
@@ -81,6 +86,7 @@ class NeedsAttentionCounts extends Equatable {
   bool get isEmpty =>
       pendingCollections <= 0 &&
       negativeStock <= 0 &&
+      stockShortage <= 0 &&
       waitingForStock <= 0 &&
       placedAwaitingFulfillment <= 0 &&
       partialNeedingAttention <= 0;
@@ -89,6 +95,7 @@ class NeedsAttentionCounts extends Equatable {
     var n = 0;
     if (pendingCollections > 0) n++;
     if (negativeStock > 0) n++;
+    if (stockShortage > 0) n++;
     if (waitingForStock > 0) n++;
     if (placedAwaitingFulfillment > 0) n++;
     if (partialNeedingAttention > 0) n++;
@@ -102,6 +109,7 @@ class NeedsAttentionCounts extends Equatable {
         waitingPlaced,
         waitingPartial,
         negativeStock,
+        stockShortage,
         pendingCollections,
       ];
 }
@@ -134,6 +142,20 @@ abstract final class NeedsAttentionLogic {
           title: counts.negativeStock == 1
               ? '1 product has negative stock'
               : '${counts.negativeStock} products have negative stock',
+          route: RoutePaths.hubInventory,
+        ),
+      );
+    }
+
+    if (counts.stockShortage > 0) {
+      items.add(
+        NeedsAttentionItem(
+          kind: NeedsAttentionKind.stockShortage,
+          priority: NeedsAttentionPriority.high,
+          count: counts.stockShortage,
+          title: counts.stockShortage == 1
+              ? '1 product is short of reserved stock'
+              : '${counts.stockShortage} products are short of reserved stock',
           route: RoutePaths.hubInventory,
         ),
       );

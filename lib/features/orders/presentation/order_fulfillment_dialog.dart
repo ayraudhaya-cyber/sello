@@ -4,15 +4,24 @@ import 'package:sello/core/responsive/responsive.dart';
 import 'package:sello/core/theme/theme.dart';
 import 'package:sello/services/orders/order_fulfillment_math.dart';
 import 'package:sello/shared/models/order_summary.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
+import 'transportation_cost_fields.dart';
+
 /// Result of recording a delivery against an open order.
 class OrderFulfillmentResult {
-  const OrderFulfillmentResult({required this.lines});
+  const OrderFulfillmentResult({
+    required this.lines,
+    this.transportationCost = 0,
+    this.transportationPayer = TransportationPayer.seller,
+  });
 
   /// Deliver quantities > 0 keyed by order item id.
   final List<({String orderItemId, num quantity})> lines;
+  final num transportationCost;
+  final TransportationPayer transportationPayer;
 }
 
 /// Owner/Manager and Sales — record what was actually delivered (full or partial).
@@ -47,6 +56,8 @@ class OrderFulfillmentDialog extends StatefulWidget {
 
 class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
   late final Map<String, TextEditingController> _controllers;
+  late final TextEditingController _transportation;
+  TransportationPayer _payer = TransportationPayer.seller;
   String? _error;
 
   List<OrderLineItem> get _openLines => widget.detail.lines
@@ -67,6 +78,16 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
           text: SelloFormatters.quantity(line.remainingQuantity),
         ),
     };
+    final order = widget.detail.summary;
+    _payer = order.transportationPayer;
+    final cost = order.transportationCost;
+    _transportation = TextEditingController(
+      text: cost > 0
+          ? (cost == cost.roundToDouble()
+                ? cost.toStringAsFixed(0)
+                : cost.toString())
+          : '',
+    );
   }
 
   @override
@@ -74,6 +95,7 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
     for (final controller in _controllers.values) {
       controller.dispose();
     }
+    _transportation.dispose();
     super.dispose();
   }
 
@@ -126,7 +148,21 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
       return;
     }
 
-    Navigator.of(context).pop(OrderFulfillmentResult(lines: deliveries));
+    final transport = num.tryParse(_transportation.text.trim()) ?? 0;
+    if (transport < 0) {
+      setState(() => _error = 'Transportation cannot be negative.');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      OrderFulfillmentResult(
+        lines: deliveries,
+        transportationCost: transport,
+        transportationPayer: transport <= 0
+            ? TransportationPayer.seller
+            : _payer,
+      ),
+    );
   }
 
   @override
@@ -190,6 +226,12 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
                 onPressed: _clearAll,
               ),
             ],
+          ),
+          const SizedBox(height: 20),
+          TransportationCostFields(
+            amountController: _transportation,
+            payer: _payer,
+            onPayerChanged: (value) => setState(() => _payer = value),
           ),
           const SizedBox(height: 20),
           if (_openLines.isEmpty)

@@ -9,16 +9,24 @@ import 'package:sello/shared/models/user_role.dart';
 /// Centralized redirect / guard decisions for GoRouter.
 abstract final class RouteGuards {
   /// Returns a redirect location, or null to allow navigation.
+  ///
+  /// [publicMarketing] is true on the web, where `/` is the public site for
+  /// visitors and signed-in users. Native apps keep `/` as the cold-start
+  /// splash that continues into the workspace. Owner setup, password
+  /// recovery, and email confirmation still take priority over the site.
   static String? resolve({
     required AuthSessionState auth,
     required String location,
+    bool publicMarketing = false,
   }) {
     final isSplash = location == RoutePaths.splash;
     final isLogin = location == RoutePaths.login;
     final isOnboarding = location == RoutePaths.onboarding;
-    final isDocument = location == RoutePaths.orderDocument ||
+    final isDocument =
+        location == RoutePaths.orderDocument ||
         location.startsWith('${RoutePaths.orderDocument}/');
     final isPublic = isSplash || isLogin || isOnboarding || isDocument;
+    final showMarketing = publicMarketing && isSplash;
 
     // Session restoration — preserve the browser URL during bootstrap so a
     // refresh on /hub/settings (etc.) does not bounce through splash → home.
@@ -30,7 +38,7 @@ abstract final class RouteGuards {
     // If a workspace session is already loaded (e.g. Owner setup → reloadSession),
     // stay put so we do not flash /login before hydration finishes.
     if (auth.isAuthenticating) {
-      if (isLogin || isOnboarding || isDocument) return null;
+      if (isLogin || isOnboarding || isDocument || showMarketing) return null;
       if (auth.session != null) return null;
       return RoutePaths.login;
     }
@@ -51,6 +59,7 @@ abstract final class RouteGuards {
         home: home,
       );
       if (setupRedirect != null) return setupRedirect;
+      if (showMarketing) return null;
       if (isPublic) return home;
       if (!_workspaceMayAccess(session.appRole, location)) {
         return home;
@@ -80,7 +89,7 @@ abstract final class RouteGuards {
     }
 
     if (!auth.isAuthenticated) {
-      if (isLogin || isOnboarding || isDocument) return null;
+      if (isLogin || isOnboarding || isDocument || showMarketing) return null;
       return RoutePaths.login;
     }
 
@@ -145,7 +154,9 @@ abstract final class RouteTitles {
   static List<BreadcrumbData> breadcrumbsFor(String location) {
     final isHub = location.startsWith(RoutePaths.hub);
     final root = isHub ? 'Sello Hub' : 'Sello Go';
-    final rootPath = isHub ? RoutePaths.hubDashboard : RoutePaths.selloDashboard;
+    final rootPath = isHub
+        ? RoutePaths.hubDashboard
+        : RoutePaths.selloDashboard;
     final title = titleFor(location);
 
     if (location == rootPath) {

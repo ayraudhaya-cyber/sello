@@ -234,6 +234,18 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
     await loadStock(resetPage: true);
   }
 
+  /// Dashboard shortage row. Keeps the signed-in branch and drops a leftover
+  /// category or search so the list matches the dashboard count.
+  Future<void> openReservedShortage() async {
+    state = state.copyWith(
+      statusFilter: StockStatusFilter.shortage,
+      search: '',
+      clearCategory: true,
+      page: 0,
+    );
+    await loadStock(resetPage: true);
+  }
+
   Future<void> setCategoryFilter(String? categoryId) async {
     state = state.copyWith(
       categoryId: categoryId,

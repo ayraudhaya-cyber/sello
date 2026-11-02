@@ -1,6 +1,7 @@
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 
 /// Shared order math — quantity × price − discount (+ future tax).
 abstract final class OrderCalculations {
@@ -54,7 +55,7 @@ abstract final class OrderCalculations {
     return (subtotal - (afterPercent - amount)).clamp(0, subtotal);
   }
 
-  static num grandTotal({
+  static num goodsTotal({
     required num subtotal,
     num orderDiscount = 0,
     num orderDiscountPercent = 0,
@@ -67,6 +68,26 @@ abstract final class OrderCalculations {
     );
     final afterDiscount = (subtotal - discount).clamp(0, double.infinity);
     return afterDiscount + taxAmount;
+  }
+
+  /// Customer-facing total. Receiver-paid transport is included; seller-paid is not.
+  static num grandTotal({
+    required num subtotal,
+    num orderDiscount = 0,
+    num orderDiscountPercent = 0,
+    num taxAmount = 0,
+    num transportationCost = 0,
+    bool customerPaysTransportation = false,
+  }) {
+    final goods = goodsTotal(
+      subtotal: subtotal,
+      orderDiscount: orderDiscount,
+      orderDiscountPercent: orderDiscountPercent,
+      taxAmount: taxAmount,
+    );
+    final transport = transportationCost < 0 ? 0 : transportationCost;
+    if (!customerPaysTransportation || transport <= 0) return goods;
+    return goods + transport;
   }
 }
 
@@ -87,6 +108,7 @@ class OrderLineDraft {
     this.discountType,
     this.existingItemId,
     this.deliveredQuantity = 0,
+    this.heldQuantity = 0,
     this.productBrand,
     this.productAttributes = const {},
   });
@@ -115,6 +137,10 @@ class OrderLineDraft {
   /// Already fulfilled units. Used so a correction can keep those units
   /// and only ask stock for a real increase.
   final num deliveredQuantity;
+
+  /// Undelivered quantity already reserved for this saved line.
+  /// Stays at the loaded value while the quantity field is edited.
+  final num heldQuantity;
   final String? productBrand;
   final Map<String, String> productAttributes;
 
@@ -172,6 +198,7 @@ class OrderLineDraft {
       discountType: clearDiscount ? null : (discountType ?? this.discountType),
       existingItemId: existingItemId,
       deliveredQuantity: deliveredQuantity,
+      heldQuantity: heldQuantity,
       productBrand: productBrand,
       productAttributes: productAttributes,
     );

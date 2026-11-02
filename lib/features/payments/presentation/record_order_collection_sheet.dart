@@ -8,6 +8,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/features/orders/presentation/order_confirmation_share_sheet.dart';
+import 'package:sello/features/orders/presentation/transportation_cost_fields.dart';
 import 'package:sello/features/payments/application/order_collection_rules.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/feedback/sello_activity.dart';
@@ -15,6 +16,7 @@ import 'package:sello/shared/models/cheque_summary.dart';
 import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_summary.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -34,6 +36,8 @@ Future<bool> showRecordOrderCollectionSheet({
   num amountPending = 0,
   List<OrderCollectionEntry> priorEntries = const [],
   PaymentMethod? orderPaymentMethod,
+  num transportationCost = 0,
+  TransportationPayer transportationPayer = TransportationPayer.seller,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -55,6 +59,8 @@ Future<bool> showRecordOrderCollectionSheet({
       amountPending: amountPending,
       priorEntries: priorEntries,
       orderPaymentMethod: orderPaymentMethod,
+      transportationCost: transportationCost,
+      transportationPayer: transportationPayer,
     ),
   ).then((value) => value ?? false);
 }
@@ -74,6 +80,8 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
     this.amountPending = 0,
     this.priorEntries = const [],
     this.orderPaymentMethod,
+    this.transportationCost = 0,
+    this.transportationPayer = TransportationPayer.seller,
   });
 
   final String customerId;
@@ -90,6 +98,8 @@ class RecordOrderCollectionSheet extends ConsumerStatefulWidget {
 
   /// How the order was placed. Only used to pre-select the method chip.
   final PaymentMethod? orderPaymentMethod;
+  final num transportationCost;
+  final TransportationPayer transportationPayer;
 
   @override
   ConsumerState<RecordOrderCollectionSheet> createState() =>
@@ -105,7 +115,9 @@ class _RecordOrderCollectionSheetState
   final _bank = TextEditingController();
   final _chequeNumber = TextEditingController();
   final _holder = TextEditingController();
+  final _transportation = TextEditingController();
   late PaymentMethod _method;
+  TransportationPayer _transportPayer = TransportationPayer.seller;
   DateTime _chequeDate = DateTime.now();
   bool _saving = false;
   bool _loading = true;
@@ -133,8 +145,13 @@ class _RecordOrderCollectionSheetState
     _method = OrderCollectionAssociation.suggestedMethodFromOrder(
       widget.orderPaymentMethod,
     );
+    _transportPayer = widget.transportationPayer;
+    _transportation.text = widget.transportationCost > 0
+        ? _plain(widget.transportationCost)
+        : '';
     _holder.text = widget.customerName;
     _writeAmount(widget.outstanding);
+    _followedCeiling = widget.outstanding;
     Future.microtask(_loadAssociatedCheques);
   }
 
@@ -147,6 +164,7 @@ class _RecordOrderCollectionSheetState
     _bank.dispose();
     _chequeNumber.dispose();
     _holder.dispose();
+    _transportation.dispose();
     super.dispose();
   }
 
@@ -199,13 +217,29 @@ class _RecordOrderCollectionSheetState
     return parsed < 0 ? 0 : parsed;
   }
 
+  num get _enteredTransport {
+    final parsed = num.tryParse(_transportation.text.trim()) ?? 0;
+    return parsed < 0 ? 0 : parsed;
+  }
+
+  num get _transportOnBill =>
+      _transportPayer == TransportationPayer.receiver && _enteredTransport > 0
+      ? _enteredTransport
+      : 0;
+
+  num get _storedTransportOnBill =>
+      widget.transportationPayer == TransportationPayer.receiver
+      ? widget.transportationCost
+      : 0;
+
+  num get _transportDelta => _transportOnBill - _storedTransportOnBill;
+
   /// Room left after an associated cheque that this save is not collecting.
   num get _collectableNow {
-    final reserved =
-        _match != null && _match!.usesExisting && !_usingExisting
+    final reserved = _match != null && _match!.usesExisting && !_usingExisting
         ? _match!.applicableAmount
         : 0;
-    final room = widget.outstanding - reserved;
+    final room = widget.outstanding + _transportDelta - reserved;
     return room < 0 ? 0 : room;
   }
 
@@ -221,10 +255,12 @@ class _RecordOrderCollectionSheetState
   String _money(num value) =>
       SelloFormatters.currency(value, symbol: widget.currencySymbol);
 
+  String _plain(num value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toString();
+
   void _writeAmount(num value) {
-    _amount.text = value == value.roundToDouble()
-        ? value.toStringAsFixed(0)
-        : value.toString();
+    _amount.text = _plain(value);
   }
 
   void _writeWallet(num value) {
@@ -256,6 +292,23 @@ class _RecordOrderCollectionSheetState
   }
 
   void _syncAmountToCeiling() => _syncSettlementToCeiling();
+
+  num? _followedCeiling;
+
+  void _onTransportChanged() {
+    final previousAmount = _parsedAmount;
+    final wasFull =
+        _followedCeiling != null &&
+        previousAmount != null &&
+        (previousAmount - _followedCeiling!).abs() < 0.02;
+    setState(() {
+      _error = null;
+      if (wasFull || _amount.text.trim().isEmpty) {
+        _syncSettlementToCeiling();
+      }
+      _followedCeiling = _collectableNow;
+    });
+  }
 
   void _applyDefaultWallet() {
     final discount = _resolvedDiscount;
@@ -370,6 +423,19 @@ class _RecordOrderCollectionSheetState
     var walletSaved = false;
     SelloActivity.begin();
     try {
+      final storedPayer = widget.transportationPayer;
+      final transportChanged =
+          (_enteredTransport - widget.transportationCost).abs() > 0.001 ||
+          _transportPayer != storedPayer;
+      if (transportChanged) {
+        await ref.read(orderRepositoryProvider).setOrderTransportation(
+          orderId: widget.orderId,
+          amount: _enteredTransport,
+          payer: _enteredTransport <= 0
+              ? TransportationPayer.seller.dbValue
+              : _transportPayer.dbValue,
+        );
+      }
       // Put the discount on the cash/card/bank row when present; otherwise on
       // the wallet row so a wallet-only settlement can still write off.
       // Discount-only (no cash/wallet) records amount 0 + discount.
@@ -543,7 +609,7 @@ class _RecordOrderCollectionSheetState
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    final outstandingMoney = _money(widget.outstanding);
+    final outstandingMoney = _money(widget.outstanding + _transportDelta);
     final match = _match;
     final canDiscount = _discountAllowed();
     // Keep Sales settings subscribed so the discount field appears when loaded.
@@ -663,6 +729,16 @@ class _RecordOrderCollectionSheetState
                   amountLabel: _money(match.applicableAmount),
                 ),
               ],
+              const SizedBox(height: 16),
+              TransportationCostFields(
+                amountController: _transportation,
+                payer: _transportPayer,
+                onAmountChanged: (_) => _onTransportChanged(),
+                onPayerChanged: (value) {
+                  _transportPayer = value;
+                  _onTransportChanged();
+                },
+              ),
               if (_showWallet) ...[
                 const SizedBox(height: 16),
                 SelloTextField(

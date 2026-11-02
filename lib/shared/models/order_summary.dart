@@ -5,6 +5,7 @@ import 'package:sello/shared/models/order_upsert_input.dart';
 import 'package:sello/shared/models/payment_method.dart';
 import 'package:sello/shared/models/payment_status.dart';
 import 'package:sello/shared/models/role_permission_profile.dart';
+import 'package:sello/shared/models/transportation_payer.dart';
 
 num _numValue(dynamic value) {
   if (value is num) return value;
@@ -73,6 +74,8 @@ class OrderSummary extends Equatable {
     this.cancellationReason,
     this.cancellationPaidDestination,
     this.cancellationPaidAmount = 0,
+    this.transportationCost = 0,
+    this.transportationPayer = TransportationPayer.seller,
   });
 
   final String id;
@@ -112,6 +115,12 @@ class OrderSummary extends Equatable {
   /// none | cash | wallet. Set when the order was cancelled.
   final String? cancellationPaidDestination;
   final num cancellationPaidAmount;
+
+  /// Delivery cost shown on the invoice. Separate from discounts.
+  final num transportationCost;
+
+  /// Seller pays does not change [total]. Customer pays is included in [total].
+  final TransportationPayer transportationPayer;
 
   /// Combined discount for display (percent first, then amount).
   num get displayDiscountAmount {
@@ -167,6 +176,10 @@ class OrderSummary extends Equatable {
         json['cancellation_paid_destination'],
       ),
       cancellationPaidAmount: _numValue(json['cancellation_paid_amount']),
+      transportationCost: _numValue(json['transportation_cost']),
+      transportationPayer: TransportationPayer.fromDb(
+        json['transportation_payer'] as String?,
+      ),
     );
   }
 
@@ -349,12 +362,16 @@ class FulfillmentAttentionCounts {
     this.partiallyDelivered = 0,
     this.waitingPlaced = 0,
     this.waitingPartial = 0,
+    this.waitingOrderIds = const <String>{},
   });
 
   final int placed;
   final int partiallyDelivered;
   final int waitingPlaced;
   final int waitingPartial;
+
+  /// Open orders that cannot be fully packed, oldest claim first.
+  final Set<String> waitingOrderIds;
 }
 
 class SalesRepOption {

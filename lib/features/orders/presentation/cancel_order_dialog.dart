@@ -142,7 +142,7 @@ class _CancelOrderDialogState extends State<CancelOrderDialog> {
     return SelloFormDialog(
       title: 'Cancel order',
       subtitle:
-          '${widget.order.orderNumber} stops here. Delivered items go back to stock. What they still owe on this order is cleared.',
+          '${widget.order.orderNumber} stops here. Delivered items go back to stock. Units that were not delivered are no longer held. What they still owe on this order is cleared.',
       maxWidth: 560,
       fullscreenOnMobile: true,
       body: _loading

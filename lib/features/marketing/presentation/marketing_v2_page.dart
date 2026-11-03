@@ -68,6 +68,37 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
     await launchUrl(Uri.parse(uri));
   }
 
+  void _showContact() {
+    setState(() => _menuOpen = false);
+    final motion = !MediaQuery.disableAnimationsOf(context);
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close contact',
+      barrierColor: Colors.transparent,
+      transitionDuration: motion ? AppDurations.normal : Duration.zero,
+      pageBuilder: (context, _, _) => _V2ContactDialog(
+        email: _email,
+        phoneLabel: _phoneLabel,
+        phoneUri: _phoneUri,
+        onOpen: _open,
+      ),
+      transitionBuilder: (context, animation, _, child) {
+        final curve = CurvedAnimation(
+          parent: animation,
+          curve: AppCurves.standard,
+        );
+        return FadeTransition(
+          opacity: curve,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.98, end: 1).animate(curve),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final motion = !MediaQuery.disableAnimationsOf(context);
@@ -131,8 +162,9 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
                             onToggleMenu: () =>
                                 setState(() => _menuOpen = !_menuOpen),
                             onFeatures: () => _scrollTo(_featuresKey),
+                            onFaq: () => _scrollTo(_faqKey),
                             onPricing: () {},
-                            onContact: () => _scrollTo(_contactKey),
+                            onContact: _showContact,
                             onV1: _toTop,
                             onSignIn: _signIn,
                             onGetStarted: _getStarted,
@@ -145,8 +177,9 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
                                 ? _V2MobileMenu(
                                     key: const ValueKey('v2-menu'),
                                     onFeatures: () => _scrollTo(_featuresKey),
+                                    onFaq: () => _scrollTo(_faqKey),
                                     onPricing: () {},
-                                    onContact: () => _scrollTo(_contactKey),
+                                    onContact: _showContact,
                                     onV1: _toTop,
                                     onSignIn: _signIn,
                                     onGetStarted: _getStarted,
@@ -255,6 +288,7 @@ class _V2Nav extends StatelessWidget {
     required this.menuOpen,
     required this.onToggleMenu,
     required this.onFeatures,
+    required this.onFaq,
     required this.onPricing,
     required this.onContact,
     required this.onV1,
@@ -265,6 +299,7 @@ class _V2Nav extends StatelessWidget {
   final bool menuOpen;
   final VoidCallback onToggleMenu;
   final VoidCallback onFeatures;
+  final VoidCallback onFaq;
   final VoidCallback onPricing;
   final VoidCallback onContact;
   final VoidCallback onV1;
@@ -310,6 +345,9 @@ class _V2Nav extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _V2NavLink(label: 'Features', onPressed: onFeatures),
+                          const SizedBox(width: 18),
+                          _V2NavLink(label: 'FAQ', onPressed: onFaq),
+                          const SizedBox(width: 18),
                           _V2NavLink(label: 'Contact', onPressed: onContact),
                         ],
                       ),
@@ -386,6 +424,7 @@ class _V2MobileMenu extends StatelessWidget {
   const _V2MobileMenu({
     super.key,
     required this.onFeatures,
+    required this.onFaq,
     required this.onPricing,
     required this.onContact,
     required this.onV1,
@@ -394,6 +433,7 @@ class _V2MobileMenu extends StatelessWidget {
   });
 
   final VoidCallback onFeatures;
+  final VoidCallback onFaq;
   final VoidCallback onPricing;
   final VoidCallback onContact;
   final VoidCallback onV1;
@@ -420,6 +460,7 @@ class _V2MobileMenu extends StatelessWidget {
                 children: [
                   for (final item in [
                     ('Features', onFeatures),
+                    ('FAQ', onFaq),
                     ('Contact', onContact),
                   ])
                     SizedBox(
@@ -521,11 +562,13 @@ class _V2GlowButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.expanded = false,
+    this.height = 46,
   });
 
   final String label;
   final VoidCallback onPressed;
   final bool expanded;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -545,7 +588,7 @@ class _V2GlowButton extends StatelessWidget {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          minimumSize: Size(expanded ? double.infinity : 48, 46),
+          minimumSize: Size(expanded ? double.infinity : 48, height),
           padding: const EdgeInsets.symmetric(horizontal: 20),
           shape: const StadiumBorder(),
           textStyle: const TextStyle(
@@ -637,7 +680,7 @@ class _V2Hero extends StatelessWidget {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 460),
                     child: Text(
-                      'Manage orders, inventory, customers, payments and your team, with a dedicated Sales Rep App.',
+                      'Manage orders, inventory, customers and payments,\nand your team, with a dedicated Sales Rep App.',
                       textAlign: sideBySide
                           ? TextAlign.start
                           : TextAlign.center,
@@ -838,7 +881,11 @@ class _V2LogoMarqueeState extends State<_V2LogoMarquee>
   static const _logos = <Widget>[
     _StripImageLogo('assets/brand/v2_logo_unexon.png', 'Unexon'),
     _UniqeLogo(),
-    _StripImageLogo('assets/brand/v2_logo_namson.png', 'Namson Lanka'),
+    _StripImageLogo(
+      'assets/brand/v2_logo_namson.png',
+      'Namson Lanka',
+      scale: 0.84,
+    ),
     _WordmarkLogo('Alder & Co'),
     _MarkWordLogo('Northlane'),
   ];
@@ -1019,16 +1066,17 @@ class _V2Statement extends StatelessWidget {
 const _stripInk = Color(0xFFC4B6D2);
 
 class _StripImageLogo extends StatelessWidget {
-  const _StripImageLogo(this.asset, this.label);
+  const _StripImageLogo(this.asset, this.label, {this.scale = 1});
 
   final String asset;
   final String label;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     return Image.asset(
       asset,
-      height: _V2LogoMarqueeState._logoHeight,
+      height: _V2LogoMarqueeState._logoHeight * scale,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
       semanticLabel: label,
@@ -1645,35 +1693,35 @@ _AudienceTone _audienceTone(_AudienceKind kind) {
   return switch (kind) {
     _AudienceKind.wholesale => const _AudienceTone(
       title: 'Wholesale & Distribution',
-      body: 'Manage customer orders, stock, deliveries and collections.',
-      wash: Color(0xFFE4D9FF),
-      base: Color(0x00FFFFFF),
-      ink: Color(0xFF3F2C9E),
-      soft: Color(0xFFF4EFFF),
+      body: 'Manage customer orders, stock,\ndeliveries and collections.',
+      wash: Color(0xFF8E70D6),
+      base: Color(0xFF5840A8),
+      ink: Color(0xFF4A348F),
+      soft: Color(0xFFE4D8FF),
     ),
     _AudienceKind.retail => const _AudienceTone(
       title: 'Retail Businesses',
-      body: 'Keep products, inventory, customers and sales organised.',
-      wash: Color(0xFFE4D9FF),
-      base: Color(0x00FFFFFF),
-      ink: Color(0xFF3F2C9E),
-      soft: Color(0xFFF4EFFF),
+      body: 'Keep products, inventory,\ncustomers and sales organised.',
+      wash: Color(0xFF8E70D6),
+      base: Color(0xFF5840A8),
+      ink: Color(0xFF4A348F),
+      soft: Color(0xFFE4D8FF),
     ),
     _AudienceKind.trading => const _AudienceTone(
       title: 'Trading Businesses',
-      body: 'Manage product catalogues, customer accounts and transactions.',
-      wash: Color(0xFFE4D9FF),
-      base: Color(0x00FFFFFF),
-      ink: Color(0xFF3F2C9E),
-      soft: Color(0xFFF4EFFF),
+      body: 'Manage product catalogues,\ncustomer accounts and transactions.',
+      wash: Color(0xFF8E70D6),
+      base: Color(0xFF5840A8),
+      ink: Color(0xFF4A348F),
+      soft: Color(0xFFE4D8FF),
     ),
     _AudienceKind.product => const _AudienceTone(
       title: 'Product-Based Businesses',
-      body: 'Simplify order processing and everyday operations.',
-      wash: Color(0xFFE4D9FF),
-      base: Color(0x00FFFFFF),
-      ink: Color(0xFF3F2C9E),
-      soft: Color(0xFFF4EFFF),
+      body: 'Simplify order processing\nand everyday operations.',
+      wash: Color(0xFF8E70D6),
+      base: Color(0xFF5840A8),
+      ink: Color(0xFF4A348F),
+      soft: Color(0xFFE4D8FF),
     ),
   };
 }
@@ -1715,7 +1763,7 @@ class _AudienceArtPainter extends CustomPainter {
     canvas.drawPath(
       route,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.85)
+        ..color = tone.soft.withValues(alpha: 0.95)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
         ..strokeCap = StrokeCap.round,
@@ -1725,7 +1773,7 @@ class _AudienceArtPainter extends CustomPainter {
       canvas,
       Rect.fromLTWH(w * 0.16, h * 0.30, w * 0.14, h * 0.16),
       tone,
-      fill: Colors.white,
+      fill: tone.soft,
     );
     _rrect(
       canvas,
@@ -1737,10 +1785,10 @@ class _AudienceArtPainter extends CustomPainter {
       canvas,
       Rect.fromLTWH(w * 0.66, h * 0.44, w * 0.13, h * 0.11),
       6,
-      Colors.white.withValues(alpha: 0.88),
+      tone.soft.withValues(alpha: 0.92),
     );
-    _wheel(canvas, Offset(w * 0.54, h * 0.64), w * 0.038);
-    _wheel(canvas, Offset(w * 0.76, h * 0.64), w * 0.038);
+    _wheel(canvas, Offset(w * 0.54, h * 0.64), w * 0.038, tone);
+    _wheel(canvas, Offset(w * 0.76, h * 0.64), w * 0.038, tone);
   }
 
   void _retail(Canvas canvas, Size size, _AudienceTone tone) {
@@ -1751,7 +1799,7 @@ class _AudienceArtPainter extends CustomPainter {
       canvas,
       Rect.fromLTWH(w * 0.22, h * 0.28, w * 0.56, h * 0.42),
       16,
-      Colors.white.withValues(alpha: 0.92),
+      tone.soft.withValues(alpha: 0.96),
     );
     _rrect(
       canvas,
@@ -1763,12 +1811,12 @@ class _AudienceArtPainter extends CustomPainter {
       canvas,
       Rect.fromLTWH(w * 0.30, h * 0.42, w * 0.26, h * 0.20),
       8,
-      tone.soft.withValues(alpha: 0.85),
+      tone.base.withValues(alpha: 0.85),
     );
     canvas.drawCircle(
       Offset(w * 0.37, h * 0.52),
       w * 0.028,
-      Paint()..color = Colors.white,
+      Paint()..color = tone.soft,
     );
     canvas.drawCircle(
       Offset(w * 0.48, h * 0.52),
@@ -1779,13 +1827,13 @@ class _AudienceArtPainter extends CustomPainter {
       canvas,
       Rect.fromLTWH(w * 0.60, h * 0.42, w * 0.10, h * 0.28),
       6,
-      tone.soft,
+      tone.base,
     );
     final bag = RRect.fromRectAndRadius(
       Rect.fromLTWH(w * 0.78, h * 0.46, w * 0.12, h * 0.16),
       const Radius.circular(6),
     );
-    canvas.drawRRect(bag, Paint()..color = Colors.white);
+    canvas.drawRRect(bag, Paint()..color = tone.soft);
     canvas.drawArc(
       Rect.fromLTWH(w * 0.80, h * 0.40, w * 0.08, h * 0.10),
       3.4,
@@ -1813,14 +1861,14 @@ class _AudienceArtPainter extends CustomPainter {
         height: h * 0.46,
       ),
       14,
-      tone.soft,
+      tone.base,
     );
     canvas.restore();
     _rrect(
       canvas,
       Rect.fromLTWH(w * 0.30, h * 0.22, w * 0.46, h * 0.50),
       16,
-      Colors.white.withValues(alpha: 0.94),
+      tone.soft.withValues(alpha: 0.98),
     );
     final chart = Path()
       ..moveTo(w * 0.38, h * 0.52)
@@ -1839,7 +1887,7 @@ class _AudienceArtPainter extends CustomPainter {
         canvas,
         Rect.fromLTWH(w * 0.38, h * (0.32 + i * 0.07), w * 0.22, h * 0.025),
         4,
-        tone.soft,
+        tone.base,
       );
     }
     canvas.drawCircle(
@@ -1851,7 +1899,7 @@ class _AudienceArtPainter extends CustomPainter {
       Offset(w * 0.78, h * 0.58),
       w * 0.028,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.92)
+        ..color = tone.soft.withValues(alpha: 0.9)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
@@ -1873,12 +1921,12 @@ class _AudienceArtPainter extends CustomPainter {
       ..lineTo(w * 0.52, h * 0.28)
       ..lineTo(w * 0.50, h * 0.42)
       ..close();
-    canvas.drawPath(lid, Paint()..color = tone.soft);
+    canvas.drawPath(lid, Paint()..color = tone.base);
     _rrect(
       canvas,
       Rect.fromLTWH(w * 0.28, h * 0.46, w * 0.12, h * 0.08),
       4,
-      Colors.white.withValues(alpha: 0.9),
+      tone.soft.withValues(alpha: 0.94),
     );
     canvas.save();
     canvas.translate(w * 0.62, h * 0.46);
@@ -1891,7 +1939,7 @@ class _AudienceArtPainter extends CustomPainter {
         height: h * 0.40,
       ),
       12,
-      Colors.white.withValues(alpha: 0.95),
+      tone.soft.withValues(alpha: 0.98),
     );
     for (var i = 0; i < 3; i++) {
       canvas.drawCircle(
@@ -1903,7 +1951,7 @@ class _AudienceArtPainter extends CustomPainter {
         canvas,
         Rect.fromLTWH(-w * 0.05, h * (-0.11 + i * 0.09), w * 0.16, h * 0.02),
         3,
-        tone.soft,
+        tone.base,
       );
     }
     canvas.restore();
@@ -1923,22 +1971,22 @@ class _AudienceArtPainter extends CustomPainter {
   }
 
   void _box(Canvas canvas, Rect rect, _AudienceTone tone, {Color? fill}) {
-    _rrect(canvas, rect, 8, fill ?? Colors.white.withValues(alpha: 0.94));
+    _rrect(canvas, rect, 8, fill ?? tone.soft);
     canvas.drawLine(
       Offset(rect.center.dx, rect.top + 4),
       Offset(rect.center.dx, rect.bottom - 4),
       Paint()
-        ..color = tone.soft
+        ..color = tone.base
         ..strokeWidth = 2,
     );
   }
 
-  void _wheel(Canvas canvas, Offset center, double radius) {
-    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFF5B45C6));
+  void _wheel(Canvas canvas, Offset center, double radius, _AudienceTone tone) {
+    canvas.drawCircle(center, radius, Paint()..color = tone.ink);
     canvas.drawCircle(
       center,
       radius * 0.42,
-      Paint()..color = Colors.white.withValues(alpha: 0.9),
+      Paint()..color = tone.soft,
     );
   }
 
@@ -1991,7 +2039,7 @@ class _V2Team extends StatelessWidget {
                                 asset: 'assets/brand/v2_team_owners.jpg',
                                 title: 'Owner & Manager',
                                 body:
-                                    'See the whole business at once, and keep day-to-day operations, people and performance in view.',
+                                    'See the whole business at once, and keep day-to-day\noperations, people and performance in view.',
                               ),
                             ),
                             SizedBox(height: gap),
@@ -2001,7 +2049,7 @@ class _V2Team extends StatelessWidget {
                                 asset: 'assets/brand/v2_team_store.png',
                                 title: 'Store & Sales In-charge',
                                 body:
-                                    'Run daily sales, stock and the shop floor, and keep inventory responsibilities clear for the team.',
+                                    'Run daily sales, stock and the shop floor, and\nkeep inventory responsibilities clear for the team.',
                               ),
                             ),
                           ],
@@ -2014,7 +2062,7 @@ class _V2Team extends StatelessWidget {
                           asset: 'assets/brand/v2_team_sales.jpg',
                           title: 'Sales Representative',
                           body:
-                              'Handle customer visits, order taking and collections, while staying connected to the business.',
+                              'Handle customer visits, order taking and collections,\nwhile staying connected to the business.',
                         ),
                       ),
                     ],
@@ -2028,7 +2076,7 @@ class _V2Team extends StatelessWidget {
                         asset: 'assets/brand/v2_team_owners.jpg',
                         title: 'Owner & Manager',
                         body:
-                            'See the whole business at once, and keep day-to-day operations, people and performance in view.',
+                            'See the whole business at once, and keep day-to-day\noperations, people and performance in view.',
                       ),
                     ),
                     SizedBox(height: gap),
@@ -2037,7 +2085,7 @@ class _V2Team extends StatelessWidget {
                       child: const _TeamPurpleCard(
                         asset: 'assets/brand/v2_team_store.png',
                         title: 'Store & Sales In-charge',
-                        body: 'Run daily sales, stock and the shop floor, and keep inventory responsibilities clear for the team.',
+                        body: 'Run daily sales, stock and the shop floor, and\nkeep inventory responsibilities clear for the team.',
                       ),
                     ),
                     SizedBox(height: gap),
@@ -2046,7 +2094,7 @@ class _V2Team extends StatelessWidget {
                       child: _TeamPortraitCard(
                         asset: 'assets/brand/v2_team_sales.jpg',
                         title: 'Sales Representative',
-                        body: 'Handle customer visits, order taking and collections, while staying connected to the business.',
+                        body: 'Handle customer visits, order taking and collections,\nwhile staying connected to the business.',
                       ),
                     ),
                   ],
@@ -2175,16 +2223,24 @@ class _TeamPurpleCard extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            left: 40,
-            right: 40,
-            top: 24,
-            bottom: 150,
-            child: Image.asset(
-              asset,
-              fit: BoxFit.contain,
-              alignment: Alignment.bottomCenter,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          Image.asset(
+            asset,
+            fit: BoxFit.cover,
+            alignment: Alignment.bottomCenter,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x007D3DCD),
+                  Color(0x660F031F),
+                  Color(0xF20F031F),
+                ],
+                stops: [0.35, 0.68, 1],
+              ),
             ),
           ),
           Positioned(
@@ -2390,7 +2446,7 @@ class _V2FaqItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: const Color(0xFF2C2738),
+        color: const Color(0xFF241E30),
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           onTap: onToggle,
@@ -2398,7 +2454,7 @@ class _V2FaqItem extends StatelessWidget {
           hoverColor: Colors.white.withValues(alpha: 0.04),
           splashColor: Colors.white.withValues(alpha: 0.05),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 18, 18, 18),
+            padding: const EdgeInsets.fromLTRB(22, 26, 18, 26),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -2514,9 +2570,9 @@ class _V2Closing extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     wide ? 64 : 24,
-                    wide ? 88 : 56,
+                    wide ? 112 : 72,
                     wide ? 64 : 24,
-                    wide ? 84 : 52,
+                    wide ? 108 : 68,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -2556,6 +2612,7 @@ class _V2Closing extends StatelessWidget {
                           _V2GlowButton(
                             label: 'Get started with Sello',
                             onPressed: onGetStarted,
+                            height: 54,
                           ),
                           OutlinedButton(
                             onPressed: onTalk,
@@ -2567,7 +2624,7 @@ class _V2Closing extends StatelessWidget {
                               side: BorderSide(
                                 color: Colors.white.withValues(alpha: 0.28),
                               ),
-                              minimumSize: const Size(48, 46),
+                              minimumSize: const Size(48, 54),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 20,
                               ),
@@ -2918,6 +2975,253 @@ class _V2Intro extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _V2ContactDialog extends StatelessWidget {
+  const _V2ContactDialog({
+    required this.email,
+    required this.phoneLabel,
+    required this.phoneUri,
+    required this.onOpen,
+  });
+
+  final String email;
+  final String phoneLabel;
+  final String phoneUri;
+  final Future<void> Function(String uri) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: const ColoredBox(color: Color(0x8A090212)),
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xD01A1230),
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.16),
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x66000000),
+                            blurRadius: 40,
+                            offset: Offset(0, 18),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 22, 22, 26),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                tooltip: 'Close',
+                                onPressed: () => Navigator.of(context).pop(),
+                                style: IconButton.styleFrom(
+                                  foregroundColor: const Color(0xFFE6E1F4),
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.waving_hand_rounded,
+                              color: Color(0xFFC4B0FF),
+                              size: 28,
+                            ),
+                            const SizedBox(height: 18),
+                            const Text.rich(
+                              TextSpan(
+                                style: TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontSize: 34,
+                                  height: 1.12,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: -0.6,
+                                  color: Colors.white,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: "Let's get your\nbusiness on ",
+                                  ),
+                                  TextSpan(
+                                    text: 'Sello.',
+                                    style: TextStyle(color: Color(0xFFC4B0FF)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              "We'd love to walk you through it in person. Reach out and we'll find a time that works — no pressure, and no long calls unless you want one.",
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 15,
+                                height: 1.5,
+                                color: Color(0xFFC9C2D8),
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            _ContactRow(
+                              icon: Icons.mail_outline_rounded,
+                              tint: const Color(0xFFC4B0FF),
+                              label: 'Drop us a line',
+                              value: email,
+                              onTap: () => onOpen('mailto:$email'),
+                            ),
+                            const SizedBox(height: 10),
+                            _ContactRow(
+                              icon: Icons.call_outlined,
+                              tint: const Color(0xFFD4C6FF),
+                              label: 'Give us a call',
+                              value: phoneLabel,
+                              onTap: () => onOpen(phoneUri),
+                            ),
+                            const SizedBox(height: 10),
+                            _ContactRow(
+                              icon: Icons.place_outlined,
+                              tint: const Color(0xFFB9A6FF),
+                              label: 'Visit us',
+                              value: '207 Saranankara Road, Dehiwala',
+                              onTap: () => onOpen(
+                                'https://maps.google.com/?q=207+Saranankara+Road,+Dehiwala',
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Divider(
+                              height: 1,
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              "We're a small team — you'll talk to a real person who knows product businesses.\nWe'll get back to you quickly.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 13,
+                                height: 1.5,
+                                color: Color(0xFFA79FBA),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactRow extends StatelessWidget {
+  const _ContactRow({
+    required this.icon,
+    required this.tint,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color tint;
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        hoverColor: Colors.white.withValues(alpha: 0.05),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 18, color: tint),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 11,
+                        height: 1.2,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 1.1,
+                        color: Color(0xFF9A93AD),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 15,
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 16,
+                color: Colors.white.withValues(alpha: 0.45),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

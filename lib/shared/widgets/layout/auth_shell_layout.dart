@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sello/core/constants/app_constants.dart';
 import 'package:sello/core/responsive/app_breakpoints.dart';
+import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/core/theme/theme.dart';
 
 /// Full-screen purple auth canvas with optional marketing panel and a floating
@@ -21,9 +24,11 @@ class AuthShellLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: AppColors.authCanvas,
-      child: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
+      child: Stack(
+        children: [
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
             final wide = constraints.maxWidth >= AppBreakpoints.mobile;
             final horizontalGutter = wide ? AppSpacing.xl : AppSpacing.lg;
             final verticalGutter = wide ? AppSpacing.xxl : AppSpacing.xl;
@@ -72,8 +77,40 @@ class AuthShellLayout extends StatelessWidget {
                 ),
               ),
             );
-          },
+              },
+            ),
+          ),
+          if (kIsWeb)
+            const SafeArea(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: _BackToMarketingLink(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackToMarketingLink extends StatelessWidget {
+  const _BackToMarketingLink();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, top: 4),
+      child: TextButton.icon(
+        onPressed: () => context.go(RoutePaths.splash),
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          textStyle: context.texts.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w500,
+            color: Colors.white,
+          ),
         ),
+        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+        label: const Text('Back to website'),
       ),
     );
   }

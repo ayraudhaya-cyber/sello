@@ -172,8 +172,24 @@ void main() {
       );
       expect(
         RouteGuards.resolve(
+          auth: signedOut,
+          location: RoutePaths.marketingV2,
+          publicMarketing: true,
+        ),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(
           auth: signedIn,
           location: RoutePaths.splash,
+          publicMarketing: true,
+        ),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: signedIn,
+          location: RoutePaths.marketingV2,
           publicMarketing: true,
         ),
         isNull,
@@ -208,7 +224,26 @@ void main() {
           location: RoutePaths.splash,
           publicMarketing: true,
         ),
-        RoutePaths.login,
+        isNull,
+      );
+      const awaitingEmail = AuthSessionState(
+        status: AuthStatus.unauthenticated,
+        awaitingEmailConfirmation: true,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: awaitingEmail,
+          location: RoutePaths.splash,
+          publicMarketing: true,
+        ),
+        isNull,
+      );
+      expect(
+        RouteGuards.resolve(
+          auth: awaitingEmail,
+          location: RoutePaths.splash,
+        ),
+        RoutePaths.onboarding,
       );
     });
   });

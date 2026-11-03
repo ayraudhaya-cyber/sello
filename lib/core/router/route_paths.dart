@@ -2,6 +2,10 @@
 abstract final class RoutePaths {
   /// Web: public marketing site. Native apps: cold-start splash, then workspace.
   static const String splash = '/';
+
+  /// Former alternate marketing URL. Redirects to [splash].
+  static const String marketingV2 = '/v2';
+
   static const String login = '/login';
   static const String onboarding = '/onboarding';
 

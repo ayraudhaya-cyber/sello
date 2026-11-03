@@ -10,23 +10,25 @@ import 'package:sello/shared/models/user_role.dart';
 abstract final class RouteGuards {
   /// Returns a redirect location, or null to allow navigation.
   ///
-  /// [publicMarketing] is true on the web, where `/` is the public site for
-  /// visitors and signed-in users. Native apps keep `/` as the cold-start
-  /// splash that continues into the workspace. Owner setup, password
-  /// recovery, and email confirmation still take priority over the site.
+  /// [publicMarketing] is true on the web, where `/` is the public marketing
+  /// site for visitors and signed-in users. `/v2` redirects there. Native apps
+  /// keep `/` as the cold-start splash that continues into the workspace. Owner setup,
+  /// password recovery, and email confirmation still take priority over the site.
   static String? resolve({
     required AuthSessionState auth,
     required String location,
     bool publicMarketing = false,
   }) {
     final isSplash = location == RoutePaths.splash;
+    final isMarketingV2 = location == RoutePaths.marketingV2;
     final isLogin = location == RoutePaths.login;
     final isOnboarding = location == RoutePaths.onboarding;
     final isDocument =
         location == RoutePaths.orderDocument ||
         location.startsWith('${RoutePaths.orderDocument}/');
-    final isPublic = isSplash || isLogin || isOnboarding || isDocument;
-    final showMarketing = publicMarketing && isSplash;
+    final isPublic =
+        isSplash || isMarketingV2 || isLogin || isOnboarding || isDocument;
+    final showMarketing = publicMarketing && (isSplash || isMarketingV2);
 
     // Session restoration — preserve the browser URL during bootstrap so a
     // refresh on /hub/settings (etc.) does not bounce through splash → home.
@@ -44,7 +46,7 @@ abstract final class RouteGuards {
     }
 
     if (auth.isPasswordRecovery) {
-      if (isDocument) return null;
+      if (isDocument || showMarketing) return null;
       return isLogin ? null : RoutePaths.login;
     }
 
@@ -72,19 +74,19 @@ abstract final class RouteGuards {
 
     // Email just verified — keep them on login with success feedback.
     if (auth.emailJustVerified) {
-      if (isLogin || isDocument) return null;
+      if (isLogin || isDocument || showMarketing) return null;
       return RoutePaths.login;
     }
 
     // Waiting for the user to verify their email after signup.
     if (auth.awaitingEmailConfirmation) {
-      if (isOnboarding || isLogin || isDocument) return null;
+      if (isOnboarding || isLogin || isDocument || showMarketing) return null;
       return RoutePaths.onboarding;
     }
 
     // Auth user without employee / pending provision — finish onboarding.
     if (auth.requiresOnboarding) {
-      if (isOnboarding || isDocument) return null;
+      if (isOnboarding || isDocument || showMarketing) return null;
       return RoutePaths.onboarding;
     }
 

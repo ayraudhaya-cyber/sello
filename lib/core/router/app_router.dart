@@ -21,7 +21,7 @@ import 'package:sello/features/hub/settings/presentation/hub_settings_page.dart'
 import 'package:sello/features/hub/shared/hub_feature_page.dart';
 import 'package:sello/features/hub/shell/hub_shell.dart';
 import 'package:sello/features/hub/suppliers/presentation/hub_suppliers_page.dart';
-import 'package:sello/features/marketing/presentation/marketing_home_page.dart';
+import 'package:sello/features/marketing/presentation/marketing_v2_page.dart';
 import 'package:sello/features/mobile/authentication/presentation/login_page.dart';
 import 'package:sello/features/mobile/customers/presentation/sello_customers_page.dart';
 import 'package:sello/features/mobile/dashboard/presentation/sello_dashboard_page.dart';
@@ -45,6 +45,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final location = state.matchedLocation;
+      if (location == RoutePaths.marketingV2) {
+        return RoutePaths.splash;
+      }
       if (location == RoutePaths.hubAnalytics) {
         return RoutePaths.hubReports;
       }
@@ -60,7 +63,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.splash,
         name: 'splash',
         builder: (context, state) =>
-            kIsWeb ? const MarketingHomePage() : const SplashPage(),
+            kIsWeb ? const MarketingV2Page() : const SplashPage(),
+      ),
+      GoRoute(
+        path: RoutePaths.marketingV2,
+        name: 'marketingV2',
+        builder: (context, state) => const MarketingV2Page(),
       ),
       GoRoute(
         path: RoutePaths.login,

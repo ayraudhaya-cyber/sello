@@ -62,7 +62,7 @@ class SelloReportKpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SelloStatCardGrid(
-      maxColumns: 6,
+      maxColumns: 5,
       children: [
         for (final kpi in kpis)
           SelloReportKpiCard(

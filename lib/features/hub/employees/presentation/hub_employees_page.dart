@@ -324,9 +324,6 @@ class _HubEmployeesPageState extends ConsumerState<HubEmployeesPage>
 
     return AppPageScaffold(
       title: 'Team',
-      subtitle:
-          'Add people to your business. Their role decides whether they use '
-          'Hub or the Sales Rep app.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       actions: [

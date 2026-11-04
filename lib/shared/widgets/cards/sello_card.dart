@@ -55,6 +55,7 @@ class SelloCard extends StatefulWidget {
     this.borderColor,
     this.enableHoverLift = true,
     this.borderRadius,
+    this.emphasizeFocus = false,
   });
 
   final Widget child;
@@ -66,12 +67,16 @@ class SelloCard extends StatefulWidget {
   final bool enableHoverLift;
   final BorderRadius? borderRadius;
 
+  /// Draws a visible border while the card's action is keyboard-focused.
+  final bool emphasizeFocus;
+
   @override
   State<SelloCard> createState() => _SelloCardState();
 }
 
 class _SelloCardState extends State<SelloCard> {
   bool _hovered = false;
+  bool _focused = false;
 
   void _setHovered(bool value) {
     if (_hovered == value) return;
@@ -89,66 +94,62 @@ class _SelloCardState extends State<SelloCard> {
     final hovered = widget.enableHoverLift && _hovered;
     final shadows = hovered ? AppShadows.hover : baseShadows;
 
-    // Stretch to a parent min height (e.g. [SelloEqualHeightRow]) while still
-    // growing with content — never lock a shorter fixed height that lets
-    // children paint outside the rounded surface.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final fill =
-            constraints.hasBoundedHeight &&
-            constraints.maxHeight < double.infinity;
-        final minH = constraints.minHeight;
-        final stretchToMin = !fill && minH.isFinite && minH > 0;
+    // A parent min height (equal-height rows) stretches the surface. Do not
+    // set an explicit height: that became a maximum and clipped lists that
+    // loaded after the first measurement. Min height is passed through so a
+    // child column can pin a footer with [MainAxisAlignment.spaceBetween].
+    final focusRing = widget.emphasizeFocus && _focused;
+    final borderColor = focusRing ? context.brandAccent : widget.borderColor;
+    final painted = AnimatedContainer(
+      duration: AppDurations.hover,
+      curve: AppCurves.standard,
+      clipBehavior: Clip.antiAlias,
+      width: double.infinity,
+      padding: widget.padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: widget.color ?? AppColors.surface,
+        borderRadius: radius,
+        border: borderColor != null
+            ? Border.all(
+                color: borderColor,
+                width: focusRing ? 1.5 : 1,
+              )
+            : null,
+        boxShadow: shadows,
+      ),
+      child: widget.child,
+    );
 
-        final painted = AnimatedContainer(
-          duration: AppDurations.hover,
-          curve: AppCurves.standard,
-          clipBehavior: Clip.antiAlias,
-          width: double.infinity,
-          height: fill ? constraints.maxHeight : null,
-          constraints: stretchToMin
-              ? BoxConstraints(minHeight: minH)
-              : const BoxConstraints(),
-          alignment: Alignment.topLeft,
-          padding:
-              widget.padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
-          decoration: BoxDecoration(
-            color: widget.color ?? AppColors.surface,
-            borderRadius: radius,
-            border: widget.borderColor != null
-                ? Border.all(color: widget.borderColor!)
-                : null,
-            boxShadow: shadows,
-          ),
-          child: widget.child,
-        );
+    // Shadow-only hover — no Transform.translate (that shifts hit targets
+    // and leaves nested list/chip hovers stuck on Flutter web).
+    final interactive = MouseRegion(
+      onEnter: widget.enableHoverLift || widget.onTap != null
+          ? (_) => _setHovered(true)
+          : null,
+      onExit: widget.enableHoverLift || widget.onTap != null
+          ? (_) => _setHovered(false)
+          : null,
+      child: painted,
+    );
 
-        // Shadow-only hover — no Transform.translate (that shifts hit targets
-        // and leaves nested list/chip hovers stuck on Flutter web).
-        final interactive = MouseRegion(
-          onEnter: widget.enableHoverLift || widget.onTap != null
-              ? (_) => _setHovered(true)
-              : null,
-          onExit: widget.enableHoverLift || widget.onTap != null
-              ? (_) => _setHovered(false)
-              : null,
-          child: painted,
-        );
+    if (widget.onTap == null) return interactive;
 
-        if (widget.onTap == null) return interactive;
-
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.onTap,
-            hoverColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            splashColor: context.brandAccent.withValues(alpha: 0.05),
-            borderRadius: radius,
-            child: interactive,
-          ),
-        );
-      },
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onTap,
+        onFocusChange: widget.emphasizeFocus
+            ? (focused) {
+                if (_focused == focused) return;
+                setState(() => _focused = focused);
+              }
+            : null,
+        hoverColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        splashColor: context.brandAccent.withValues(alpha: 0.05),
+        borderRadius: radius,
+        child: interactive,
+      ),
     );
   }
 }
@@ -441,7 +442,7 @@ class SelloStatCardGrid extends StatelessWidget {
   final List<Widget> children;
   final double gap;
 
-  /// Maximum columns on large screens (e.g. 6 for Reports, 5 for domain lists).
+  /// Maximum columns on large screens (Reports and domain lists use 5).
   final int maxColumns;
 
   /// Drop a column before cards get narrower than this.

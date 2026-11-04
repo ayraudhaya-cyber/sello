@@ -22,6 +22,13 @@ enum OrderStatusFilter {
   draft,
   openFulfillment,
   placed,
+
+  /// Placed orders that can be packed now. Stock-blocked orders are excluded
+  /// so this matches the dashboard “orders waiting to deliver” count.
+  readyToDeliver,
+
+  /// Open orders that cannot be fully packed. Matches “waiting for stock”.
+  waitingForStock,
   partiallyDelivered,
   completed,
   cancelled,
@@ -55,6 +62,8 @@ class HubOrdersState implements SelloBusyState {
     this.paymentFilter = OrderPaymentFilter.all,
     this.dateFilter = OrderDateFilter.all,
     this.employeeId,
+    this.waitingOrderIds = const {},
+    this.relatedItems = const [],
     this.sort = OrderSort.orderedAt,
     this.sortAscending = false,
     this.page = 0,
@@ -74,6 +83,13 @@ class HubOrdersState implements SelloBusyState {
   final OrderPaymentFilter paymentFilter;
   final OrderDateFilter dateFilter;
   final String? employeeId;
+
+  /// Open orders that cannot be fully packed. Used to badge rows and to
+  /// split the dashboard fulfillment lists.
+  final Set<String> waitingOrderIds;
+
+  /// Open orders counted on a different dashboard row, shown under a divider.
+  final List<OrderSummary> relatedItems;
   final OrderSort sort;
   final bool sortAscending;
   final int page;
@@ -87,7 +103,8 @@ class HubOrdersState implements SelloBusyState {
   final String? errorMessage;
   final bool initialized;
 
-  bool get isEmpty => !isLoading && initialized && items.isEmpty;
+  bool get isEmpty =>
+      !isLoading && initialized && items.isEmpty && relatedItems.isEmpty;
 
   bool get hasActiveFilters =>
       search.trim().isNotEmpty ||
@@ -106,6 +123,8 @@ class HubOrdersState implements SelloBusyState {
     OrderDateFilter? dateFilter,
     String? employeeId,
     bool clearEmployee = false,
+    Set<String>? waitingOrderIds,
+    List<OrderSummary>? relatedItems,
     OrderSort? sort,
     bool? sortAscending,
     int? page,
@@ -126,6 +145,8 @@ class HubOrdersState implements SelloBusyState {
       paymentFilter: paymentFilter ?? this.paymentFilter,
       dateFilter: dateFilter ?? this.dateFilter,
       employeeId: clearEmployee ? null : (employeeId ?? this.employeeId),
+      waitingOrderIds: waitingOrderIds ?? this.waitingOrderIds,
+      relatedItems: relatedItems ?? this.relatedItems,
       sort: sort ?? this.sort,
       sortAscending: sortAscending ?? this.sortAscending,
       page: page ?? this.page,
@@ -190,10 +211,18 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
     );
 
     try {
-      final ordersFuture = _fetchFiltered(page: page, pageSize: state.pageSize);
+      final waitingIds = await _waitingIdsFor(state.statusFilter);
+      if (generation != _loadGeneration) return;
+      final ordersFuture = _fetchFiltered(
+        page: page,
+        pageSize: state.pageSize,
+        waitingIds: waitingIds,
+      );
+      final relatedFuture = _fetchRelated(waitingIds);
       final countsFuture = _repo.fetchCounts();
       countsFuture.ignore();
       final result = await ordersFuture;
+      final related = await relatedFuture;
       final counts = await countsFuture;
       if (generation != _loadGeneration) return;
 
@@ -201,6 +230,8 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
         items: result.items,
         hasMore: result.hasMore,
         counts: counts,
+        waitingOrderIds: waitingIds,
+        relatedItems: related,
         isLoading: false,
         clearError: true,
         initialized: true,
@@ -220,17 +251,58 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
   Future<List<OrderSummary>> fetchAllForExport({int maxRows = 20000}) async {
     const pageSize = 500;
     final rows = <OrderSummary>[];
+    final waitingIds = await _waitingIdsFor(state.statusFilter);
     for (var page = 0; rows.length < maxRows; page++) {
-      final result = await _fetchFiltered(page: page, pageSize: pageSize);
+      final result = await _fetchFiltered(
+        page: page,
+        pageSize: pageSize,
+        waitingIds: waitingIds,
+      );
       rows.addAll(result.items);
       if (!result.hasMore) break;
     }
     return rows;
   }
 
+  bool _splitsOnStock(OrderStatusFilter filter) {
+    return switch (filter) {
+      OrderStatusFilter.readyToDeliver ||
+      OrderStatusFilter.waitingForStock ||
+      OrderStatusFilter.partiallyDelivered ||
+      OrderStatusFilter.placed ||
+      OrderStatusFilter.openFulfillment ||
+      OrderStatusFilter.draft ||
+      OrderStatusFilter.all => true,
+      OrderStatusFilter.completed || OrderStatusFilter.cancelled => false,
+    };
+  }
+
+  Future<Set<String>> _waitingIdsFor(OrderStatusFilter filter) async {
+    if (!_splitsOnStock(filter)) return const {};
+    final attention = await _repo.fetchFulfillmentAttention();
+    return attention.waitingOrderIds;
+  }
+
+  /// Orders that share this status but belong to the Waiting for stock count.
+  Future<List<OrderSummary>> _fetchRelated(Set<String> waitingIds) async {
+    final filter = state.statusFilter;
+    final splits = filter == OrderStatusFilter.readyToDeliver ||
+        filter == OrderStatusFilter.partiallyDelivered;
+    if (!splits || waitingIds.isEmpty) return const [];
+    final result = await _fetchFiltered(
+      page: 0,
+      pageSize: 200,
+      waitingIds: waitingIds,
+      relatedOnly: true,
+    );
+    return result.items;
+  }
+
   Future<OrderPageResult> _fetchFiltered({
     required int page,
     required int pageSize,
+    Set<String> waitingIds = const {},
+    bool relatedOnly = false,
   }) {
     final now = DateTime.now();
     final orderedFrom = switch (state.dateFilter) {
@@ -240,9 +312,10 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
       OrderDateFilter.thisMonth => DateTime(now.year, now.month, 1),
     };
 
+    final filter = state.statusFilter;
     return _repo.fetchOrders(
       search: state.search,
-      statuses: switch (state.statusFilter) {
+      statuses: switch (filter) {
         OrderStatusFilter.all => null,
         OrderStatusFilter.draft => const [
           OrderStatus.draft,
@@ -253,13 +326,26 @@ class HubOrdersNotifier extends Notifier<HubOrdersState> {
           OrderStatus.placed,
           OrderStatus.partiallyDelivered,
         ],
-        OrderStatusFilter.placed => const [OrderStatus.placed],
+        OrderStatusFilter.placed ||
+        OrderStatusFilter.readyToDeliver => const [OrderStatus.placed],
+        OrderStatusFilter.waitingForStock => const [
+          OrderStatus.placed,
+          OrderStatus.partiallyDelivered,
+        ],
         OrderStatusFilter.partiallyDelivered => const [
           OrderStatus.partiallyDelivered,
         ],
         OrderStatusFilter.completed => const [OrderStatus.completed],
         OrderStatusFilter.cancelled => const [OrderStatus.cancelled],
       },
+      onlyIds: filter == OrderStatusFilter.waitingForStock || relatedOnly
+          ? waitingIds
+          : null,
+      excludeIds: !relatedOnly &&
+              (filter == OrderStatusFilter.readyToDeliver ||
+                  filter == OrderStatusFilter.partiallyDelivered)
+          ? waitingIds
+          : null,
       paymentStatus: switch (state.paymentFilter) {
         OrderPaymentFilter.all => null,
         OrderPaymentFilter.unpaid => PaymentStatus.unpaid,

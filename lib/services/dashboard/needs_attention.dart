@@ -21,7 +21,9 @@ class NeedsAttentionItem extends Equatable {
     required this.priority,
     required this.count,
     required this.title,
+    required this.action,
     required this.route,
+    this.detail,
   });
 
   final NeedsAttentionKind kind;
@@ -29,11 +31,17 @@ class NeedsAttentionItem extends Equatable {
   final int count;
   final String title;
 
+  /// What the row is asking the owner to do.
+  final String action;
+
+  /// Age or other context under the title. Empty when we have no date.
+  final String? detail;
+
   /// Hub route to open (filters applied by the dashboard before navigate).
   final String route;
 
   @override
-  List<Object?> get props => [kind, priority, count, title, route];
+  List<Object?> get props => [kind, priority, count, title, action, detail, route];
 }
 
 /// Raw counts before presentation rules.
@@ -46,6 +54,9 @@ class NeedsAttentionCounts extends Equatable {
     this.negativeStock = 0,
     this.stockShortage = 0,
     this.pendingCollections = 0,
+    this.oldestWaiting,
+    this.oldestReadyPlaced,
+    this.oldestReadyPartial,
   });
 
   /// Orders with status `placed`.
@@ -68,6 +79,10 @@ class NeedsAttentionCounts extends Equatable {
 
   /// Sales Rep collections waiting for Owner / Manager approval.
   final int pendingCollections;
+
+  final DateTime? oldestWaiting;
+  final DateTime? oldestReadyPlaced;
+  final DateTime? oldestReadyPartial;
 
   int get waitingForStock => waitingPlaced + waitingPartial;
 
@@ -111,7 +126,23 @@ class NeedsAttentionCounts extends Equatable {
         negativeStock,
         stockShortage,
         pendingCollections,
+        oldestWaiting,
+        oldestReadyPlaced,
+        oldestReadyPartial,
       ];
+}
+
+/// How long ago an open order was placed, for a Needs attention row.
+String? attentionPlacedLabel(DateTime? at, {DateTime? now}) {
+  if (at == null) return null;
+  final localNow = (now ?? DateTime.now()).toLocal();
+  final localAt = at.toLocal();
+  final today = DateTime(localNow.year, localNow.month, localNow.day);
+  final day = DateTime(localAt.year, localAt.month, localAt.day);
+  final days = today.difference(day).inDays;
+  if (days <= 0) return 'Placed today';
+  if (days == 1) return 'Placed yesterday';
+  return 'Placed $days days ago';
 }
 
 /// Pure builder — keeps dashboard presentation free of counting rules.
@@ -119,16 +150,18 @@ abstract final class NeedsAttentionLogic {
   static List<NeedsAttentionItem> build(NeedsAttentionCounts counts) {
     final items = <NeedsAttentionItem>[];
 
-    if (counts.pendingCollections > 0) {
+    if (counts.waitingForStock > 0) {
       items.add(
         NeedsAttentionItem(
-          kind: NeedsAttentionKind.pendingCollections,
+          kind: NeedsAttentionKind.waitingForStock,
           priority: NeedsAttentionPriority.high,
-          count: counts.pendingCollections,
-          title: counts.pendingCollections == 1
-              ? '1 collection waiting for your approval'
-              : '${counts.pendingCollections} collections waiting for your approval',
-          route: RoutePaths.hubPayments,
+          count: counts.waitingForStock,
+          title: counts.waitingForStock == 1
+              ? '1 order is waiting for stock'
+              : '${counts.waitingForStock} orders are waiting for stock',
+          action: 'Restock',
+          detail: attentionPlacedLabel(counts.oldestWaiting),
+          route: RoutePaths.hubOrders,
         ),
       );
     }
@@ -142,6 +175,7 @@ abstract final class NeedsAttentionLogic {
           title: counts.negativeStock == 1
               ? '1 product has negative stock'
               : '${counts.negativeStock} products have negative stock',
+          action: 'Restock',
           route: RoutePaths.hubInventory,
         ),
       );
@@ -156,21 +190,23 @@ abstract final class NeedsAttentionLogic {
           title: counts.stockShortage == 1
               ? '1 product is short of reserved stock'
               : '${counts.stockShortage} products are short of reserved stock',
+          action: 'Restock',
           route: RoutePaths.hubInventory,
         ),
       );
     }
 
-    if (counts.waitingForStock > 0) {
+    if (counts.pendingCollections > 0) {
       items.add(
         NeedsAttentionItem(
-          kind: NeedsAttentionKind.waitingForStock,
+          kind: NeedsAttentionKind.pendingCollections,
           priority: NeedsAttentionPriority.high,
-          count: counts.waitingForStock,
-          title: counts.waitingForStock == 1
-              ? '1 order is waiting for stock'
-              : '${counts.waitingForStock} orders are waiting for stock',
-          route: RoutePaths.hubOrders,
+          count: counts.pendingCollections,
+          title: counts.pendingCollections == 1
+              ? '1 collection waiting for your approval'
+              : '${counts.pendingCollections} collections waiting for your approval',
+          action: 'Review',
+          route: RoutePaths.hubPayments,
         ),
       );
     }
@@ -184,6 +220,8 @@ abstract final class NeedsAttentionLogic {
           title: counts.placedAwaitingFulfillment == 1
               ? '1 order waiting to deliver'
               : '${counts.placedAwaitingFulfillment} orders waiting to deliver',
+          action: 'Deliver',
+          detail: attentionPlacedLabel(counts.oldestReadyPlaced),
           route: RoutePaths.hubOrders,
         ),
       );
@@ -198,6 +236,8 @@ abstract final class NeedsAttentionLogic {
           title: counts.partialNeedingAttention == 1
               ? '1 partially delivered order'
               : '${counts.partialNeedingAttention} partially delivered orders',
+          action: 'Deliver',
+          detail: attentionPlacedLabel(counts.oldestReadyPartial),
           route: RoutePaths.hubOrders,
         ),
       );

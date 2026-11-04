@@ -10,10 +10,10 @@ import 'package:sello/features/hub/settings/application/hub_settings_provider.da
 import 'package:sello/features/inventory/presentation/inventory_details_dialog.dart';
 import 'package:sello/features/inventory/presentation/stock_adjust_dialog.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/inventory_product_group.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
-import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/browser_file_download.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
@@ -159,12 +159,14 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
     required num reserved,
     required num shortage,
   }) {
-    final stock = 'Stock ${SelloFormatters.quantity(onHand)}';
+    final stock =
+        'On hand ${SelloFormatters.quantity(onHand)}'
+        ' · Reserved ${SelloFormatters.quantity(reserved)}';
     if (!_showShortageColumns) return stock;
     final short = shortage > 0
         ? ' · Shortage ${SelloFormatters.quantity(shortage)}'
         : '';
-    return '$stock · Reserved ${SelloFormatters.quantity(reserved)}$short';
+    return '$stock$short';
   }
 
   List<DataCell> _quantityCells({
@@ -177,17 +179,16 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
       DataCell(
         SelloTableText(
           SelloFormatters.quantity(onHand),
-          tone: SelloTableTone.strong,
+          numeric: true,
+        ),
+      ),
+      DataCell(
+        SelloTableText(
+          SelloFormatters.quantity(reserved),
           numeric: true,
         ),
       ),
       if (_showShortageColumns) ...[
-        DataCell(
-          SelloTableText(
-            SelloFormatters.quantity(reserved),
-            numeric: true,
-          ),
-        ),
         DataCell(
           shortage > 0
               ? SelloTableText(
@@ -206,7 +207,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
       DataCell(
         SelloTableText(
           SelloFormatters.quantity(available),
-          tone: SelloTableTone.normal,
+          tone: SelloTableTone.strong,
           numeric: true,
         ),
       ),
@@ -246,7 +247,9 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             ],
           ),
         ),
-        DataCell(SelloTableText(item.sku)),
+        DataCell(
+          SelloTableText(item.sku, tone: SelloTableTone.muted),
+        ),
         ..._quantityCells(
           onHand: item.quantity,
           reserved: item.reservedQuantity,
@@ -315,18 +318,25 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   children: [
                     SelloTableText(item.name, tone: SelloTableTone.strong),
                     const SizedBox(height: 2),
-                    SelloTableText(
-                      '${group.items.length} options'
-                      '${item.categoryName != null ? ' · ${item.categoryName}' : ''}',
-                      tone: SelloTableTone.muted,
+                    _OptionCountButton(
+                      count: group.items.length,
+                      expanded: expanded,
+                      onPressed: () => _toggleExpanded(group.productId),
                     ),
+                    if (item.categoryName != null)
+                      SelloTableText(
+                        item.categoryName!,
+                        tone: SelloTableTone.muted,
+                      ),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        DataCell(SelloTableText(item.sku)),
+        DataCell(
+          SelloTableText(item.sku, tone: SelloTableTone.muted),
+        ),
         ..._quantityCells(
           onHand: group.totalQuantity,
           reserved: group.totalReservedQuantity,
@@ -354,21 +364,14 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
           ),
         ),
         DataCell(
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
+          SelloRowIconGroup(
             children: [
-              SelloButton(
-                label: expanded ? 'Hide' : 'Options',
-                size: SelloButtonSize.small,
-                variant: SelloButtonVariant.ghost,
+              SelloRowIconButton(
+                tooltip: expanded ? 'Hide options' : 'Show options',
+                icon: expanded
+                    ? Icons.unfold_less_rounded
+                    : Icons.account_tree_outlined,
                 onPressed: () => _toggleExpanded(group.productId),
-              ),
-              Icon(
-                expanded
-                    ? Icons.expand_more_rounded
-                    : Icons.chevron_right_rounded,
-                color: AppColors.textSecondary,
               ),
             ],
           ),
@@ -402,7 +405,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             ),
           ),
         ),
-        DataCell(SelloTableText(sku)),
+        DataCell(SelloTableText(sku, tone: SelloTableTone.muted)),
         ..._quantityCells(
           onHand: item.quantity,
           reserved: item.reservedQuantity,
@@ -464,8 +467,6 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
 
     return AppPageScaffold(
       title: 'Inventory',
-      subtitle:
-          'Stock control center — on-hand quantities, adjustments, and movement history.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(
@@ -520,6 +521,7 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             _SummaryRow(
               stats: state.stats,
               currencySymbol: _currencySymbol(),
+              amountDisplay: ref.watch(companySettingsProvider).amountDisplay,
               showValuation:
                   ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
                   false,
@@ -705,7 +707,12 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                     ],
                     _Pager(
                       page: state.page,
+                      pageSize: state.pageSize,
+                      matchedCount: state.matchedCount,
                       hasMore: state.hasMore,
+                      onPageSize: (size) => ref
+                          .read(hubInventoryProvider.notifier)
+                          .setPageSize(size),
                       onPrev: state.page <= 0
                           ? null
                           : () => ref
@@ -723,14 +730,14 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
             else
               SelloFadeIn(
                 child: SelloDataTable(
+                  dataRowMinHeight: 64,
                   columns: [
                     selloDataColumn('Product'),
                     selloDataColumn('SKU'),
                     selloDataColumn('On hand', numeric: true),
-                    if (state.statusFilter == StockStatusFilter.shortage) ...[
-                      selloDataColumn('Reserved', numeric: true),
+                    selloDataColumn('Reserved', numeric: true),
+                    if (state.statusFilter == StockStatusFilter.shortage)
                       selloDataColumn('Shortage', numeric: true),
-                    ],
                     selloDataColumn('Available', numeric: true),
                     selloDataColumn('Reorder', numeric: true),
                     selloDataColumn('Status'),
@@ -740,7 +747,12 @@ class _HubInventoryPageState extends ConsumerState<HubInventoryPage> {
                   rows: _buildGroupedRows(groups),
                   footer: _Pager(
                     page: state.page,
+                    pageSize: state.pageSize,
+                    matchedCount: state.matchedCount,
                     hasMore: state.hasMore,
+                    onPageSize: (size) => ref
+                        .read(hubInventoryProvider.notifier)
+                        .setPageSize(size),
                     onPrev: state.page <= 0
                         ? null
                         : () => ref
@@ -812,62 +824,77 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = SizedBox(
-      width: context.isMobile ? double.infinity : 160,
-      child: SelloDropdown<StockStatusFilter>(
-        value: state.statusFilter,
-        compact: true,
-        hint: 'Stock status',
-        onChanged: onStatusChanged,
-        items: const [
-          DropdownMenuItem(value: StockStatusFilter.all, child: Text('All')),
-          DropdownMenuItem(
-            value: StockStatusFilter.inStock,
-            child: Text('In stock'),
-          ),
-          DropdownMenuItem(
-            value: StockStatusFilter.lowStock,
-            child: Text('Low stock'),
-          ),
-          DropdownMenuItem(
-            value: StockStatusFilter.outOfStock,
-            child: Text('Out of stock'),
-          ),
-          DropdownMenuItem(
-            value: StockStatusFilter.negativeStock,
-            child: Text('Negative stock'),
-          ),
-          DropdownMenuItem(
-            value: StockStatusFilter.shortage,
-            child: Text('Shortage only'),
-          ),
-          DropdownMenuItem(
-            value: StockStatusFilter.recentlyUpdated,
-            child: Text('Recently updated'),
-          ),
-          DropdownMenuItem(
-            value: StockStatusFilter.archived,
-            child: Text('Inactive'),
-          ),
-        ],
+    final inStock = (state.stats.totalItems -
+            state.stats.outOfStock -
+            state.stats.lowStock)
+        .clamp(0, 1 << 31);
+    final statusActive = state.statusFilter != StockStatusFilter.all;
+    final categoryActive = state.categoryId != null;
+    final status = _ActiveFilter(
+      active: statusActive,
+      child: SizedBox(
+        width: context.isMobile ? double.infinity : 220,
+        child: SelloDropdown<StockStatusFilter>(
+          value: state.statusFilter,
+          compact: true,
+          hint: 'Stock',
+          onChanged: onStatusChanged,
+          items: [
+            const DropdownMenuItem(
+              value: StockStatusFilter.all,
+              child: Text('All stock'),
+            ),
+            DropdownMenuItem(
+              value: StockStatusFilter.inStock,
+              child: Text('In stock · $inStock'),
+            ),
+            const DropdownMenuItem(
+              value: StockStatusFilter.lowStock,
+              child: Text('Low stock'),
+            ),
+            DropdownMenuItem(
+              value: StockStatusFilter.outOfStock,
+              child: Text('Out of stock · ${state.stats.outOfStock}'),
+            ),
+            const DropdownMenuItem(
+              value: StockStatusFilter.negativeStock,
+              child: Text('Negative stock'),
+            ),
+            const DropdownMenuItem(
+              value: StockStatusFilter.shortage,
+              child: Text('Shortage only'),
+            ),
+            const DropdownMenuItem(
+              value: StockStatusFilter.recentlyUpdated,
+              child: Text('Recently updated'),
+            ),
+            const DropdownMenuItem(
+              value: StockStatusFilter.archived,
+              child: Text('Inactive'),
+            ),
+          ],
+        ),
       ),
     );
 
-    final category = SizedBox(
-      width: context.isMobile ? double.infinity : 168,
-      child: SelloDropdown<String>(
-        value: state.categoryId ?? _allCategories,
-        compact: true,
-        hint: 'Category',
-        onChanged: onCategoryChanged,
-        items: [
-          const DropdownMenuItem(
-            value: _allCategories,
-            child: Text('All categories'),
-          ),
-          for (final cat in state.categories)
-            DropdownMenuItem(value: cat.id, child: Text(cat.name)),
-        ],
+    final category = _ActiveFilter(
+      active: categoryActive,
+      child: SizedBox(
+        width: context.isMobile ? double.infinity : 180,
+        child: SelloDropdown<String>(
+          value: state.categoryId ?? _allCategories,
+          compact: true,
+          hint: 'Category',
+          onChanged: onCategoryChanged,
+          items: [
+            const DropdownMenuItem(
+              value: _allCategories,
+              child: Text('All categories'),
+            ),
+            for (final cat in state.categories)
+              DropdownMenuItem(value: cat.id, child: Text(cat.name)),
+          ],
+        ),
       ),
     );
 
@@ -890,7 +917,7 @@ class _Toolbar extends StatelessWidget {
     final search = SelloSearchBar(
       controller: searchController,
       focusNode: searchFocus,
-      hint: 'Search products or SKU…',
+      hint: 'Search products or SKU...',
       onChanged: onSearchChanged,
     );
 
@@ -906,6 +933,7 @@ class _Toolbar extends StatelessWidget {
         search: search,
         filters: [status, category],
         actions: [export, refresh],
+        stackBelow: 1600,
         onClearFilters: onClearFilters,
       ),
     );
@@ -916,12 +944,14 @@ class _SummaryRow extends StatelessWidget {
   const _SummaryRow({
     required this.stats,
     required this.currencySymbol,
+    required this.amountDisplay,
     required this.onFilter,
     this.showValuation = false,
   });
 
   final InventoryDashboardStats stats;
   final String currencySymbol;
+  final AmountDisplayStyle amountDisplay;
   final ValueChanged<StockStatusFilter> onFilter;
 
   /// Worth at cost / selling — Owner only.
@@ -937,28 +967,33 @@ class _SummaryRow extends StatelessWidget {
           hint: 'Active catalog',
           icon: Icons.inventory_2_outlined,
           tone: context.brandAccent,
+          compact: true,
           onTap: () => onFilter(StockStatusFilter.all),
         ),
         if (showValuation) ...[
           SelloStatCard(
             label: 'Worth at cost',
-            value: SelloFormatters.currency(
+            value: SelloFormatters.summaryAmount(
               stats.stockValue,
               symbol: currencySymbol,
+              style: amountDisplay,
             ),
             hint: 'Quantity × cost price',
             icon: Icons.payments_outlined,
             tone: AppColors.finance,
+            compact: true,
           ),
           SelloStatCard(
             label: 'Worth at selling',
-            value: SelloFormatters.currency(
+            value: SelloFormatters.summaryAmount(
               stats.stockSellingValue,
               symbol: currencySymbol,
+              style: amountDisplay,
             ),
             hint: 'Quantity × selling price',
             icon: Icons.storefront_outlined,
             tone: AppColors.success,
+            compact: true,
           ),
         ],
         SelloStatCard(
@@ -967,6 +1002,7 @@ class _SummaryRow extends StatelessWidget {
           hint: 'Zero on hand',
           icon: Icons.error_outline_rounded,
           tone: AppColors.error,
+          compact: true,
           onTap: () => onFilter(StockStatusFilter.outOfStock),
         ),
         SelloStatCard(
@@ -975,6 +1011,7 @@ class _SummaryRow extends StatelessWidget {
           hint: 'Last 7 days',
           icon: Icons.swap_vert_rounded,
           tone: AppColors.inventory,
+          compact: true,
           onTap: () => onFilter(StockStatusFilter.recentlyUpdated),
         ),
       ],
@@ -1053,38 +1090,66 @@ class _RecentMovementsStrip extends StatelessWidget {
 class _Pager extends StatelessWidget {
   const _Pager({
     required this.page,
+    required this.pageSize,
+    required this.matchedCount,
     required this.hasMore,
+    required this.onPageSize,
     this.onPrev,
     this.onNext,
   });
 
   final int page;
+  final int pageSize;
+  final int matchedCount;
   final bool hasMore;
+  final ValueChanged<int> onPageSize;
   final VoidCallback? onPrev;
   final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context) {
+    final productLabel = matchedCount == 1 ? 'product' : 'products';
+    final summary = matchedCount <= 0
+        ? 'Page ${page + 1}'
+        : 'Page ${page + 1} · $matchedCount $productLabel';
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
         children: [
+          Text(
+            summary,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(
+            width: 108,
+            child: SelloDropdown<int>(
+              value: pageSize,
+              compact: true,
+              hint: 'Rows',
+              onChanged: (value) {
+                if (value != null) onPageSize(value);
+              },
+              items: const [
+                DropdownMenuItem(value: 10, child: Text('10')),
+                DropdownMenuItem(value: 25, child: Text('25')),
+                DropdownMenuItem(value: 50, child: Text('50')),
+                DropdownMenuItem(value: 100, child: Text('100')),
+              ],
+            ),
+          ),
           SelloButton(
             label: 'Previous',
             size: SelloButtonSize.small,
             variant: SelloButtonVariant.outline,
             onPressed: onPrev,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              'Page ${page + 1}',
-              style: const TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                color: AppColors.textSecondary,
-              ),
-            ),
           ),
           SelloButton(
             label: 'Next',
@@ -1093,6 +1158,66 @@ class _Pager extends StatelessWidget {
             onPressed: onNext,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActiveFilter extends StatelessWidget {
+  const _ActiveFilter({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) return child;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.controlAll,
+        border: Border.all(
+          color: context.brandAccent.withValues(alpha: 0.45),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _OptionCountButton extends StatelessWidget {
+  const _OptionCountButton({
+    required this.count,
+    required this.expanded,
+    required this.onPressed,
+  });
+
+  final int count;
+  final bool expanded;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count == 1 ? '1 option' : '$count options';
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: context.brandAccent,
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        child: Text(
+          expanded ? '$label · hide' : label,
+          style: TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: context.brandAccent,
+          ),
+        ),
       ),
     );
   }

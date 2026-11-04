@@ -29,6 +29,7 @@ class HubInventoryState implements SelloBusyState {
     this.statusFilter = StockStatusFilter.all,
     this.page = 0,
     this.pageSize = kHubTablePageSize,
+    this.matchedCount = 0,
     this.hasMore = false,
     this.isLoading = false,
     this.isSaving = false,
@@ -45,6 +46,9 @@ class HubInventoryState implements SelloBusyState {
   final StockStatusFilter statusFilter;
   final int page;
   final int pageSize;
+
+  /// Parent products matching the current search and filters.
+  final int matchedCount;
   final bool hasMore;
   final bool isLoading;
   final bool isSaving;
@@ -72,6 +76,7 @@ class HubInventoryState implements SelloBusyState {
     StockStatusFilter? statusFilter,
     int? page,
     int? pageSize,
+    int? matchedCount,
     bool? hasMore,
     bool? isLoading,
     bool? isSaving,
@@ -89,6 +94,7 @@ class HubInventoryState implements SelloBusyState {
       statusFilter: statusFilter ?? this.statusFilter,
       page: page ?? this.page,
       pageSize: pageSize ?? this.pageSize,
+      matchedCount: matchedCount ?? this.matchedCount,
       hasMore: hasMore ?? this.hasMore,
       isLoading: isLoading ?? this.isLoading,
       isSaving: isSaving ?? this.isSaving,
@@ -208,6 +214,7 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
       state = state.copyWith(
         items: result.items,
         hasMore: result.hasMore,
+        matchedCount: result.matchedCount,
         stats: stats,
         recentMovements: recent,
         isLoading: false,
@@ -263,6 +270,11 @@ class HubInventoryNotifier extends Notifier<HubInventoryState> {
       page: 0,
     );
     await loadStock(resetPage: true);
+  }
+
+  Future<void> setPageSize(int pageSize) async {
+    state = state.copyWith(pageSize: pageSize, page: 0);
+    await loadStock(resetPage: true, refreshStats: false);
   }
 
   Future<void> goToPage(int page) async {

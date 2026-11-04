@@ -1,5 +1,6 @@
 import 'package:sello/core/router/route_paths.dart';
 import 'package:sello/data/repositories/report_repository.dart';
+import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/report_models.dart';
 import 'package:sello/shared/utils/formatters.dart';
 
@@ -30,10 +31,14 @@ class AnalyticsService {
   List<ReportKpi> buildKpis({
     required ReportsOverview overview,
     required String currencySymbol,
+    AmountDisplayStyle amountDisplay = AmountDisplayStyle.exact,
     bool includeInventoryValuation = true,
   }) {
-    String money(num v) =>
-        SelloFormatters.currency(v, symbol: currencySymbol);
+    String money(num v) => SelloFormatters.summaryAmount(
+      v,
+      symbol: currencySymbol,
+      style: amountDisplay,
+    );
     final spark = [
       for (final p in overview.salesTrend.take(14)) p.sales.toDouble(),
     ];
@@ -43,7 +48,7 @@ class AnalyticsService {
         id: 'sales_today',
         label: 'Sales today',
         value: money(overview.salesToday),
-        hint: overview.preset.label,
+        hint: 'Completed today',
         iconKey: 'today',
         tone: ReportKpiTone.primary,
         drillRoute: RoutePaths.hubOrders,

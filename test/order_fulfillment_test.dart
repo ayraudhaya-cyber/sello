@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sello/services/orders/order_fulfillment_math.dart';
 import 'package:sello/shared/models/order_status.dart';
 import 'package:sello/shared/models/order_summary.dart';
+import 'package:sello/shared/utils/formatters.dart';
 
 void main() {
   group('OrderFulfillmentMath', () {
@@ -229,5 +230,14 @@ void main() {
       expect(delivered, 12);
       expect(cancelled, 8);
     });
+  });
+
+  test('prefilled delivery quantity with a thousands comma still counts', () {
+    expect(SelloFormatters.tryParseQuantity('5,000'), 5000);
+    expect(
+      SelloFormatters.tryParseQuantity(SelloFormatters.quantity(5000)),
+      5000,
+    );
+    expect(SelloFormatters.tryParseQuantity(''), isNull);
   });
 }

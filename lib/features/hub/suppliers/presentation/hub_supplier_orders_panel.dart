@@ -255,6 +255,7 @@ class _HubSupplierOrdersPanelState extends ConsumerState<HubSupplierOrdersPanel>
             rows: [
               for (final order in state.items)
                 DataRow(
+                  onSelectChanged: (_) => _open(order),
                   cells: [
                     DataCell(Text(order.orderNumber)),
                     DataCell(Text(order.supplierName)),

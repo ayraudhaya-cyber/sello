@@ -193,15 +193,23 @@ class _HeroGlassChipState extends State<_HeroGlassChip>
         ),
       ),
     );
-    if (MediaQuery.disableAnimationsOf(context)) return chip;
-    return AnimatedBuilder(
-      animation: _float,
-      builder: (context, child) {
-        final t = (_float.value + widget.phase) % 1;
-        final dy = math.sin(t * math.pi * 2) * 6;
-        return Transform.translate(offset: Offset(0, dy), child: child);
-      },
-      child: chip,
+    final floating = MediaQuery.disableAnimationsOf(context)
+        ? chip
+        : AnimatedBuilder(
+            animation: _float,
+            builder: (context, child) {
+              final t = (_float.value + widget.phase) % 1;
+              final dy = math.sin(t * math.pi * 2) * 6;
+              return Transform.translate(offset: Offset(0, dy), child: child);
+            },
+            child: chip,
+          );
+    // Scale around the chip center so the hero anchors stay where they are.
+    return Transform.scale(
+      scale: 0.78,
+      alignment: Alignment.center,
+      filterQuality: FilterQuality.medium,
+      child: floating,
     );
   }
 }

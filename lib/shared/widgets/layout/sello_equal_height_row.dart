@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:sello/core/responsive/responsive_layout.dart';
 import 'package:sello/core/theme/theme.dart';
@@ -8,9 +9,10 @@ import 'package:sello/core/theme/theme.dart';
 /// Responsive siblings that share a row when they fit, otherwise stack.
 ///
 /// Default [equalizeHeights] matches KPI tiles: after layout, every child
-/// gets [BoxConstraints.minHeight] of the tallest so the row looks even.
-/// Dashboard section cards should use [SelloEqualHeightRow.natural] so each
-/// card keeps its own content height (top edges still align).
+/// gets the height of the tallest so the row looks even.
+/// [tightHeights] stretches the shorter card to the shared height. The
+/// shared height is a minimum: a list that loads after the first frame
+/// still grows the row instead of overflowing a locked slot.
 ///
 /// Safe inside scroll views — measures after layout instead of
 /// [IntrinsicHeight] / [Table], which previously blanked the Hub dashboard.
@@ -27,6 +29,7 @@ class SelloEqualHeightRow extends StatefulWidget {
     this.expandChildren = true,
     this.childWidth,
     this.equalizeHeights = true,
+    this.tightHeights = false,
   });
 
   /// Same reflow as the default row, without stretching shorter cards.
@@ -38,6 +41,7 @@ class SelloEqualHeightRow extends StatefulWidget {
     this.minChildWidth,
     this.expandChildren = true,
     this.childWidth,
+    this.tightHeights = false,
   }) : equalizeHeights = false;
 
   final List<Widget> children;
@@ -58,6 +62,12 @@ class SelloEqualHeightRow extends StatefulWidget {
   /// When true, shorter children stretch to the tallest. When false, each
   /// child keeps its intrinsic height and the row uses top alignment.
   final bool equalizeHeights;
+
+  /// Stretch shorter cards up to the tallest sibling.
+  ///
+  /// The shared height is a floor. Dashboard pairs use this so surfaces
+  /// line up, while a list that arrives later can still grow the row.
+  final bool tightHeights;
 
   @override
   State<SelloEqualHeightRow> createState() => _SelloEqualHeightRowState();
@@ -109,8 +119,9 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
       maxH = math.max(maxH, box.size.height);
     }
     if (maxH <= 0) return;
-    // Grow when content needs more room. Fixed [SizedBox] heights previously
-    // prevented growth and caused overflow; minHeight equalization can grow.
+    // Only grow. The cell height is already max(content, slot), so a later
+    // list still reports a taller box. Shrinking here fights the stretch
+    // and retriggers layout every frame.
     if (_rowHeight == null || maxH > _rowHeight! + 0.5) {
       setState(() => _rowHeight = maxH);
     }
@@ -131,7 +142,12 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
   Widget _cell(int i) {
     final child = widget.children[i];
     if (!widget.equalizeHeights) return child;
-    return _EqualHeightCell(key: _keys[i], height: _rowHeight, child: child);
+    return _EqualHeightCell(
+      key: _keys[i],
+      minHeight: _rowHeight,
+      tight: widget.tightHeights,
+      child: child,
+    );
   }
 
   @override
@@ -181,18 +197,88 @@ class _SelloEqualHeightRowState extends State<SelloEqualHeightRow> {
   }
 }
 
-class _EqualHeightCell extends StatelessWidget {
-  const _EqualHeightCell({super.key, required this.child, this.height});
+/// At least [minHeight], and taller when the child needs it.
+///
+/// [tight] gives a shorter card the shared height as a real max so its
+/// chart or surface can fill the row. Content that is taller than the slot
+/// is laid out unbounded, so a list that arrives later still grows the row.
+class _EqualHeightCell extends SingleChildRenderObjectWidget {
+  const _EqualHeightCell({
+    super.key,
+    required super.child,
+    required this.minHeight,
+    required this.tight,
+  });
 
-  final Widget child;
-  final double? height;
+  final double? minHeight;
+  final bool tight;
 
   @override
-  Widget build(BuildContext context) {
-    if (height == null) return child;
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: height!),
-      child: SizedBox(width: double.infinity, child: child),
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderEqualHeightCell(minHeight: minHeight, tight: tight);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderEqualHeightCell renderObject,
+  ) {
+    renderObject
+      ..minHeight = minHeight
+      ..tight = tight;
+  }
+}
+
+class _RenderEqualHeightCell extends RenderProxyBox {
+  _RenderEqualHeightCell({required double? minHeight, required bool tight})
+    : _minHeight = minHeight,
+      _tight = tight;
+
+  double? _minHeight;
+  bool _tight;
+
+  double? get minHeight => _minHeight;
+  set minHeight(double? value) {
+    if (_minHeight == value) return;
+    _minHeight = value;
+    markNeedsLayout();
+  }
+
+  bool get tight => _tight;
+  set tight(bool value) {
+    if (_tight == value) return;
+    _tight = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+
+    final width = constraints.hasBoundedWidth
+        ? constraints.maxWidth
+        : constraints.minWidth;
+    child.layout(
+      BoxConstraints(minWidth: width, maxWidth: width),
+      parentUsesSize: true,
+    );
+    final natural = child.size.height;
+    final slot = _minHeight;
+    final height = slot == null ? natural : math.max(natural, slot);
+    // Stretch a shorter card up to the row, but never cap it. A tight max
+    // froze the first measurement and painted overflow on lists that grew.
+    if (slot != null && height > natural + 0.5) {
+      child.layout(
+        BoxConstraints(minWidth: width, maxWidth: width, minHeight: height),
+        parentUsesSize: true,
+      );
+    }
+    size = constraints.constrain(
+      Size(width, math.max(height, child.size.height)),
     );
   }
 }

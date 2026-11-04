@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,11 +11,9 @@ import 'package:sello/features/hub/reports/presentation/collections_report_dialo
 import 'package:sello/features/hub/reports/presentation/report_charts.dart';
 import 'package:sello/features/hub/reports/presentation/report_detail_dialog.dart';
 import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
-import 'package:sello/features/intelligence/application/intelligence_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/collections_report.dart';
 import 'package:sello/shared/models/report_models.dart';
-import 'package:sello/shared/models/user_role.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/widgets.dart';
 
@@ -43,8 +43,23 @@ class HubReportsPage extends ConsumerWidget {
       return;
     }
 
-    final overview = ref.read(hubReportsProvider).overview;
-    if (overview == null) return;
+    final reports = ref.read(hubReportsProvider);
+    final overview = reports.overview;
+    if (overview == null) {
+      final message = reports.isLoading
+          ? 'Analytics are still loading. This report will open once they are ready.'
+          : (reports.errorMessage ??
+                'No report data yet. Complete a few sales and stock movements, then try again.');
+      await _showReportMessage(
+        context,
+        definition: definition,
+        message: message,
+        onRetry: reports.isLoading
+            ? null
+            : () => ref.read(hubReportsProvider.notifier).refresh(),
+      );
+      return;
+    }
 
     await showDialog<void>(
       context: context,
@@ -52,15 +67,6 @@ class HubReportsPage extends ConsumerWidget {
         definition: definition,
         overview: overview,
         currencySymbol: _currencySymbol(ref),
-        onExport: (format) async {
-          final message = await ref
-              .read(hubReportsProvider.notifier)
-              .requestExport(reportId: definition.id, format: format);
-          if (!context.mounted) return;
-          if (message != null) {
-            SelloSnackbars.info(context, message);
-          }
-        },
         onDrillDown: () {
           final route =
               definition.drillRoute ??
@@ -72,6 +78,51 @@ class HubReportsPage extends ConsumerWidget {
             context.go(route);
           }
         },
+      ),
+    );
+  }
+
+  Future<void> _showReportMessage(
+    BuildContext context, {
+    required ReportDefinition definition,
+    required String message,
+    VoidCallback? onRetry,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => SelloFormDialog(
+        title: definition.title,
+        subtitle: definition.question,
+        maxWidth: 480,
+        body: Text(
+          message,
+          style: const TextStyle(
+            fontFamily: AppTypography.fontFamily,
+            fontSize: 14,
+            height: 1.45,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        footer: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (onRetry != null) ...[
+              SelloButton(
+                label: 'Retry',
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  onRetry();
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
+            SelloButton(
+              label: 'Close',
+              variant: SelloButtonVariant.outline,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -100,8 +151,6 @@ class HubReportsPage extends ConsumerWidget {
 
     return AppPageScaffold(
       title: 'Reports',
-      subtitle:
-          'Reusable analytics from live sales, visits, inventory, payments, and suppliers.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       actions: [
@@ -119,18 +168,16 @@ class HubReportsPage extends ConsumerWidget {
         children: [
           SelloReportFiltersBar(
             query: state.query,
-            categoryFilter: state.categoryFilter,
+            showCategory: false,
             onQueryChanged: (query) =>
                 ref.read(hubReportsProvider.notifier).setQuery(query),
-            onCategoryChanged: (value) =>
-                ref.read(hubReportsProvider.notifier).setCategoryFilter(value),
           ),
           const SizedBox(height: AppSpacing.lg),
           if (state.isLoading && overview == null)
             const SelloTableSkeleton(showMetrics: true, rows: 4, columns: 4)
-          else if (state.errorMessage != null)
+          else if (state.errorMessage != null && overview == null)
             SelloEmptyState(
-              title: 'Unable to load reports',
+              title: 'Unable to load analytics',
               message: state.errorMessage,
               icon: Icons.error_outline_rounded,
               actionLabel: 'Retry',
@@ -144,65 +191,69 @@ class HubReportsPage extends ConsumerWidget {
               icon: Icons.insights_outlined,
             )
           else ...[
-            Consumer(
-              builder: (context, ref, _) {
-                final intel = ref.watch(hubIntelligenceProvider);
-                final session = ref.watch(currentSessionProvider);
-                final role = session?.appRole;
-                return intel.when(
-                  data: (snap) => SelloIntelligenceBanner(
-                    insights: snap.insights,
-                    message:
-                        'Sello Intelligence reuses these same analytics — '
-                        'forecasting and AI digests come next.',
-                    onInsightAction: role == null
-                        ? null
-                        : (insight) => context.go(insight.routeFor(role)),
-                  ),
-                  loading: () => const SelloIntelligenceBanner(
-                    message: 'Analysing sales, stock, visits, and collections…',
-                  ),
-                  error: (_, _) => const SelloIntelligenceBanner(
-                    message:
-                        'Sello Intelligence reuses these same analytics — '
-                        'forecasting and AI digests come next.',
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: AppSpacing.lg),
             SelloReportKpiGrid(
-              kpis: ref
-                  .read(analyticsServiceProvider)
-                  .buildKpis(
-                    overview: overview,
-                    currencySymbol: currency,
-                    includeInventoryValuation:
-                        ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
-                        false,
-                  ),
+              kpis: [
+                for (final kpi in ref
+                    .read(analyticsServiceProvider)
+                    .buildKpis(
+                      overview: overview,
+                      currencySymbol: currency,
+                      amountDisplay: ref
+                          .watch(companySettingsProvider)
+                          .amountDisplay,
+                      includeInventoryValuation:
+                          ref
+                              .watch(currentRoleProvider)
+                              ?.canViewInventoryValuation ??
+                          false,
+                    ))
+                  if (kpi.id != 'top_customers' && kpi.id != 'top_products')
+                    kpi,
+              ],
               onKpiTap: (kpi) => _onKpiTap(context, ref, kpi),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            _SalesTrendCard(
-              overview: overview,
-              currencySymbol: currency,
-              points: ref
-                  .read(analyticsServiceProvider)
-                  .bucketTrend(
-                    overview.salesTrend,
-                    granularity: state.query.granularity,
-                  ),
-              granularity: state.query.granularity,
             ),
             const SizedBox(height: AppSpacing.lg),
             SelloEqualHeightRow(
               gap: AppSpacing.lg,
+              flexes: const [3, 2],
               minChildWidth: ResponsiveLayout.sectionCardMinWidth,
               children: [
+                _SalesTrendCard(
+                  overview: overview,
+                  currencySymbol: currency,
+                  points: ref
+                      .read(analyticsServiceProvider)
+                      .bucketTrend(
+                        overview.salesTrend,
+                        granularity: state.query.granularity,
+                      ),
+                  granularity: state.query.granularity,
+                ),
+                _StatusCard(overview: overview),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SelloEqualHeightRow(
+              gap: AppSpacing.lg,
+              minChildWidth: 260,
+              children: [
+                _RankCard(
+                  title: 'Top sales representatives',
+                  child: ReportComparisonBars(
+                    items: overview.topSalesReps,
+                    valueLabel: (i) =>
+                        SelloFormatters.currency(i.value, symbol: currency),
+                  ),
+                  onOpen: () => _openReport(
+                    context,
+                    ref,
+                    ReportCatalog.definitions.firstWhere(
+                      (d) => d.id == 'sales_top_reps',
+                    ),
+                  ),
+                ),
                 _RankCard(
                   title: 'Best selling products',
-                  subtitle: 'Revenue leaders this period',
                   child: ReportComparisonBars(
                     items: overview.topProducts,
                     valueLabel: (i) =>
@@ -218,7 +269,6 @@ class HubReportsPage extends ConsumerWidget {
                 ),
                 _RankCard(
                   title: 'Top customers',
-                  subtitle: 'Highest completed order value',
                   child: ReportComparisonBars(
                     items: overview.topCustomers,
                     valueLabel: (i) =>
@@ -234,44 +284,21 @@ class HubReportsPage extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.lg),
-            SelloEqualHeightRow(
-              gap: AppSpacing.lg,
-              minChildWidth: ResponsiveLayout.sectionCardMinWidth,
-              children: [
-                _StatusCard(overview: overview),
-                _RankCard(
-                  title: 'Top sales representatives',
-                  subtitle: 'Completed order value by rep',
-                  child: ReportComparisonBars(
-                    items: overview.topSalesReps,
-                    valueLabel: (i) =>
-                        SelloFormatters.currency(i.value, symbol: currency),
-                  ),
-                  onOpen: () => _openReport(
-                    context,
-                    ref,
-                    ReportCatalog.definitions.firstWhere(
-                      (d) => d.id == 'sales_top_reps',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            const SelloSectionHeader(
-              title: 'Report library',
-              subtitle:
-                  'Each report answers one business question. Open any card for detail and export options.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _ReportLibrary(
-              categoryFilter: state.categoryFilter,
-              isOwner: ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
-                  false,
-              onOpen: (definition) => _openReport(context, ref, definition),
-            ),
           ],
+          const SizedBox(height: AppSpacing.xl),
+          const Divider(height: 1, color: AppColors.outlinePanel),
+          const SizedBox(height: AppSpacing.lg),
+          const SelloSectionHeader(title: 'Report library'),
+          const SizedBox(height: AppSpacing.md),
+          _ReportLibrary(
+            categoryFilter: state.categoryFilter,
+            onCategoryChanged: (value) =>
+                ref.read(hubReportsProvider.notifier).setCategoryFilter(value),
+            isOwner:
+                ref.watch(currentRoleProvider)?.canViewInventoryValuation ??
+                false,
+            onOpen: (definition) => _openReport(context, ref, definition),
+          ),
         ],
       ),
     );
@@ -366,13 +393,11 @@ class _SalesTrendCard extends StatelessWidget {
 class _RankCard extends StatelessWidget {
   const _RankCard({
     required this.title,
-    required this.subtitle,
     required this.child,
     this.onOpen,
   });
 
   final String title;
-  final String subtitle;
   final Widget child;
   final VoidCallback? onOpen;
 
@@ -396,15 +421,6 @@ class _RankCard extends StatelessWidget {
                         fontFamily: AppTypography.fontFamily,
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontFamily: AppTypography.fontFamily,
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],
@@ -446,7 +462,7 @@ class _StatusCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text(
-            'All-time operational mix (from Orders)',
+            'All-time order status',
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 12,
@@ -454,20 +470,11 @@ class _StatusCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              SelloMetaPill(value: 'Total ${counts.total}'),
-              SelloMetaPill(value: 'Open ${counts.draft}'),
-              SelloMetaPill(value: 'Completed ${counts.completed}'),
-              SelloMetaPill(value: 'Cancelled ${counts.cancelled}'),
-            ],
-          ),
+          OrderStatusDonut(data: OrderStatusDonutData.fromCounts(counts)),
           if (overview.paymentStatusCounts.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Text(
-              'Completed orders — payment status',
+              'Completed orders in the selected period — payment status',
               style: TextStyle(
                 fontFamily: AppTypography.fontFamily,
                 fontSize: 12,
@@ -490,16 +497,25 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-class _ReportLibrary extends StatelessWidget {
+class _ReportLibrary extends StatefulWidget {
   const _ReportLibrary({
     required this.categoryFilter,
+    required this.onCategoryChanged,
     required this.onOpen,
     this.isOwner = false,
   });
 
   final ReportCategory? categoryFilter;
+  final ValueChanged<ReportCategory?> onCategoryChanged;
   final ValueChanged<ReportDefinition> onOpen;
   final bool isOwner;
+
+  @override
+  State<_ReportLibrary> createState() => _ReportLibraryState();
+}
+
+class _ReportLibraryState extends State<_ReportLibrary> {
+  String _query = '';
 
   IconData _iconFor(String key) {
     return switch (key) {
@@ -534,78 +550,171 @@ class _ReportLibrary extends StatelessWidget {
       'receipt_long' => Icons.receipt_long_outlined,
       'badge' => Icons.badge_outlined,
       'map' => Icons.map_outlined,
+      'event' => Icons.event_outlined,
+      'event_busy' => Icons.event_busy_outlined,
+      'notifications' => Icons.notifications_outlined,
+      'timeline' => Icons.timeline_outlined,
       _ => Icons.description_outlined,
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final categories = categoryFilter == null
+    final matches = ReportCatalog.matching(
+      query: _query,
+      category: widget.categoryFilter,
+      isOwner: widget.isOwner,
+    );
+    final categories = widget.categoryFilter == null
         ? ReportCategory.values
-        : [categoryFilter!];
+        : [widget.categoryFilter!];
+    final searching = _query.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final category in categories) ...[
-          Text(
-            category.label,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
-          ),
-          if (!category.isAvailable)
-            const Padding(
-              padding: EdgeInsets.only(top: 4, bottom: 8),
-              child: Text(
-                'Coming soon — structure reserved.',
-                style: TextStyle(
+        _LibraryControls(
+          category: widget.categoryFilter,
+          onCategoryChanged: widget.onCategoryChanged,
+          onQueryChanged: (value) => setState(() => _query = value),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        if (matches.isEmpty)
+          SelloEmptyState(
+            title: 'No reports match',
+            message: searching && widget.categoryFilter != null
+                ? 'Nothing in ${widget.categoryFilter!.label} matches “${_query.trim()}”.'
+                : searching
+                ? 'No report title, description, or category matches “${_query.trim()}”.'
+                : 'No reports are listed in ${widget.categoryFilter?.label ?? 'this category'}.',
+            icon: Icons.search_off_rounded,
+          )
+        else
+          for (final category in categories) ...[
+            if (matches.any((item) => item.category == category)) ...[
+              Text(
+                category.label,
+                style: const TextStyle(
                   fontFamily: AppTypography.fontFamily,
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                 ),
               ),
-            )
-          else
-            const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = ResponsiveLayout.columnsFor(
-                width: constraints.maxWidth,
-                itemCount: 3,
-                minItemWidth: ResponsiveLayout.sectionCardMinWidth,
-                maxColumns: 3,
-                gap: AppSpacing.md,
-              );
-              final width =
-                  (constraints.maxWidth - (AppSpacing.md * (columns - 1))) /
-                  columns;
-              final items = ReportCatalog.forCategory(
-                category,
-                isOwner: isOwner,
-              );
-              return Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
-                children: [
-                  for (final item in items)
-                    SizedBox(
-                      width: width,
-                      child: _LibraryCard(
-                        definition: item,
-                        icon: _iconFor(item.icon),
-                        onTap: item.available ? () => onOpen(item) : null,
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.xl),
-        ],
+              const SizedBox(height: 10),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final items = [
+                    for (final item in matches)
+                      if (item.category == category) item,
+                  ];
+                  final columns = ResponsiveLayout.columnsFor(
+                    width: constraints.maxWidth,
+                    itemCount: math.max(items.length, 1),
+                    minItemWidth: ResponsiveLayout.sectionCardMinWidth,
+                    maxColumns: 3,
+                    gap: AppSpacing.md,
+                  );
+                  final width =
+                      (constraints.maxWidth -
+                          (AppSpacing.md * (columns - 1))) /
+                      columns;
+                  return Column(
+                    children: [
+                      for (var start = 0; start < items.length; start += columns) ...[
+                        if (start > 0) const SizedBox(height: AppSpacing.md),
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (
+                                var i = start;
+                                i < math.min(start + columns, items.length);
+                                i++
+                              ) ...[
+                                if (i > start) const SizedBox(width: AppSpacing.md),
+                                SizedBox(
+                                  width: width,
+                                  child: _LibraryCard(
+                                    definition: items[i],
+                                    icon: _iconFor(items[i].icon),
+                                    onTap: items[i].available
+                                        ? () => widget.onOpen(items[i])
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+          ],
       ],
+    );
+  }
+}
+
+class _LibraryControls extends StatelessWidget {
+  const _LibraryControls({
+    required this.category,
+    required this.onCategoryChanged,
+    required this.onQueryChanged,
+  });
+
+  final ReportCategory? category;
+  final ValueChanged<ReportCategory?> onCategoryChanged;
+  final ValueChanged<String> onQueryChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final search = SelloSearchBar(
+      hint: 'Search reports',
+      onChanged: onQueryChanged,
+    );
+    final filter = SizedBox(
+      width: 220,
+      child: SelloDropdown<ReportCategory?>(
+        compact: true,
+        value: category,
+        items: [
+          const DropdownMenuItem<ReportCategory?>(
+            value: null,
+            child: Text('All reports'),
+          ),
+          for (final item in ReportCategory.values)
+            DropdownMenuItem(value: item, child: Text(item.label)),
+        ],
+        onChanged: onCategoryChanged,
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = !constraints.maxWidth.isFinite || constraints.maxWidth < 640;
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              search,
+              const SizedBox(height: 10),
+              filter,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: search),
+            const SizedBox(width: 12),
+            filter,
+          ],
+        );
+      },
     );
   }
 }
@@ -627,6 +736,7 @@ class _LibraryCard extends StatelessWidget {
     return SelloCard(
       onTap: onTap,
       enableHoverLift: enabled,
+      emphasizeFocus: enabled,
       padding: const EdgeInsets.all(16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -667,10 +777,12 @@ class _LibraryCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (!definition.available)
-                      const SelloMetaPill(value: 'Soon'),
                   ],
                 ),
+                if (!definition.available) ...[
+                  const SizedBox(height: 6),
+                  const SelloMetaPill(value: 'Not available yet'),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   definition.question,

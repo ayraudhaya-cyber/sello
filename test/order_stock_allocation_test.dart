@@ -109,4 +109,33 @@ void main() {
 
     expect(short, isEmpty);
   });
+
+  test('a stocked option is not short because a sibling option is zero', () {
+    final onHand = <String, num>{};
+    OrderStockAllocation.addOnHand(
+      onHand,
+      key: OrderStockAllocation.stockKey(branchId: 'b', unitId: '10mm'),
+      quantity: 93,
+    );
+    OrderStockAllocation.addOnHand(
+      onHand,
+      key: OrderStockAllocation.stockKey(branchId: 'b', unitId: '8mm'),
+      quantity: 0,
+    );
+
+    final short = OrderStockAllocation.ordersShortOfStock(
+      orders: [
+        order(
+          id: 'glass',
+          at: older,
+          key: OrderStockAllocation.stockKey(branchId: 'b', unitId: '10mm'),
+          remaining: 10,
+        ),
+      ],
+      onHandByKey: onHand,
+    );
+
+    expect(short, isEmpty);
+    expect(onHand[OrderStockAllocation.stockKey(branchId: 'b', unitId: '10mm')], 93);
+  });
 }

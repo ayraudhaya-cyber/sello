@@ -112,7 +112,7 @@ class SelloDataTable extends StatelessWidget {
                       sortColumnIndex: sortColumnIndex,
                       sortAscending: sortAscending,
                       columns: expandedColumns,
-                      rows: rows,
+                      rows: [for (final row in rows) _withRowCursor(row)],
                     ),
                   ),
                 ),
@@ -129,6 +129,22 @@ class SelloDataTable extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  /// A row that opens something shows a pointer across the whole row.
+  /// Icon buttons inside the row keep their own taps.
+  DataRow _withRowCursor(DataRow row) {
+    if (row.onSelectChanged == null || row.mouseCursor != null) return row;
+    return DataRow(
+      key: row.key,
+      selected: row.selected,
+      onSelectChanged: row.onSelectChanged,
+      onLongPress: row.onLongPress,
+      onHover: row.onHover,
+      color: row.color,
+      mouseCursor: WidgetStateProperty.all(SystemMouseCursors.click),
+      cells: row.cells,
     );
   }
 
@@ -250,6 +266,12 @@ DataColumn selloDataColumn(
   String label, {
   bool numeric = false,
   DataColumnSortCallback? onSort,
+  TableColumnWidth? columnWidth,
 }) {
-  return DataColumn(label: Text(label), numeric: numeric, onSort: onSort);
+  return DataColumn(
+    label: Text(label),
+    numeric: numeric,
+    onSort: onSort,
+    columnWidth: columnWidth,
+  );
 }

@@ -53,13 +53,12 @@ class PaymentAllocation extends Equatable {
   bool get isOpeningBalance =>
       receivableAdjustmentId != null && receivableAdjustmentId!.isNotEmpty;
 
-  /// Order number, or "Opening balance · OB-…" for adjustment allocations.
+  /// Order number, or the OB code for an opening-balance allocation.
+  /// The code already starts with OB, so the words are not repeated.
   String get displayLabel {
     if (isOpeningBalance) {
       final number = adjustmentNumber?.trim();
-      if (number != null && number.isNotEmpty) {
-        return 'Opening balance · $number';
-      }
+      if (number != null && number.isNotEmpty) return number;
       return 'Opening balance';
     }
     final order = orderNumber?.trim();
@@ -175,7 +174,7 @@ class PaymentSummary extends Equatable {
             allocation.displayLabel.trim(),
       ];
 
-  /// "SO-1001, Opening balance · OB-0003" — empty when nothing is allocated.
+  /// "SO-1001, OB-0003" — empty when nothing is allocated.
   String get allocationSummary => allocationLabels.join(', ');
 
   /// First item, then how many more. "SO-1001 +3".

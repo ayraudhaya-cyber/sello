@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sello/features/hub/dashboard/application/hub_dashboard_provider.dart';
+import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/inventory_item.dart';
 import 'package:sello/shared/models/order_summary.dart';
 import 'package:sello/shared/models/payment_summary.dart';
@@ -57,10 +58,17 @@ void main() {
       expect(snap.activeCustomers, 0);
       expect(snap.outstanding, 0);
       expect(snap.lowStock, 0);
-      expect(snap.moneyCompact(0), 'Rs 0.00');
+      expect(snap.summary(0), 'Rs 0.00');
       expect(snap.money(0), isNot(contains('4.82')));
-      expect(snap.moneyCompact(612000), contains('K'));
-      expect(snap.moneyCompact(4820000), contains('M'));
+      expect(snap.summary(8350073.93), 'Rs 8,350,073.93');
+      expect(
+        snap.summary(8350073.93, style: AmountDisplayStyle.lakhs),
+        'Rs 83.5 lakhs',
+      );
+      expect(
+        snap.summary(8350073.93, style: AmountDisplayStyle.millions),
+        'Rs 8.35m',
+      );
     });
 
     test('empty flags drive truthful empty states', () {
@@ -140,6 +148,31 @@ void main() {
       expect(snap.hasInventory, isTrue);
       expect(snap.sparkForMetric('revenue'), isNotEmpty);
     });
+  });
+
+  test('previous period uses the same elapsed dates', () {
+    final now = DateTime(2026, 11, 4, 15);
+    final month = hubDashboardPreviousBounds('month', now: now);
+    expect(month.from.toLocal(), DateTime(2026, 10, 1));
+    expect(month.to.toLocal().day, 4);
+    expect(month.to.toLocal().month, 10);
+
+    final today = hubDashboardPreviousBounds('today', now: now);
+    expect(today.from.toLocal().day, 3);
+    expect(today.from.toLocal().month, 11);
+
+    expect(
+      hubDashboardComparison(current: 120, previous: 100, periodName: 'last month'),
+      '+20% vs last month',
+    );
+    expect(
+      hubDashboardComparison(current: 80, previous: 100, periodName: 'last month'),
+      '-20% vs last month',
+    );
+    expect(
+      hubDashboardComparison(current: 10, previous: 0, periodName: 'yesterday'),
+      'New vs yesterday',
+    );
   });
 
   test('hubDashboardPresetForRange maps UI ranges to report presets', () {

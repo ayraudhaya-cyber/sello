@@ -203,11 +203,11 @@ class IntelligenceService {
           category: IntelligenceCategory.payments,
           title: 'Money still owed by customers',
           message:
-              '${_money(payments.outstandingReceivables, currency)} hasn\'t '
+              '${_money(payments.outstandingReceivables, currency, settings.amountDisplay)} hasn\'t '
               'been paid yet. Follow up so cash comes in sooner.',
           action: IntelligenceActionKind.openPayments,
           priority: 15,
-          metricLabel: _money(payments.outstandingReceivables, currency),
+          metricLabel: _money(payments.outstandingReceivables, currency, settings.amountDisplay),
         ),
       );
     }
@@ -258,12 +258,12 @@ class IntelligenceService {
           category: IntelligenceCategory.sales,
           title: 'Revenue this month',
           message:
-              'You\'ve earned ${_money(overview.salesInPeriod, currency)} '
+              'You\'ve earned ${_money(overview.salesInPeriod, currency, settings.amountDisplay)} '
               'from $orders completed $orderWord.\n'
-              'Average order: ${_money(overview.averageOrderValue, currency)}.',
+              'Average order: ${_money(overview.averageOrderValue, currency, settings.amountDisplay)}.',
           action: IntelligenceActionKind.openReport,
           priority: 45,
-          metricLabel: _money(overview.salesInPeriod, currency),
+          metricLabel: _money(overview.salesInPeriod, currency, settings.amountDisplay),
         ),
       );
     }
@@ -319,12 +319,12 @@ class IntelligenceService {
           category: IntelligenceCategory.sales,
           title: 'Payments collected today',
           message:
-              'You\'ve taken in ${_money(payments.collectedToday, currency)} '
+              'You\'ve taken in ${_money(payments.collectedToday, currency, settings.amountDisplay)} '
               'so far today. Open reports to see how that compares with '
               'other days.',
           action: IntelligenceActionKind.openReport,
           priority: 55,
-          metricLabel: _money(payments.collectedToday, currency),
+          metricLabel: _money(payments.collectedToday, currency, settings.amountDisplay),
         ),
       );
     }
@@ -389,11 +389,11 @@ class IntelligenceService {
           category: IntelligenceCategory.payments,
           title: 'Money still owed by customers',
           message:
-              '${_money(payments.outstandingReceivables, currency)} is still '
+              '${_money(payments.outstandingReceivables, currency, settings.amountDisplay)} is still '
               'unpaid. Ask the team to follow up on the largest amounts first.',
           action: IntelligenceActionKind.openPayments,
           priority: 25,
-          metricLabel: _money(payments.outstandingReceivables, currency),
+          metricLabel: _money(payments.outstandingReceivables, currency, settings.amountDisplay),
         ),
       );
     }
@@ -536,12 +536,12 @@ class IntelligenceService {
                 category: IntelligenceCategory.payments,
                 title: 'Customers still owe money',
                 message:
-                    '${_money(payments.outstandingReceivables, currency)} is '
+                    '${_money(payments.outstandingReceivables, currency, settings.amountDisplay)} is '
                     'unpaid across customers. Collect what you can on your '
                     'visits today.',
                 action: IntelligenceActionKind.receivePayment,
                 priority: 18,
-                metricLabel: _money(payments.outstandingReceivables, currency),
+                metricLabel: _money(payments.outstandingReceivables, currency, settings.amountDisplay),
               ),
             );
           }
@@ -599,6 +599,9 @@ class IntelligenceService {
     return out;
   }
 
-  static String _money(num value, String symbol) =>
-      SelloFormatters.currency(value, symbol: symbol);
+  static String _money(
+    num value,
+    String symbol,
+    AmountDisplayStyle style,
+  ) => SelloFormatters.summaryAmount(value, symbol: symbol, style: style);
 }

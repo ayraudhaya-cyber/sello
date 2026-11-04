@@ -13,6 +13,7 @@ import 'package:sello/features/mobile/dashboard/application/sello_home_provider.
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/data/sri_lanka_areas.dart';
+import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/intelligence_insight.dart';
 import 'package:sello/shared/models/sales_day.dart';
@@ -31,6 +32,9 @@ class SelloDashboardPage extends ConsumerWidget {
     final consider = ref.watch(selloConsiderCustomersProvider);
     final nearArea = ref.watch(selloHomeNearAreaProvider);
     final currency = ref.watch(selloCurrencySymbolProvider);
+    final amountStyle =
+        ref.watch(selloCompanySettingsProvider).valueOrNull?.amountDisplay ??
+        AmountDisplayStyle.exact;
     final pad = context.pagePadding;
 
     void openVisit({
@@ -88,7 +92,11 @@ class SelloDashboardPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _HomeHero(day: day, currencySymbol: currency),
+            _HomeHero(
+              day: day,
+              currencySymbol: currency,
+              amountDisplay: amountStyle,
+            ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () {
@@ -344,10 +352,15 @@ class SelloDashboardPage extends ConsumerWidget {
 }
 
 class _HomeHero extends StatelessWidget {
-  const _HomeHero({required this.day, required this.currencySymbol});
+  const _HomeHero({
+    required this.day,
+    required this.currencySymbol,
+    required this.amountDisplay,
+  });
 
   final SalesDaySnapshot day;
   final String currencySymbol;
+  final AmountDisplayStyle amountDisplay;
 
   @override
   Widget build(BuildContext context) {
@@ -355,13 +368,18 @@ class _HomeHero extends StatelessWidget {
     final visits = day.hasVisitPlan
         ? day.plannedCount
         : day.activity.customersVisited;
-    final collected = SelloFormatters.currency(
+    final collected = SelloFormatters.summaryAmount(
       day.insights.todaysSales,
       symbol: currencySymbol,
+      style: amountDisplay,
     );
     final ordersLabel = '$orders ${orders == 1 ? 'Order' : 'Orders'}';
     final visitsLabel = '$visits ${visits == 1 ? 'Visit' : 'Visits'}';
-    final orderValue = _wholeMoney(day.activity.ordersValue, currencySymbol);
+    final orderValue = _wholeMoney(
+      day.activity.ordersValue,
+      currencySymbol,
+      amountDisplay,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
@@ -400,8 +418,16 @@ class _HomeHero extends StatelessWidget {
 }
 
 /// Pill money stays whole when there are no cents: `Rs 43,000`.
-String _wholeMoney(num value, String symbol) {
-  final text = SelloFormatters.currency(value, symbol: symbol);
+String _wholeMoney(
+  num value,
+  String symbol,
+  AmountDisplayStyle style,
+) {
+  final text = SelloFormatters.summaryAmount(
+    value,
+    symbol: symbol,
+    style: style,
+  );
   if (text.endsWith('.00')) return text.substring(0, text.length - 3);
   return text;
 }

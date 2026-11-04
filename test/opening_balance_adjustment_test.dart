@@ -192,7 +192,7 @@ void main() {
         receivableAdjustmentId: 'adj-1',
         adjustmentNumber: 'OB-20261001-0001',
       );
-      expect(alloc.displayLabel, 'Opening balance · OB-20261001-0001');
+      expect(alloc.displayLabel, 'OB-20261001-0001');
       expect(alloc.isOpeningBalance, isTrue);
     });
 
@@ -501,7 +501,7 @@ void main() {
         adjustmentNumber: 'OB-20261001-0001',
         adjustmentReferenceNumber: 'INV-4587',
       );
-      expect(alloc.displayLabel, 'Opening balance · OB-20261001-0001');
+      expect(alloc.displayLabel, 'OB-20261001-0001');
       expect(alloc.displayLabel, isNot(contains('INV-4587')));
       expect(alloc.adjustmentReferenceNumber, 'INV-4587');
     });

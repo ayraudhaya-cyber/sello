@@ -288,4 +288,65 @@ void main() {
     expect(overflow, isNull);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('tight row grows when a card gets taller instead of overflowing', (
+    tester,
+  ) async {
+    await setSurface(tester, const Size(1000, 800));
+    FlutterErrorDetails? overflow;
+    final old = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        overflow = details;
+      }
+      old?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = old);
+
+    var tall = false;
+    await tester.pumpWidget(
+      wrap(
+        width: 800,
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return Column(
+              children: [
+                SelloEqualHeightRow(
+                  tightHeights: true,
+                  minChildWidth: 280,
+                  children: [
+                    SelloCard(
+                      key: const Key('list'),
+                      child: SizedBox(
+                        height: tall ? 220 : 48,
+                        child: Text(tall ? 'Loaded rows' : 'Loading'),
+                      ),
+                    ),
+                    const SelloCard(
+                      key: Key('neighbor'),
+                      child: SizedBox(height: 80, child: Text('Neighbor')),
+                    ),
+                  ],
+                ),
+                TextButton(
+                  onPressed: () => setState(() => tall = true),
+                  child: const Text('Load'),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Load'));
+    await tester.pumpAndSettle();
+
+    expect(overflow, isNull);
+    expect(tester.takeException(), isNull);
+    final listH = tester.getSize(find.byKey(const Key('list'))).height;
+    final neighborH = tester.getSize(find.byKey(const Key('neighbor'))).height;
+    expect(listH, greaterThan(180));
+    expect((listH - neighborH).abs(), lessThan(1));
+  });
 }

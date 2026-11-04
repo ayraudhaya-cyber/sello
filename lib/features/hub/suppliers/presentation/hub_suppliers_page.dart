@@ -54,15 +54,9 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
   }
 
   String _currencySymbol() {
-    final currency = ref.read(companySettingsProvider).currency;
-    return switch (currency) {
-      'LKR' => 'Rs ',
-      'EUR' => '€',
-      'GBP' => '£',
-      'INR' => '₹',
-      'JPY' => '¥',
-      _ => '\$',
-    };
+    return SelloFormatters.currencySymbol(
+      ref.read(companySettingsProvider).currency,
+    );
   }
 
   Future<void> _openEditor({SupplierSummary? supplier}) async {
@@ -226,10 +220,6 @@ class _HubSuppliersPageState extends ConsumerState<HubSuppliersPage>
 
     return AppPageScaffold(
       title: 'Suppliers',
-      subtitle: _tab == _SuppliersWorkspaceTab.directory
-          ? 'Procurement directory — vendors that supply products and will '
-              'power purchase orders and goods received.'
-          : 'Orders you place with a supplier. Receive the goods on that same order.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       actions: [

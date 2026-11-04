@@ -8,6 +8,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/features/visits/application/active_customer_visit_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
+import 'package:sello/shared/models/app_notification.dart';
 import 'package:sello/shared/models/customer_receivable_adjustment.dart';
 import 'package:sello/shared/models/customer_summary.dart';
 import 'package:sello/shared/models/customer_visit.dart';
@@ -155,7 +156,6 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                 onAddOpeningBalance: widget.onAddOpeningBalance,
                 onCorrectOpeningBalance: widget.onCorrectOpeningBalance,
                 onAddExistingCheque: widget.onAddExistingCheque,
-                sectionGap: _sectionGap,
                 fieldGap: _fieldGap,
               ),
               _CustomerDetailTab.orders => _HubCustomerOrdersBody(
@@ -260,13 +260,12 @@ class _CustomerDetailTabs extends StatelessWidget {
   }
 }
 
-class _HubOverviewBody extends StatelessWidget {
+class _HubOverviewBody extends ConsumerStatefulWidget {
   const _HubOverviewBody({
     required this.customer,
     required this.currencySymbol,
     required this.readOnly,
     required this.openingBalanceHistoryEpoch,
-    required this.sectionGap,
     required this.fieldGap,
     this.assignedRepresentativeName,
     this.onAddOpeningBalance,
@@ -283,48 +282,139 @@ class _HubOverviewBody extends StatelessWidget {
   final Future<void> Function(CustomerReceivableAdjustment item)?
   onCorrectOpeningBalance;
   final VoidCallback? onAddExistingCheque;
-  final double sectionGap;
   final double fieldGap;
 
-  static const _dash = '—';
+  @override
+  ConsumerState<_HubOverviewBody> createState() => _HubOverviewBodyState();
+}
+
+class _HubOverviewBodyState extends ConsumerState<_HubOverviewBody> {
+  static const _sectionGap = 22.0;
+
+  List<CustomerReceivableAdjustment> _adjustments = const [];
+  bool _adjustmentsLoading = true;
+  bool _adjustmentsFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadAdjustments());
+  }
+
+  @override
+  void didUpdateWidget(covariant _HubOverviewBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.customer.id != widget.customer.id ||
+        oldWidget.openingBalanceHistoryEpoch !=
+            widget.openingBalanceHistoryEpoch) {
+      _loadAdjustments();
+    }
+  }
+
+  Future<void> _loadAdjustments() async {
+    setState(() {
+      _adjustmentsLoading = true;
+      _adjustmentsFailed = false;
+    });
+    try {
+      final items = await ref
+          .read(customerRepositoryProvider)
+          .fetchOpeningBalanceAdjustments(widget.customer.id);
+      if (!mounted) return;
+      setState(() {
+        _adjustments = items;
+        _adjustmentsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _adjustments = const [];
+        _adjustmentsLoading = false;
+        _adjustmentsFailed = true;
+      });
+    }
+  }
+
+  ({String? label, SelloStatusTone? tone}) get _openingStatus {
+    final original = _adjustments.fold<num>(
+      0,
+      (total, item) => total + item.amount,
+    );
+    final remaining = _adjustments.fold<num>(
+      0,
+      (total, item) => total + item.remaining,
+    );
+    if (original <= 0.001 || remaining + 0.001 >= original) {
+      return (label: null, tone: null);
+    }
+    if (remaining <= 0.001) {
+      return (label: 'Collected', tone: SelloStatusTone.success);
+    }
+    return (label: 'Partially collected', tone: SelloStatusTone.warning);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final customer = widget.customer;
+    final currencySymbol = widget.currencySymbol;
+    final fieldGap = widget.fieldGap;
+    final status = _adjustmentsFailed ? null : _openingStatus;
     final hasFinancialActions =
-        onAddOpeningBalance != null || onAddExistingCheque != null;
+        widget.onAddOpeningBalance != null ||
+        widget.onAddExistingCheque != null;
+    final company = _distinctCompanyName(customer);
+    final customerFields = <Widget>[
+      if (customer.createdAt != null)
+        _ProfileField(
+          label: 'Customer since',
+          value: SelloFormatters.date(customer.createdAt),
+        ),
+      _ProfileField(label: 'Type', value: customer.customerType.label),
+      if (customer.lastPurchaseAt != null)
+        _ProfileField(
+          label: 'Last purchase',
+          value: SelloFormatters.date(customer.lastPurchaseAt),
+        ),
+      if (company != null) _ProfileField(label: 'Company', value: company),
+    ];
+    final contactFields = _contactFields(customer);
+    final relationshipFields = _relationshipFields(customer);
+    final notes = customer.notes?.trim();
+    final showNotes = notes != null && notes.isNotEmpty && !widget.readOnly;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          const SelloIntelligenceBanner(
-            message:
-                'Purchase patterns, risk signals, and growth insights will '
-                'appear here as Sello Intelligence rolls out.',
-          ),
-        SizedBox(height: sectionGap),
-          _ProfileSection(
-            label: 'Financial summary',
+        _ProfileSection(
+          label: 'Financial summary',
           showDivider: false,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              color: AppColors.veil,
+              borderRadius: AppRadius.panelAll,
+              border: Border.all(color: AppColors.outlinePanel),
+            ),
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SelloFormRow(
                   left: _ProfileField(
-                  label: 'Outstanding now',
+                    label: 'Outstanding now',
                     value: SelloFormatters.currency(
                       customer.outstandingBalance,
                       symbol: currencySymbol,
                     ),
                   ),
                   right: _ProfileField(
-                  label: 'Wallet credit',
+                    label: 'Wallet credit',
                     value: SelloFormatters.currency(
                       customer.walletBalance,
                       symbol: currencySymbol,
                     ),
                   ),
                 ),
-              SizedBox(height: fieldGap),
+                SizedBox(height: fieldGap),
                 SelloFormRow(
                   left: _ProfileField(
                     label: 'Credit limit',
@@ -336,252 +426,221 @@ class _HubOverviewBody extends StatelessWidget {
                         : 'Credit not allowed',
                     mutedEmpty: !customer.creditAllowed,
                   ),
-                right: _OpeningBalanceSummaryField(
-                  customerId: customer.id,
-                  amount: customer.openingBalance,
-                  currencySymbol: currencySymbol,
-                  epoch: openingBalanceHistoryEpoch,
+                  right: _ProfileField(
+                    label: 'Opening balance recorded',
+                    value: SelloFormatters.currency(
+                      customer.openingBalance,
+                      symbol: currencySymbol,
+                    ),
+                    statusLabel: _adjustmentsLoading ? null : status?.label,
+                    statusTone: _adjustmentsLoading ? null : status?.tone,
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Outstanding now includes unpaid orders and the remaining '
-                'opening balance. Wallet credit is money available for a '
-                'future payment.',
-                style: _CustomerDetailType.label.copyWith(
-                  color: AppColors.textFaint,
-                  fontSize: 12,
-                ),
-              ),
-              if (hasFinancialActions) ...[
-                SizedBox(height: fieldGap),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Financial actions',
+                  'Outstanding now includes unpaid orders and the remaining '
+                  'opening balance. Wallet credit is money available for a '
+                  'future payment.',
                   style: _CustomerDetailType.label.copyWith(
                     color: AppColors.textFaint,
                     fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: AppSpacing.md,
-                  runSpacing: AppSpacing.md,
-                  children: [
-                    if (onAddOpeningBalance != null)
-                      _FinancialAction(
-                        button: SelloButton(
-                          label: 'Add opening balance',
-                          icon: Icons.add_card_outlined,
-                          variant: SelloButtonVariant.secondary,
-                          onPressed: onAddOpeningBalance,
-                        ),
-                        hint:
-                            'Add money this customer already owed before Sello.',
-                      ),
-                    if (onAddExistingCheque != null)
-                      _FinancialAction(
-                        button: SelloButton(
-                          label: 'Add existing cheque',
-                          icon: Icons.account_balance_outlined,
-                          variant: SelloButtonVariant.outline,
-                          onPressed: onAddExistingCheque,
-                        ),
-                        hint:
-                            'Record a cheque received before you started using Sello.',
-                      ),
-                  ],
-                ),
               ],
-              _OpeningBalanceHistory(
-                customerId: customer.id,
-                currencySymbol: currencySymbol,
-                epoch: openingBalanceHistoryEpoch,
-                onCorrect: onCorrectOpeningBalance,
-              ),
-            ],
+            ),
           ),
         ),
-        SizedBox(height: sectionGap),
-        _ProfileSection(
-          label: 'Customer information',
-          child: Column(
-            children: [
-                const SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Lifetime sales',
-                    value: 'Coming soon',
-                    mutedEmpty: true,
-                  ),
-                  right: _ProfileField(
-                    label: 'Total orders',
-                    value: 'Coming soon',
-                    mutedEmpty: true,
-                  ),
-                ),
-              SizedBox(height: fieldGap),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Customer since',
-                    value: customer.createdAt != null
-                        ? SelloFormatters.date(customer.createdAt)
-                      : _dash,
-                    mutedEmpty: customer.createdAt == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Last purchase',
-                    value: customer.lastPurchaseAt != null
-                        ? SelloFormatters.date(customer.lastPurchaseAt)
-                      : _dash,
-                    mutedEmpty: customer.lastPurchaseAt == null,
-                  ),
-                ),
-              SizedBox(height: fieldGap),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Type',
-                    value: customer.customerType.label,
-                  ),
-                  right: _ProfileField(
-                    label: 'Company',
-                  value: customer.companyName ?? _dash,
-                    mutedEmpty: customer.companyName == null,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        SizedBox(height: sectionGap),
-        _ProfileSection(
-          label: 'Relationship',
-          child: Column(
-            children: [
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Upcoming visit',
-                    value: customer.nextVisitAt != null
-                        ? SelloFormatters.date(customer.nextVisitAt)
-                      : _dash,
-                    mutedEmpty: customer.nextVisitAt == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Last completed visit',
-                    value: customer.lastVisitAt != null
-                        ? SelloFormatters.date(customer.lastVisitAt)
-                      : _dash,
-                    mutedEmpty: customer.lastVisitAt == null,
-                  ),
-                ),
-              SizedBox(height: fieldGap),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Assigned representative',
-                  value: assignedRepresentativeName ?? _dash,
-                    mutedEmpty: assignedRepresentativeName == null,
-                  ),
-                  right: const _ProfileField(
-                    label: 'Visit frequency',
-                    value: 'Coming soon',
-                    mutedEmpty: true,
-                  ),
-                ),
-              ],
+        if (_adjustmentsLoading) ...[
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
           ),
-        SizedBox(height: sectionGap),
+        ] else if (_adjustmentsFailed) ...[
+          const SizedBox(height: _sectionGap),
           _ProfileSection(
-            label: 'Contact',
-            child: Column(
-              children: [
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Phone',
-                  value: PhoneNumber.displayOrNull(customer.phone) ?? _dash,
-                    mutedEmpty: customer.phone == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'WhatsApp',
-                  value: PhoneNumber.displayOrNull(customer.whatsapp) ?? _dash,
-                    mutedEmpty: customer.whatsapp == null,
-                  ),
-                ),
-              SizedBox(height: fieldGap),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Email',
-                  value: customer.email ?? _dash,
-                    mutedEmpty: customer.email == null,
-                  ),
-                  right: _ProfileField(
-                    label: 'Tax number',
-                  value: customer.taxNumber ?? _dash,
-                    mutedEmpty: customer.taxNumber == null,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        SizedBox(height: sectionGap),
-          _ProfileSection(
-            label: 'Address',
-            child: SelloFormRow(
-              left: _ProfileField(
-                label: 'Address',
-              value: customer.addressLine1 ?? _dash,
-                mutedEmpty: customer.addressLine1 == null,
-              ),
-              right: _ProfileField(
-                label: 'City',
-              value: customer.city ?? _dash,
-                mutedEmpty: customer.city == null,
+            label: 'Opening balance adjustments',
+            child: Text(
+              'Couldn\'t load opening balance adjustments.',
+              style: _CustomerDetailType.label.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 13,
               ),
             ),
           ),
-          if (customer.notes != null &&
-              customer.notes!.trim().isNotEmpty &&
-              !readOnly) ...[
-          SizedBox(height: sectionGap),
-            _ProfileSection(
-              label: 'Notes',
-              child: Text(
-                customer.notes!,
-                style: _CustomerDetailType.value.copyWith(
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        SizedBox(height: sectionGap),
+        ] else if (_adjustments.isNotEmpty) ...[
+          const SizedBox(height: _sectionGap),
           _ProfileSection(
-            label: 'Activity',
+            label: 'Opening balance adjustments',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                EntityActivityPanel(
-                  referenceType: 'customer',
-                  referenceId: customer.id,
-                  emptyMessage: 'No company activity for this customer yet.',
-                  limit: 12,
-                ),
-              SizedBox(height: fieldGap),
-                SelloFormRow(
-                  left: _ProfileField(
-                    label: 'Created',
-                    value: customer.createdAt != null
-                        ? SelloFormatters.date(customer.createdAt)
-                      : _dash,
-                    mutedEmpty: customer.createdAt == null,
+                for (var i = 0; i < _adjustments.length; i++) ...[
+                  if (i > 0) ...[
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: AppColors.outlineSubtle),
+                    const SizedBox(height: 12),
+                  ],
+                  _OpeningBalanceRow(
+                    item: _adjustments[i],
+                    currencySymbol: currencySymbol,
+                    onCorrect: widget.onCorrectOpeningBalance,
                   ),
-                  right: _ProfileField(
-                    label: 'Updated',
-                    value: SelloFormatters.date(customer.updatedAt),
-                  ),
-                ),
+                ],
               ],
             ),
           ),
-          ],
+        ],
+        if (hasFinancialActions) ...[
+          const SizedBox(height: _sectionGap),
+          _ProfileSection(
+            label: 'Financial actions',
+            child: Wrap(
+              spacing: AppSpacing.md,
+              runSpacing: AppSpacing.md,
+              children: [
+                if (widget.onAddOpeningBalance != null)
+                  _FinancialAction(
+                    button: SelloButton(
+                      label: 'Add opening balance',
+                      icon: Icons.add_card_outlined,
+                      variant: SelloButtonVariant.secondary,
+                      onPressed: widget.onAddOpeningBalance,
+                    ),
+                    hint: 'Add money this customer already owed before Sello.',
+                  ),
+                if (widget.onAddExistingCheque != null)
+                  _FinancialAction(
+                    button: SelloButton(
+                      label: 'Add existing cheque',
+                      icon: Icons.account_balance_outlined,
+                      variant: SelloButtonVariant.outline,
+                      onPressed: widget.onAddExistingCheque,
+                    ),
+                    hint:
+                        'Record a cheque received before you started using Sello.',
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: _sectionGap),
+        _ProfileSection(
+          label: 'Customer information',
+          child: _FieldGrid(fields: customerFields, gap: fieldGap),
+        ),
+        if (contactFields.isNotEmpty) ...[
+          const SizedBox(height: _sectionGap),
+          _ProfileSection(
+            label: 'Contact & address',
+            child: _FieldGrid(fields: contactFields, gap: fieldGap),
+          ),
+        ],
+        if (relationshipFields.isNotEmpty) ...[
+          const SizedBox(height: _sectionGap),
+          _ProfileSection(
+            label: 'Relationship',
+            child: _FieldGrid(fields: relationshipFields, gap: fieldGap),
+          ),
+        ],
+        if (showNotes) ...[
+          const SizedBox(height: _sectionGap),
+          _ProfileSection(
+            label: 'Notes',
+            child: Text(
+              notes,
+              style: _CustomerDetailType.value.copyWith(
+                fontWeight: FontWeight.w500,
+                height: 1.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: _sectionGap),
+        _CustomerActivitySection(customerId: customer.id),
+        const SizedBox(height: 18),
+        Text(
+          'Updated ${SelloFormatters.date(customer.updatedAt)}',
+          style: _CustomerDetailType.label.copyWith(
+            fontSize: 12,
+            color: AppColors.textFaint,
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _contactFields(CustomerSummary customer) {
+    final phone = PhoneNumber.displayOrNull(customer.phone);
+    final whatsapp = PhoneNumber.displayOrNull(customer.whatsapp);
+    final email = customer.email?.trim();
+    final tax = customer.taxNumber?.trim();
+    final address = customer.addressLine1?.trim();
+    final city = customer.city?.trim();
+    return [
+      if (phone != null) _ProfileField(label: 'Phone', value: phone),
+      if (whatsapp != null) _ProfileField(label: 'WhatsApp', value: whatsapp),
+      if (email != null && email.isNotEmpty)
+        _ProfileField(label: 'Email', value: email),
+      if (tax != null && tax.isNotEmpty)
+        _ProfileField(label: 'Tax number', value: tax),
+      if (address != null && address.isNotEmpty)
+        _ProfileField(label: 'Address', value: address),
+      if (city != null && city.isNotEmpty)
+        _ProfileField(label: 'City', value: city),
+    ];
+  }
+
+  List<Widget> _relationshipFields(CustomerSummary customer) {
+    final rep = widget.assignedRepresentativeName?.trim();
+    return [
+      if (rep != null && rep.isNotEmpty)
+        _ProfileField(label: 'Assigned representative', value: rep),
+      if (customer.nextVisitAt != null)
+        _ProfileField(
+          label: 'Upcoming visit',
+          value: SelloFormatters.date(customer.nextVisitAt),
+        ),
+      if (customer.lastVisitAt != null)
+        _ProfileField(
+          label: 'Last completed visit',
+          value: SelloFormatters.date(customer.lastVisitAt),
+        ),
+    ];
+  }
+}
+
+String? _distinctCompanyName(CustomerSummary customer) {
+  final company = customer.companyName?.trim();
+  if (company == null || company.isEmpty) return null;
+  if (company.toLowerCase() == customer.name.trim().toLowerCase()) return null;
+  return company;
+}
+
+class _FieldGrid extends StatelessWidget {
+  const _FieldGrid({required this.fields, required this.gap});
+
+  final List<Widget> fields;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < fields.length; i += 2) ...[
+          if (i > 0) SizedBox(height: gap),
+          if (i + 1 < fields.length)
+            SelloFormRow(left: fields[i], right: fields[i + 1])
+          else
+            fields[i],
+        ],
+      ],
     );
   }
 }
@@ -817,6 +876,7 @@ class _CustomerOrderCard extends StatelessWidget {
                         ),
                         SelloStatusBadge(
                           label: order.paymentStatus.label,
+                          emphasis: SelloBadgeEmphasis.quiet,
                           tone: _paymentTone(order.paymentStatus),
                         ),
                       ],
@@ -979,6 +1039,165 @@ class _FinancialAction extends StatelessWidget {
 }
 
 /// Field-sales first view — outstanding, contact, last order; rest behind expand.
+class _CustomerActivitySection extends ConsumerStatefulWidget {
+  const _CustomerActivitySection({required this.customerId});
+
+  final String customerId;
+
+  @override
+  ConsumerState<_CustomerActivitySection> createState() =>
+      _CustomerActivitySectionState();
+}
+
+class _CustomerActivitySectionState
+    extends ConsumerState<_CustomerActivitySection> {
+  static const _historyLimit = 12;
+  static const _previewLimit = 3;
+
+  List<CompanyActivityEvent> _events = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(covariant _CustomerActivitySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.customerId != widget.customerId) _load();
+  }
+
+  Future<void> _load() async {
+    final session = ref.read(currentSessionProvider);
+    if (session == null) {
+      setState(() {
+        _events = const [];
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final events = await ref
+          .read(notificationRepositoryProvider)
+          .fetchCompanyActivity(
+            companyId: session.company.id,
+            referenceType: 'customer',
+            referenceId: widget.customerId,
+            limit: _historyLimit,
+          );
+      if (!mounted) return;
+      setState(() {
+        _events = events;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Couldn\'t load company activity.';
+      });
+    }
+  }
+
+  void _openHistory() {
+    final events = _events;
+    showDialog<void>(
+      context: context,
+      builder: (context) => SelloFormDialog(
+        title: 'Customer activity',
+        maxWidth: 720,
+        fullscreenOnMobile: true,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Showing the latest events, up to $_historyLimit. '
+              'Older events stay on record and are not listed here.',
+              style: _CustomerDetailType.label.copyWith(
+                fontSize: 12.5,
+                color: AppColors.textTertiary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SelloActivityTimeline(
+              events: events,
+              dense: true,
+              emptyMessage: 'No company activity for this customer yet.',
+            ),
+          ],
+        ),
+        footer: Align(
+          alignment: Alignment.centerRight,
+          child: SelloButton(
+            label: 'Close',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = _events.take(_previewLimit).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 1, thickness: 1, color: AppColors.outlinePanel),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text('RECENT ACTIVITY', style: _CustomerDetailType.section),
+            ),
+            if (!_loading && _error == null)
+              SelloButton(
+                label: 'View activity',
+                size: SelloButtonSize.small,
+                variant: SelloButtonVariant.outline,
+                onPressed: _openHistory,
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_loading)
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (_error != null)
+          Text(
+            _error!,
+            style: _CustomerDetailType.label.copyWith(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          )
+        else
+          SelloActivityTimeline(
+            events: preview,
+            dense: true,
+            emptyMessage: 'No company activity for this customer yet.',
+          ),
+      ],
+    );
+  }
+}
+
 class _FieldSalesFocus extends StatelessWidget {
   const _FieldSalesFocus({
     required this.customer,
@@ -1403,105 +1622,6 @@ class _CustomerHero extends StatelessWidget {
   }
 }
 
-class _OpeningBalanceHistory extends ConsumerStatefulWidget {
-  const _OpeningBalanceHistory({
-    required this.customerId,
-    required this.currencySymbol,
-    required this.epoch,
-    this.onCorrect,
-  });
-
-  final String customerId;
-  final String currencySymbol;
-  final int epoch;
-  final Future<void> Function(CustomerReceivableAdjustment item)? onCorrect;
-
-  @override
-  ConsumerState<_OpeningBalanceHistory> createState() =>
-      _OpeningBalanceHistoryState();
-}
-
-class _OpeningBalanceHistoryState
-    extends ConsumerState<_OpeningBalanceHistory> {
-  List<CustomerReceivableAdjustment> _items = const [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
-
-  @override
-  void didUpdateWidget(covariant _OpeningBalanceHistory oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.epoch != widget.epoch ||
-        oldWidget.customerId != widget.customerId) {
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final items = await ref
-          .read(customerRepositoryProvider)
-          .fetchOpeningBalanceAdjustments(widget.customerId);
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 18),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-    if (_items.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Opening balance adjustments',
-            style: _CustomerDetailType.label.copyWith(
-              color: AppColors.textFaint,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < _items.length; i++) ...[
-            if (i > 0) const SizedBox(height: 10),
-            _OpeningBalanceRow(
-              item: _items[i],
-              currencySymbol: widget.currencySymbol,
-              onCorrect: widget.onCorrect,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _OpeningBalanceRow extends StatelessWidget {
   const _OpeningBalanceRow({
     required this.item,
@@ -1529,56 +1649,47 @@ class _OpeningBalanceRow extends StatelessWidget {
     final collected = item.remaining <= 0.001;
     final partiallyCollected =
         !collected && item.remaining + 0.001 < item.amount;
+    final status = collected
+        ? 'Collected'
+        : partiallyCollected
+        ? 'Partially collected'
+        : null;
+    final tone = collected
+        ? SelloStatusTone.success
+        : SelloStatusTone.warning;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text('Opening balance', style: _title),
-            if (collected || partiallyCollected) ...[
-              const SizedBox(width: AppSpacing.xs),
-              SelloStatusBadge(
-                label: collected ? 'Collected' : 'Partially collected',
-                tone: collected
-                    ? SelloStatusTone.success
-                    : SelloStatusTone.warning,
-              ),
-            ],
+            Text(
+              '${item.adjustmentNumber} · ${SelloFormatters.date(item.recognizedAt)}',
+              style: _title,
+            ),
+            if (status != null)
+              SelloStatusBadge(label: status, tone: tone, compact: true),
           ],
         ),
-        const SizedBox(height: 2),
-        Text(item.adjustmentNumber, style: _title),
         if (reference != null && reference.isNotEmpty) ...[
           const SizedBox(height: 2),
           Text('Old invoice / reference: $reference', style: _meta),
         ],
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
-          'Original: ${SelloFormatters.currency(item.amount, symbol: currencySymbol)}',
-          style: _CustomerDetailType.label.copyWith(
-            color: AppColors.textPrimary,
-          ),
+          'Original ${SelloFormatters.currency(item.amount, symbol: currencySymbol)}'
+          ' · Remaining ${SelloFormatters.currency(item.remaining, symbol: currencySymbol)}',
+          style: _meta.copyWith(color: AppColors.textSecondary),
         ),
-        const SizedBox(height: 2),
-        Text(
-          'Remaining: ${SelloFormatters.currency(item.remaining, symbol: currencySymbol)}',
-          style: _CustomerDetailType.label.copyWith(
-            color: AppColors.textTertiary,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text('Date: ${SelloFormatters.date(item.recognizedAt)}', style: _meta),
         if (onCorrect != null) ...[
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelloButton(
-              label: 'Correct',
-              size: SelloButtonSize.small,
-              variant: SelloButtonVariant.outline,
-              onPressed: () => onCorrect!(item),
-            ),
+          SelloButton(
+            label: 'Correct',
+            size: SelloButtonSize.small,
+            variant: SelloButtonVariant.outline,
+            onPressed: () => onCorrect!(item),
           ),
         ],
       ],
@@ -1692,90 +1803,6 @@ class _ProfileField extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _OpeningBalanceSummaryField extends ConsumerStatefulWidget {
-  const _OpeningBalanceSummaryField({
-    required this.customerId,
-    required this.amount,
-    required this.currencySymbol,
-    required this.epoch,
-  });
-
-  final String customerId;
-  final num amount;
-  final String currencySymbol;
-  final int epoch;
-
-  @override
-  ConsumerState<_OpeningBalanceSummaryField> createState() =>
-      _OpeningBalanceSummaryFieldState();
-}
-
-class _OpeningBalanceSummaryFieldState
-    extends ConsumerState<_OpeningBalanceSummaryField> {
-  String? _statusLabel;
-  SelloStatusTone? _statusTone;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
-
-  @override
-  void didUpdateWidget(covariant _OpeningBalanceSummaryField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.customerId != widget.customerId ||
-        oldWidget.epoch != widget.epoch) {
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    try {
-      final items = await ref
-          .read(customerRepositoryProvider)
-          .fetchOpeningBalanceAdjustments(widget.customerId);
-      if (!mounted) return;
-      final original = items.fold<num>(0, (total, item) => total + item.amount);
-      final remaining = items.fold<num>(
-        0,
-        (total, item) => total + item.remaining,
-      );
-      setState(() {
-        if (original <= 0.001 || remaining + 0.001 >= original) {
-          _statusLabel = null;
-          _statusTone = null;
-        } else if (remaining <= 0.001) {
-          _statusLabel = 'Collected';
-          _statusTone = SelloStatusTone.success;
-        } else {
-          _statusLabel = 'Partially collected';
-          _statusTone = SelloStatusTone.warning;
-        }
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _statusLabel = null;
-        _statusTone = null;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _ProfileField(
-      label: 'Opening balance recorded',
-      value: SelloFormatters.currency(
-        widget.amount,
-        symbol: widget.currencySymbol,
-      ),
-      statusLabel: _statusLabel,
-      statusTone: _statusTone,
     );
   }
 }

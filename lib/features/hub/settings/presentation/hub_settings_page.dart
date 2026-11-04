@@ -123,7 +123,6 @@ class _HubSettingsPageState extends ConsumerState<HubSettingsPage> {
 
     return AppPageScaffold(
       title: 'Settings',
-      subtitle: 'Preferences that shape how Sello works for your business.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       scrollable: false,
@@ -368,7 +367,10 @@ class _BusinessSection extends StatelessWidget {
               children: [
                 SettingsSubgroup(
                   title: 'Financial & regional',
-                  child: SettingsTwoUp(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                  SettingsTwoUp(
                     children: [
                       SettingsCompactField(
                         label: 'Default currency',
@@ -408,6 +410,35 @@ class _BusinessSection extends StatelessWidget {
                           },
                         ),
                       ),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                SettingsCompactField(
+                  label: 'Summary amounts',
+                  helper:
+                      'Summary cards only. 8,350,073.93 can show as 83.5 lakhs or 8.35m. Details, tables, and documents keep every digit.',
+                  child: SelloDropdown<AmountDisplayStyle>(
+                    value: draft.amountDisplay,
+                    items: const [
+                      DropdownMenuItem(
+                        value: AmountDisplayStyle.exact,
+                        child: Text('Full amount'),
+                      ),
+                      DropdownMenuItem(
+                        value: AmountDisplayStyle.lakhs,
+                        child: Text('Lakhs'),
+                      ),
+                      DropdownMenuItem(
+                        value: AmountDisplayStyle.millions,
+                        child: Text('Millions'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      onChanged((c) => c.copyWith(amountDisplay: value));
+                    },
+                  ),
+                ),
                     ],
                   ),
                 ),

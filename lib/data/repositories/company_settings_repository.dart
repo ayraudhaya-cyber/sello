@@ -22,6 +22,7 @@ class CompanySettingsRepository {
     company_id,
     currency,
     currency_position,
+    amount_display,
     financial_year_start_month,
     default_tax_mode,
     default_reorder_level,
@@ -60,22 +61,31 @@ class CompanySettingsRepository {
   // [_select] once applied in all environments; until then Dart defaults
   // to [InventoryMovementPolicy.deductOnInvoice].
 
+  /// Used when migration 131 has not been applied yet. Summary amounts stay exact.
+  static final _selectBeforeAmountDisplay = _select.replaceFirst(
+    'amount_display,\n    ',
+    '',
+  );
+
+  bool _missingAmountDisplay(PostgrestException error) {
+    return error.message.toLowerCase().contains('amount_display');
+  }
+
   Future<CompanySettings> fetchForCompany(
     String companyId, {
     String? employeeId,
   }) async {
     try {
-      final row = await _client
-          .from('company_settings')
-          .select(_select)
-          .eq('company_id', companyId)
-          .maybeSingle();
-
-      if (row != null) {
-        return CompanySettings.fromJson(Map<String, dynamic>.from(row));
+      Map<String, dynamic>? row;
+      try {
+        row = await _settingsRow(companyId, _select);
+      } on PostgrestException catch (error) {
+        if (!_missingAmountDisplay(error)) rethrow;
+        row = await _settingsRow(companyId, _selectBeforeAmountDisplay);
       }
 
-      return ensureDefaults(companyId: companyId, employeeId: employeeId);
+      if (row != null) return CompanySettings.fromJson(row);
+      return await ensureDefaults(companyId: companyId, employeeId: employeeId);
     } on PostgrestException catch (error) {
       throw UnexpectedFailure(
         error.message.trim().isEmpty
@@ -83,8 +93,22 @@ class CompanySettingsRepository {
             : error.message,
       );
     } catch (error) {
+      if (error is UnexpectedFailure) rethrow;
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  Future<Map<String, dynamic>?> _settingsRow(
+    String companyId,
+    String columns,
+  ) async {
+    final row = await _client
+        .from('company_settings')
+        .select(columns)
+        .eq('company_id', companyId)
+        .maybeSingle();
+    if (row == null) return null;
+    return Map<String, dynamic>.from(row);
   }
 
   /// Creates a settings row when missing (e.g. legacy tenants).
@@ -111,6 +135,7 @@ class CompanySettingsRepository {
             'locale': 'en-US',
             'currency_position':
                 CompanySettings.defaults.currencyPosition.dbValue,
+            'amount_display': CompanySettings.defaults.amountDisplay.dbValue,
             'financial_year_start_month':
                 CompanySettings.defaults.financialYearStartMonth,
             'default_tax_mode': CompanySettings.defaults.defaultTaxMode.dbValue,
@@ -158,23 +183,51 @@ class CompanySettingsRepository {
     required String employeeId,
   }) async {
     try {
-      final updated = await _client
-          .from('company_settings')
-          .update(settings.toUpdatePayload(employeeId: employeeId))
-          .eq('company_id', settings.companyId)
-          .select(_select)
-          .single();
+      final payload = settings.toUpdatePayload(employeeId: employeeId);
+      Map<String, dynamic> updated;
+      try {
+        updated = await _updateSettingsRow(settings.companyId, payload, _select);
+      } on PostgrestException catch (error) {
+        if (!_missingAmountDisplay(error)) rethrow;
+        if (settings.amountDisplay != AmountDisplayStyle.exact) {
+          throw UnexpectedFailure(
+            'Apply the summary amount migration before saving Lakhs or Millions.',
+          );
+        }
+        payload.remove('amount_display');
+        updated = await _updateSettingsRow(
+          settings.companyId,
+          payload,
+          _selectBeforeAmountDisplay,
+        );
+      }
 
-      return CompanySettings.fromJson(Map<String, dynamic>.from(updated));
+      return CompanySettings.fromJson(updated);
     } on PostgrestException catch (error) {
       throw ValidationFailure(
         error.message.trim().isEmpty
             ? 'Unable to save settings.'
             : error.message,
       );
+    } on UnexpectedFailure {
+      rethrow;
     } catch (error) {
       throw UnexpectedFailure(error.toString());
     }
+  }
+
+  Future<Map<String, dynamic>> _updateSettingsRow(
+    String companyId,
+    Map<String, dynamic> payload,
+    String columns,
+  ) async {
+    final updated = await _client
+        .from('company_settings')
+        .update(payload)
+        .eq('company_id', companyId)
+        .select(columns)
+        .single();
+    return Map<String, dynamic>.from(updated);
   }
 
   /// Brand assets + colours only. Never sends [CompanySettings.customBrandingEnabled]

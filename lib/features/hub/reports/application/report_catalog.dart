@@ -164,6 +164,7 @@ abstract final class ReportCatalog {
       title: 'Paid orders',
       question: 'How many completed orders are fully paid?',
       icon: 'check_circle',
+      keywords: ['payment'],
     ),
     ReportDefinition(
       id: 'payments_partial',
@@ -178,6 +179,7 @@ abstract final class ReportCatalog {
       title: 'Outstanding amount',
       question: 'What is total collection due?',
       icon: 'request_quote',
+      keywords: ['payment'],
     ),
     ReportDefinition(
       id: kCollectionsReportId,
@@ -185,6 +187,7 @@ abstract final class ReportCatalog {
       title: kCollectionsReportTitle,
       question: kCollectionsReportQuestion,
       icon: 'receipt_long',
+      keywords: ['payment'],
     ),
     ReportDefinition(
       id: 'payments_methods',
@@ -199,6 +202,7 @@ abstract final class ReportCatalog {
       title: 'Wallet usage',
       question: 'How much store credit is issued?',
       icon: 'savings',
+      keywords: ['payment'],
     ),
     // Suppliers
     ReportDefinition(
@@ -239,6 +243,7 @@ abstract final class ReportCatalog {
       icon: 'badge',
       available: true,
       drillRoute: '/hub/orders',
+      keywords: ['sales rep'],
     ),
     ReportDefinition(
       id: 'employees_visit_mix',
@@ -248,6 +253,7 @@ abstract final class ReportCatalog {
       icon: 'groups',
       available: true,
       drillRoute: '/hub/visits',
+      keywords: ['sales rep'],
     ),
     ReportDefinition(
       id: 'visits_coverage',
@@ -293,6 +299,7 @@ abstract final class ReportCatalog {
       icon: 'groups',
       available: true,
       drillRoute: '/hub/visits',
+      keywords: ['sales rep'],
     ),
     // Schedules
     ReportDefinition(
@@ -319,7 +326,7 @@ abstract final class ReportCatalog {
       title: 'Notification volume',
       question: 'How busy is the in-app inbox?',
       icon: 'notifications',
-      available: true,
+      available: false,
     ),
     ReportDefinition(
       id: 'activity_feed',
@@ -327,7 +334,7 @@ abstract final class ReportCatalog {
       title: 'Company activity',
       question: 'What happened across the business?',
       icon: 'timeline',
-      available: true,
+      available: false,
     ),
   ];
 
@@ -338,4 +345,60 @@ abstract final class ReportCatalog {
     for (final item in definitions)
       if (item.category == category && (!item.ownerOnly || isOwner)) item,
   ];
+
+  /// Client-side catalogue filter. [category] and [query] both apply.
+  static List<ReportDefinition> matching({
+    String query = '',
+    ReportCategory? category,
+    bool isOwner = true,
+  }) {
+    final needle = query.trim().toLowerCase();
+    return [
+      for (final item in definitions)
+        if ((!item.ownerOnly || isOwner) &&
+            (category == null || item.category == category) &&
+            (needle.isEmpty || _matches(item, needle)))
+          item,
+    ];
+  }
+
+  static bool _matches(ReportDefinition item, String needle) {
+    bool contains(String value) => value.toLowerCase().contains(needle);
+    if (contains(item.title) ||
+        contains(item.question) ||
+        contains(item.category.label)) {
+      return true;
+    }
+    for (final keyword in item.keywords) {
+      if (contains(keyword)) return true;
+    }
+    return false;
+  }
+
+  /// Window the report actually uses. Null means the selected page period.
+  static String? fixedWindowCaption(String reportId) {
+    return switch (reportId) {
+      'customers_recent' => 'Created in the last 30 days',
+      'customers_inactive' =>
+        'No purchase, or last purchase more than 60 days ago',
+      'customers_outstanding' || 'payments_outstanding' =>
+        'Current customer balances',
+      'inventory_stock' ||
+      'inventory_value' ||
+      'inventory_low' ||
+      'inventory_out' => 'Current stock snapshot',
+      'inventory_adjustments' =>
+        'Current stock snapshot · movements in the last 7 days',
+      'suppliers_products' ||
+      'suppliers_activity' ||
+      'suppliers_recent' => 'Current supplier directory',
+      'payments_paid' ||
+      'payments_partial' ||
+      'payments_methods' ||
+      'payments_wallet' =>
+        'Collections and payment methods follow the selected period. '
+            'Outstanding balances and wallet issued are current.',
+      _ => null,
+    };
+  }
 }

@@ -437,11 +437,11 @@ class _SelloOrdersPageState extends ConsumerState<SelloOrdersPage> {
   Future<void> _fulfillAll(OrderSummary order) async {
     final confirmed = await showSelloDialog(
       context: context,
-      title: 'Deliver remaining?',
+      title: 'Deliver all remaining?',
       message:
           '${order.orderNumber}: deliver every remaining unit now. '
           'Stock will be reduced only for remaining quantities. Payment is not settled automatically.',
-      confirmLabel: 'Deliver remaining',
+      confirmLabel: 'Deliver all remaining',
       cancelLabel: 'Back',
     );
     if (confirmed != true || !mounted) return;

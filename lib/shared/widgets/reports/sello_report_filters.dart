@@ -110,7 +110,7 @@ class SelloReportFiltersBar extends StatelessWidget {
                 items: [
                   const DropdownMenuItem<ReportCategory?>(
                     value: null,
-                    child: Text('All areas'),
+                    child: Text('All reports'),
                   ),
                   for (final category in ReportCategory.values)
                     if (category.isAvailable)

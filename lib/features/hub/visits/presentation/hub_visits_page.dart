@@ -18,7 +18,6 @@ class HubVisitsPage extends ConsumerWidget {
 
     return AppPageScaffold(
       title: 'Visits',
-      subtitle: 'What happened in the field today',
       maxWidth: AppSpacing.contentMax,
       actions: [
         IconButton(

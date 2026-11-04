@@ -9,7 +9,6 @@ class HubFeaturePage extends StatelessWidget {
   const HubFeaturePage({
     super.key,
     required this.title,
-    required this.description,
     this.icon = Icons.layers_outlined,
     this.tone,
     this.rows = const [],
@@ -19,7 +18,6 @@ class HubFeaturePage extends StatelessWidget {
   });
 
   final String title;
-  final String description;
   final IconData icon;
   final Color? tone;
   final List<HubFeatureRow> rows;
@@ -34,7 +32,6 @@ class HubFeaturePage extends StatelessWidget {
     final accent = tone ?? context.brandAccent;
     return AppPageScaffold(
       title: title,
-      subtitle: description,
       showBreadcrumbs: showBreadcrumbs,
       actions: actions,
       maxWidth: AppSpacing.contentMax,
@@ -65,13 +62,6 @@ class HubFeaturePage extends StatelessWidget {
                                 title,
                                 style: context.texts.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                description,
-                                style: context.texts.bodyMedium?.copyWith(
-                                  color: context.selloColors.textTertiary,
                                 ),
                               ),
                             ],

@@ -6,6 +6,7 @@ import 'package:sello/core/theme/theme.dart';
 import 'package:sello/features/collections/application/collections_summary.dart';
 import 'package:sello/features/mobile/collections/application/sello_collections_provider.dart';
 import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
+import 'package:sello/shared/models/company_settings.dart';
 import 'package:sello/shared/models/payment_record_status.dart';
 import 'package:sello/shared/models/payment_summary.dart';
 import 'package:sello/shared/utils/formatters.dart';
@@ -29,8 +30,16 @@ class SelloCollectionsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(selloCollectionsProvider);
     final symbol = ref.watch(selloCurrencySymbolProvider);
+    final amountStyle =
+        ref.watch(selloCompanySettingsProvider).valueOrNull?.amountDisplay ??
+        AmountDisplayStyle.exact;
     final summary = state.summary;
-    String money(num value) => SelloFormatters.currency(value, symbol: symbol);
+    String exact(num value) => SelloFormatters.currency(value, symbol: symbol);
+    String glance(num value) => SelloFormatters.summaryAmount(
+      value,
+      symbol: symbol,
+      style: amountStyle,
+    );
 
     final notifier = ref.read(selloCollectionsProvider.notifier);
 
@@ -72,7 +81,7 @@ class SelloCollectionsPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          _TotalsCard(summary: summary, money: money),
+          _TotalsCard(summary: summary, money: glance),
           const SizedBox(height: AppSpacing.md),
           SelloInlineRefreshBar(
             active: state.isLoading && state.items.isNotEmpty,
@@ -99,7 +108,7 @@ class SelloCollectionsPage extends ConsumerWidget {
             )
           else
             for (final payment in state.items) ...[
-              _CollectionCard(payment: payment, money: money),
+              _CollectionCard(payment: payment, money: exact),
               const SizedBox(height: 10),
             ],
         ],

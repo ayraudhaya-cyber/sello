@@ -4,6 +4,22 @@
 /// is left, so later orders only see the remainder. Reserved quantity is not
 /// used here: it already includes these same orders.
 abstract final class OrderStockAllocation {
+  /// Branch and sellable unit. Options of one product stay separate.
+  static String stockKey({
+    required String branchId,
+    required String unitId,
+  }) =>
+      '$branchId|$unitId';
+
+  /// Adds a stock row. Repeated rows for the same option are summed.
+  static void addOnHand(
+    Map<String, num> onHand, {
+    required String key,
+    required num quantity,
+  }) {
+    onHand[key] = (onHand[key] ?? 0) + quantity;
+  }
+
   static Set<String> ordersShortOfStock({
     required List<OpenOrderStockDemand> orders,
     required Map<String, num> onHandByKey,

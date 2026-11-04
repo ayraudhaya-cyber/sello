@@ -320,7 +320,7 @@ class _PaymentDetailsDialogState extends State<PaymentDetailsDialog> {
               children: [
                 SelloFormRow(
                   left: _Field(
-                    label: 'Recorded by',
+                    label: 'Collected by',
                     value: payment.employeeName ?? dash,
                     mutedEmpty: payment.employeeName == null,
                   ),

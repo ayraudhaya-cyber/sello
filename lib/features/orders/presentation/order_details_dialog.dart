@@ -24,8 +24,8 @@ import 'package:sello/shared/widgets/feedback/entity_activity_panel.dart';
 
 /// Shared horizontal metrics for Order Details content + totals alignment.
 abstract final class _OrderGrid {
-  static const double sectionGap = 24;
-  static const double fieldGap = 12;
+  static const double sectionGap = 20;
+  static const double fieldGap = 6;
   static const double colGutter = 12;
   static const double indexW = 32;
   static const double qtyW = 72;
@@ -208,6 +208,11 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     return 'This order is cancelled. $outcome';
   }
 
+  String _awaitingDeliveryMessage(num remaining) {
+    final quantity = SelloFormatters.quantity(remaining);
+    return '$quantity still to deliver. The customer\'s balance updates when you record delivery, not when the order is saved.';
+  }
+
   bool get _canCollect =>
       !readOnly &&
       OrderCollectionRules.canOfferRecordCollection(
@@ -260,6 +265,17 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
     }
   }
 
+  void _openActivity(List<OrderTimelineEvent> events) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => _OrderActivityDialog(
+        orderNumber: order.orderNumber,
+        orderId: order.id,
+        events: events,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = context.isMobile;
@@ -293,7 +309,10 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
         detail.customerWallet != null || detail.customerCreditAllowed != null;
 
     return SelloFormDialog(
-      header: _OrderHero(order: order),
+      header: _OrderHero(
+        order: order,
+        onViewActivity: () => _openActivity(detail.timeline),
+      ),
       maxWidth: kSelloDetailDialogWidth,
       fullscreenOnMobile: true,
       bodyPadding: EdgeInsets.fromLTRB(
@@ -314,12 +333,11 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
             ),
             const SizedBox(height: _OrderGrid.sectionGap),
           ] else if (!order.isDraft && totalRemaining > 0) ...[
-            const _NoticeBanner(
+            _NoticeBanner(
               icon: Icons.local_shipping_outlined,
               tone: AppColors.info,
               background: AppColors.infoContainer,
-              message:
-                  'Goods still to deliver. This order is added to the customer’s Outstanding when you record delivery — not when the order was saved.',
+              message: _awaitingDeliveryMessage(totalRemaining),
             ),
             if (_shortOfStock) ...[
               const SizedBox(height: 10),
@@ -337,11 +355,6 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
             customer: _InfoBlock(
               title: 'Customer',
               fields: [
-                _InfoField(
-                    label: 'Name',
-                    value: order.customerName ?? dash,
-                  muted: order.customerName == null,
-                  ),
                 _InfoField(
                     label: 'Phone',
                     value: order.customerPhone ?? dash,
@@ -451,9 +464,11 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
                                   ),
                                 if (canFulfill && onFulfillAll != null)
                                   SelloButton(
-                                    label: 'Deliver remaining',
-                                    variant: SelloButtonVariant.outline,
+                                    label: 'Deliver all remaining',
+                                    variant: SelloButtonVariant.ghost,
                                     size: SelloButtonSize.small,
+                                    tooltip:
+                                        'Delivers every quantity still open on this order',
                                     onPressed: onFulfillAll,
                                   ),
                               ],
@@ -518,269 +533,434 @@ class _OrderDetailsDialogState extends ConsumerState<OrderDetailsDialog> {
               child: Text(order.notes!.trim(), style: _Type.body),
             ),
           ],
-          const SizedBox(height: _OrderGrid.sectionGap),
-          _Section(
-            label: 'Activity',
-            child: detail.timeline.isEmpty
-                ? Text('No activity recorded yet.', style: _Type.meta)
-                : _CompactTimeline(events: detail.timeline),
-          ),
-          const SizedBox(height: 16),
-          _Section(
-            label: 'Company activity',
-            child: EntityActivityPanel(
-              referenceType: 'order',
-              referenceId: order.id,
-              emptyMessage: 'Company activity for this order will appear here.',
-            ),
-          ),
         ],
       ),
-      footer: canManageDraft
-          ? SelloDialogFooter(
-              destructiveLabel: 'Cancel order',
-              onDestructive: onCancelOrder,
-              cancelLabel: 'Edit draft',
-              cancelVariant: SelloButtonVariant.outline,
-              onCancel: onEdit,
-              primaryLabel: completeLabel,
-              onPrimary: onComplete,
-            )
-          : _canCollect
-          ? SelloDialogFooter(
-              destructiveLabel: canFulfill
-                  ? (totalDelivered > 0 ? 'Cancel remaining' : 'Cancel order')
-                  : (canArchive ? 'Archive' : null),
-              onDestructive: canFulfill
-                  ? (totalDelivered > 0 ? onCancelRemaining : onCancelOrder)
-                  : (canArchive ? onArchive : null),
-              leading: _OrderFooterLeading(
-                onMarkNotDelivered: widget.onMarkNotDelivered,
-                onCorrectInvoice: widget.onCorrectInvoice,
-                onViewInvoice: onViewInvoice,
-                onPrintInvoice: onPrintInvoice,
-                onWhatsAppInvoice: onWhatsAppInvoice,
-                onSmsInvoice: onSmsInvoice,
-              ),
-              cancelLabel: canFulfill ? 'Record delivery' : 'Close',
-              cancelVariant: SelloButtonVariant.outline,
-              onCancel: canFulfill
-                  ? onFulfill
-                  : () => Navigator.of(context).maybePop(),
-              primaryLabel: 'Record collection',
-              primaryLoading: _recording,
-              onPrimary: _recording ? null : () => _recordCollection(),
-            )
-          : canFulfill
-          ? SelloDialogFooter(
-              destructiveLabel: totalDelivered > 0
-                  ? 'Cancel remaining'
-                  : 'Cancel order',
-              onDestructive: totalDelivered > 0
-                  ? onCancelRemaining
-                  : onCancelOrder,
-              leading: _OrderFooterLeading(
-                onMarkNotDelivered: widget.onMarkNotDelivered,
-                onCorrectInvoice: widget.onCorrectInvoice,
-                onViewInvoice: onViewInvoice,
-                onPrintInvoice: onPrintInvoice,
-                onWhatsAppInvoice: onWhatsAppInvoice,
-                onSmsInvoice: onSmsInvoice,
-              ),
-              cancelLabel: 'Close',
-              cancelVariant: SelloButtonVariant.outline,
-              onCancel: () => Navigator.of(context).maybePop(),
-              primaryLabel: 'Record delivery',
-              onPrimary: onFulfill,
-            )
-          : SelloDialogFooter(
-              destructiveLabel: canArchive ? 'Archive' : null,
-              onDestructive: canArchive ? onArchive : null,
-              leading: _OrderFooterLeading(
-                onMarkNotDelivered: widget.onMarkNotDelivered,
-                onCorrectInvoice: widget.onCorrectInvoice,
-                onViewInvoice: onViewInvoice,
-                onPrintInvoice: onPrintInvoice,
-                onWhatsAppInvoice: onWhatsAppInvoice,
-                onSmsInvoice: onSmsInvoice,
-              ),
-              cancelLabel: 'Close',
-              cancelVariant: SelloButtonVariant.outline,
-              onCancel: () => Navigator.of(context).maybePop(),
-              primaryLabel: 'Done',
-              onPrimary: () => Navigator.of(context).maybePop(),
-            ),
+      footer: _OrderDetailsFooter(
+        canManageDraft: canManageDraft,
+        canFulfill: canFulfill,
+        canCollect: _canCollect,
+        canArchive: canArchive,
+        recording: _recording,
+        completeLabel: completeLabel,
+        cancelLabel: canFulfill
+            ? (totalDelivered > 0 ? 'Cancel remaining' : 'Cancel order')
+            : 'Cancel order',
+        onEdit: onEdit,
+        onComplete: onComplete,
+        onFulfill: canFulfill ? onFulfill : null,
+        onCollect: _canCollect ? () => _recordCollection() : null,
+        onClose: () => Navigator.of(context).maybePop(),
+        onMarkNotDelivered: widget.onMarkNotDelivered,
+        onCorrectInvoice: widget.onCorrectInvoice,
+        onViewInvoice: onViewInvoice,
+        onPrintInvoice: onPrintInvoice,
+        onWhatsAppInvoice: onWhatsAppInvoice,
+        onSmsInvoice: onSmsInvoice,
+        onArchive: canArchive ? onArchive : null,
+        onCancel: canManageDraft
+            ? onCancelOrder
+            : canFulfill
+            ? (totalDelivered > 0 ? onCancelRemaining : onCancelOrder)
+            : null,
+      ),
     );
   }
 }
 
-class _OrderFooterLeading extends StatelessWidget {
-  const _OrderFooterLeading({
+class _OrderActivityDialog extends StatelessWidget {
+  const _OrderActivityDialog({
+    required this.orderNumber,
+    required this.orderId,
+    required this.events,
+  });
+
+  final String orderNumber;
+  final String orderId;
+  final List<OrderTimelineEvent> events;
+
+  @override
+  Widget build(BuildContext context) {
+    return SelloFormDialog(
+      title: 'Order activity',
+      subtitle: orderNumber,
+      maxWidth: 720,
+      fullscreenOnMobile: true,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Section(
+            label: 'Activity',
+            child: events.isEmpty
+                ? Text('No order events recorded yet.', style: _Type.meta)
+                : _CompactTimeline(events: events),
+          ),
+          const SizedBox(height: _OrderGrid.sectionGap),
+          _Section(
+            label: 'Company activity',
+            child: EntityActivityPanel(
+              referenceType: 'order',
+              referenceId: orderId,
+              emptyMessage: 'No company activity for this order.',
+            ),
+          ),
+        ],
+      ),
+      footer: Align(
+        alignment: Alignment.centerRight,
+        child: SelloButton(
+          label: 'Close',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+    );
+  }
+}
+
+class _FooterMenuAction {
+  const _FooterMenuAction({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.danger = false,
+    this.dividerBefore = false,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool danger;
+  final bool dividerBefore;
+}
+
+class _OrderDetailsFooter extends StatelessWidget {
+  const _OrderDetailsFooter({
+    required this.canManageDraft,
+    required this.canFulfill,
+    required this.canCollect,
+    required this.canArchive,
+    required this.recording,
+    required this.completeLabel,
+    required this.cancelLabel,
+    required this.onClose,
+    this.onEdit,
+    this.onComplete,
+    this.onFulfill,
+    this.onCollect,
     this.onMarkNotDelivered,
     this.onCorrectInvoice,
     this.onViewInvoice,
     this.onPrintInvoice,
     this.onWhatsAppInvoice,
     this.onSmsInvoice,
+    this.onArchive,
+    this.onCancel,
   });
 
+  final bool canManageDraft;
+  final bool canFulfill;
+  final bool canCollect;
+  final bool canArchive;
+  final bool recording;
+  final String completeLabel;
+  final String cancelLabel;
+  final VoidCallback onClose;
+  final VoidCallback? onEdit;
+  final VoidCallback? onComplete;
+  final VoidCallback? onFulfill;
+  final VoidCallback? onCollect;
   final VoidCallback? onMarkNotDelivered;
   final VoidCallback? onCorrectInvoice;
   final VoidCallback? onViewInvoice;
   final VoidCallback? onPrintInvoice;
   final VoidCallback? onWhatsAppInvoice;
   final VoidCallback? onSmsInvoice;
+  final VoidCallback? onArchive;
+  final VoidCallback? onCancel;
+
+  List<_FooterMenuAction> get _menuActions {
+    final routine = <_FooterMenuAction>[
+      if (onMarkNotDelivered != null)
+        _FooterMenuAction(
+          id: 'not-delivered',
+          label: 'Not delivered yet',
+          icon: Icons.undo_outlined,
+          onPressed: onMarkNotDelivered!,
+        ),
+      if (onCorrectInvoice != null)
+        _FooterMenuAction(
+          id: 'correct',
+          label: 'Correct invoice',
+          icon: Icons.edit_outlined,
+          onPressed: onCorrectInvoice!,
+        ),
+      if (onViewInvoice != null)
+        _FooterMenuAction(
+          id: 'view',
+          label: 'View invoice',
+          icon: Icons.open_in_new_rounded,
+          onPressed: onViewInvoice!,
+        ),
+      if (onPrintInvoice != null)
+        _FooterMenuAction(
+          id: 'print',
+          label: 'Print invoice',
+          icon: Icons.print_outlined,
+          onPressed: onPrintInvoice!,
+        ),
+      if (onWhatsAppInvoice != null)
+        _FooterMenuAction(
+          id: 'whatsapp',
+          label: 'WhatsApp',
+          icon: Icons.chat_bubble_outline_rounded,
+          onPressed: onWhatsAppInvoice!,
+        ),
+      if (onSmsInvoice != null)
+        _FooterMenuAction(
+          id: 'sms',
+          label: 'SMS',
+          icon: Icons.sms_outlined,
+          onPressed: onSmsInvoice!,
+        ),
+    ];
+    final separate = routine.isNotEmpty;
+    return [
+      ...routine,
+      if (canArchive && onArchive != null)
+        _FooterMenuAction(
+          id: 'archive',
+          label: 'Archive',
+          icon: Icons.inventory_2_outlined,
+          onPressed: onArchive!,
+          danger: true,
+          dividerBefore: separate,
+        ),
+      if (onCancel != null)
+        _FooterMenuAction(
+          id: 'cancel',
+          label: cancelLabel,
+          icon: Icons.cancel_outlined,
+          onPressed: onCancel!,
+          danger: true,
+          dividerBefore: separate && !(canArchive && onArchive != null),
+        ),
+    ];
+  }
+
+  Widget _trailing({required bool narrow}) {
+    final showDelivery = canFulfill && onFulfill != null;
+    final showCollection = canCollect && onCollect != null;
+    final showDraft = canManageDraft && (onEdit != null || onComplete != null);
+    if (showDraft) {
+      return SelloButtonBar(
+        stretch: narrow ? true : false,
+        children: [
+          if (onEdit != null)
+            SelloButton(
+              label: 'Edit draft',
+              variant: SelloButtonVariant.outline,
+              onPressed: onEdit,
+            ),
+          if (onComplete != null)
+            SelloButton(label: completeLabel, onPressed: onComplete),
+        ],
+      );
+    }
+    if (showDelivery || showCollection) {
+      return SelloButtonBar(
+        stretch: narrow ? true : false,
+        children: [
+          if (showDelivery)
+            SelloButton(
+              label: 'Record delivery',
+              variant: showCollection
+                  ? SelloButtonVariant.outline
+                  : SelloButtonVariant.primary,
+              onPressed: onFulfill,
+            ),
+          if (showCollection)
+            SelloButton(
+              label: 'Record collection',
+              loading: recording,
+              onPressed: recording ? null : onCollect,
+            ),
+        ],
+      );
+    }
+    return SelloButton(label: 'Done', onPressed: onClose);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (onMarkNotDelivered != null)
-          SelloButton(
-            label: 'Not delivered yet',
-            variant: SelloButtonVariant.outline,
-            size: SelloButtonSize.small,
-            onPressed: onMarkNotDelivered,
-          ),
-        _InvoiceFooterLinks(
-          onCorrectInvoice: onCorrectInvoice,
-          onViewInvoice: onViewInvoice,
-          onPrintInvoice: onPrintInvoice,
-          onWhatsAppInvoice: onWhatsAppInvoice,
-          onSmsInvoice: onSmsInvoice,
-        ),
-      ],
+    final menu = _menuActions;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow =
+            !constraints.maxWidth.isFinite ||
+            constraints.maxWidth < AppBreakpoints.mobile;
+        final menuButton = menu.isEmpty
+            ? null
+            : _MoreActionsButton(actions: menu);
+        final trailing = _trailing(narrow: narrow);
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (menuButton != null) ...[
+                Align(alignment: Alignment.centerLeft, child: menuButton),
+                const SizedBox(height: 10),
+              ],
+              trailing,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ?menuButton,
+            const Spacer(),
+            trailing,
+          ],
+        );
+      },
     );
   }
 }
 
-class _InvoiceFooterLinks extends StatelessWidget {
-  const _InvoiceFooterLinks({
-    this.onCorrectInvoice,
-    this.onViewInvoice,
-    this.onPrintInvoice,
-    this.onWhatsAppInvoice,
-    this.onSmsInvoice,
-  });
+class _MoreActionsButton extends StatelessWidget {
+  const _MoreActionsButton({required this.actions});
 
-  final VoidCallback? onCorrectInvoice;
-  final VoidCallback? onViewInvoice;
-  final VoidCallback? onPrintInvoice;
-  final VoidCallback? onWhatsAppInvoice;
-  final VoidCallback? onSmsInvoice;
-
-  bool get _hasAny =>
-      onCorrectInvoice != null ||
-      onViewInvoice != null ||
-      onPrintInvoice != null ||
-      onWhatsAppInvoice != null ||
-      onSmsInvoice != null;
+  final List<_FooterMenuAction> actions;
 
   @override
   Widget build(BuildContext context) {
-    if (!_hasAny) return const SizedBox.shrink();
-
-    return SizedBox(
-      width: double.infinity,
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (onCorrectInvoice != null)
-            _InvoiceLink(
-              label: 'Correct invoice',
-              icon: Icons.edit_outlined,
-              onPressed: onCorrectInvoice!,
+    return PopupMenuButton<String>(
+      tooltip: 'More actions',
+      position: PopupMenuPosition.over,
+      offset: Offset(0, -_menuHeightAboveButton(actions)),
+      color: AppColors.surface,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
+      onSelected: (id) {
+        for (final action in actions) {
+          if (action.id == id) {
+            action.onPressed();
+            return;
+          }
+        }
+      },
+      itemBuilder: (context) {
+        return [
+          for (final action in actions) ...[
+            if (action.dividerBefore) const PopupMenuDivider(height: 8),
+            PopupMenuItem<String>(
+              value: action.id,
+              child: Row(
+                children: [
+                  Icon(
+                    action.icon,
+                    size: 18,
+                    color: action.danger
+                        ? AppColors.error
+                        : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      action.label,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: action.danger
+                            ? AppColors.error
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          if (onViewInvoice != null)
-            _InvoiceLink(
-              label: 'View invoice',
-              icon: Icons.open_in_new_rounded,
-              onPressed: onViewInvoice!,
-            ),
-          if (onPrintInvoice != null)
-            _InvoiceLink(
-              label: 'Print invoice',
-              icon: Icons.print_outlined,
-              onPressed: onPrintInvoice!,
-            ),
-          if (onWhatsAppInvoice != null)
-            _InvoiceLink(
-              label: 'WhatsApp',
-              icon: Icons.chat_bubble_outline_rounded,
-              onPressed: onWhatsAppInvoice!,
-            ),
-          if (onSmsInvoice != null)
-            _InvoiceLink(
-              label: 'SMS',
-              icon: Icons.sms_outlined,
-              onPressed: onSmsInvoice!,
-            ),
-        ],
+          ],
+        ];
+      },
+      child: const IgnorePointer(
+        child: SelloButton(
+          label: 'More actions',
+          icon: Icons.keyboard_arrow_down_rounded,
+          variant: SelloButtonVariant.outline,
+          onPressed: _ignore,
+        ),
       ),
     );
   }
 }
 
-class _InvoiceLink extends StatelessWidget {
-  const _InvoiceLink({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-  });
+void _ignore() {}
 
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 16, color: AppColors.textSecondary),
-        label: Text(
-          label,
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.textSecondary,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-        ),
-            ),
-    );
+/// Places the menu's bottom edge just above the More actions button.
+/// PopupMenu grows downward from [PopupMenuPosition.over], so the offset
+/// has to cover the full menu height.
+double _menuHeightAboveButton(List<_FooterMenuAction> actions) {
+  const itemHeight = 48.0;
+  const menuPadding = 16.0;
+  const gap = 6.0;
+  var height = menuPadding + gap;
+  for (final action in actions) {
+    if (action.dividerBefore) height += 8;
+    height += itemHeight;
   }
+  return height;
 }
 
 class _OrderHero extends StatelessWidget {
-  const _OrderHero({required this.order});
+  const _OrderHero({required this.order, required this.onViewActivity});
 
   final OrderSummary order;
+  final VoidCallback onViewActivity;
 
   @override
   Widget build(BuildContext context) {
+    final name = order.customerName?.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(order.orderNumber, style: _Type.title),
-        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(order.orderNumber, style: _Type.title),
+                  if (name != null && name.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(name, style: _Type.subtitle),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: onViewActivity,
+              icon: const Icon(Icons.history_rounded, size: 16),
+              label: const Text('View activity'),
+              style: TextButton.styleFrom(
+                foregroundColor: context.brandAccent,
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                textStyle: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -797,6 +977,7 @@ class _OrderHero extends StatelessWidget {
             ),
             SelloStatusBadge(
               label: order.paymentStatus.label,
+              emphasis: SelloBadgeEmphasis.quiet,
               tone: switch (order.paymentStatus) {
                 PaymentStatus.paid => SelloStatusTone.success,
                 PaymentStatus.partial => SelloStatusTone.info,
@@ -899,16 +1080,14 @@ class _InfoGrid extends StatelessWidget {
           );
         }
 
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < blocks.length; i++) ...[
-                if (i > 0) const SizedBox(width: _OrderGrid.colGutter),
-                Expanded(child: _InfoBlockView(block: blocks[i])),
-              ],
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < blocks.length; i++) ...[
+              if (i > 0) const SizedBox(width: _OrderGrid.colGutter),
+              Expanded(child: _InfoBlockView(block: blocks[i])),
             ],
-          ),
+          ],
         );
       },
     );
@@ -922,32 +1101,40 @@ class _InfoBlockView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                decoration: BoxDecoration(
-        color: AppColors.veil,
+    // Material, not a DecoratedBox: Customer account is an ExpansionTile,
+    // and ListTile ink paints on the nearest Material. A colored box between
+    // them hides the splash and trips a debug assertion.
+    return Material(
+      color: AppColors.veil,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
         borderRadius: AppRadius.panelAll,
-                  border: Border.all(color: AppColors.outlinePanel),
-                ),
-                child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(block.title.toUpperCase(), style: _Type.section),
-          const SizedBox(height: 10),
-          for (var i = 0; i < block.fields.length; i++) ...[
-            if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
-            _CompactField(field: block.fields[i]),
+        side: BorderSide(color: AppColors.outlinePanel),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(block.title.toUpperCase(), style: _Type.section),
+            const SizedBox(height: 10),
+            for (var i = 0; i < block.fields.length; i++) ...[
+              if (i > 0) const SizedBox(height: _OrderGrid.fieldGap),
+              _CompactField(field: block.fields[i]),
+            ],
+            if (block.trailing != null) ...[
+              const SizedBox(height: 12),
+              block.trailing!,
+            ],
+            if (block.account != null) ...[
+              const SizedBox(height: 14),
+              block.account!,
+            ],
           ],
-          if (block.trailing != null) ...[
-            const SizedBox(height: 12),
-            block.trailing!,
-          ],
-          if (block.account != null) ...[
-            const SizedBox(height: 14),
-            block.account!,
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -960,18 +1147,21 @@ class _CompactField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text(field.label, style: _Type.label),
-                    const SizedBox(height: 2),
-                    Text(
-          field.value,
-          style: _Type.value.copyWith(
-            color: field.muted ? AppColors.textFaint : AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            field.value,
+            textAlign: TextAlign.right,
+            style: _Type.value.copyWith(
+              color: field.muted ? AppColors.textFaint : AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1154,11 +1344,11 @@ TableRow _productTableRow({
 }) {
   final specs = _productSpecs(line, catalogFields);
   final delivery = showDelivery ? _deliveryLine(line) : null;
-  final top = showDivider ? 10.0 : 0.0;
+  final top = showDivider ? 7.0 : 0.0;
 
   Widget cell(Widget child, {EdgeInsets? padding}) {
     return Padding(
-      padding: padding ?? EdgeInsets.only(top: top, bottom: 10),
+      padding: padding ?? EdgeInsets.only(top: top, bottom: 7),
       child: child,
     );
   }
@@ -1181,7 +1371,7 @@ TableRow _productTableRow({
             ],
           ],
         ),
-        padding: EdgeInsets.only(top: top, bottom: 10, right: 8),
+        padding: EdgeInsets.only(top: top, bottom: 7, right: 8),
       ),
       cell(
         Text(
@@ -1553,16 +1743,35 @@ class _TotalsBlock extends StatelessWidget {
                   amountPaid!,
                   symbol: currencySymbol,
                 ),
+                prominent: true,
               ),
               const SizedBox(height: 8),
-              _TotalLine(
-                label: 'Outstanding',
-                value: SelloFormatters.currency(
-                  outstanding!,
-                  symbol: currencySymbol,
+              if (outstanding! > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.veil,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.outlinePanel),
+                  ),
+                  child: _TotalLine(
+                    label: 'Order balance',
+                    value: SelloFormatters.currency(
+                      outstanding!,
+                      symbol: currencySymbol,
+                    ),
+                    emphasize: true,
+                  ),
+                )
+              else
+                _TotalLine(
+                  label: 'Order balance',
+                  value: SelloFormatters.currency(
+                    outstanding!,
+                    symbol: currencySymbol,
+                  ),
+                  prominent: true,
                 ),
-                emphasize: outstanding! > 0,
-              ),
             ],
           ],
         ),
@@ -1576,38 +1785,41 @@ class _TotalLine extends StatelessWidget {
     required this.label,
     required this.value,
     this.emphasize = false,
+    this.prominent = false,
     this.muted = false,
   });
 
   final String label;
   final String value;
   final bool emphasize;
+  final bool prominent;
   final bool muted;
 
   @override
   Widget build(BuildContext context) {
+    final labelStyle = emphasize
+        ? _Type.productName
+        : prominent
+        ? _Type.label.copyWith(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          )
+        : _Type.label.copyWith(fontSize: 13.5);
+    final valueStyle = emphasize
+        ? _Type.amount.copyWith(fontSize: 16)
+        : prominent
+        ? _Type.amount
+        : _Type.tableCell.copyWith(
+            color: muted ? AppColors.textFaint : AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          );
     return Row(
       children: [
-        Expanded(
-          child: Text(
-            label,
-            style: emphasize
-                ? _Type.productName
-                : _Type.label.copyWith(fontSize: 13.5),
-          ),
-        ),
+        Expanded(child: Text(label, style: labelStyle)),
         SizedBox(
           width: _OrderGrid.amountW,
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: emphasize
-                ? _Type.amount.copyWith(fontSize: 16)
-                : _Type.tableCell.copyWith(
-                    color: muted ? AppColors.textFaint : AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-          ),
+          child: Text(value, textAlign: TextAlign.right, style: valueStyle),
         ),
       ],
     );
@@ -1694,6 +1906,14 @@ abstract final class _Type {
     letterSpacing: -0.4,
     height: 1.15,
     color: AppColors.textPrimary,
+  );
+
+  static const TextStyle subtitle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+    height: 1.3,
+    color: AppColors.textSecondary,
   );
 
   static const TextStyle section = TextStyle(

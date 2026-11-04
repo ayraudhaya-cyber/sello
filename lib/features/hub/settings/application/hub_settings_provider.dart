@@ -4,6 +4,7 @@ import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/data/repositories/company_settings_repository.dart';
 import 'package:sello/services/iam/iam_providers.dart';
 import 'package:sello/services/notifications/outbound/messaging_phone.dart';
+import 'package:sello/features/mobile/dashboard/application/sello_company_settings_provider.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/feedback/sello_activity.dart';
 import 'package:sello/shared/models/client_branding.dart';
@@ -155,6 +156,7 @@ class HubSettingsNotifier extends Notifier<HubSettingsState> {
         isSaving: false,
         clearError: true,
       );
+      ref.invalidate(selloCompanySettingsProvider);
       return null;
     } on AppFailure catch (failure) {
       state = state.copyWith(isSaving: false, errorMessage: failure.message);

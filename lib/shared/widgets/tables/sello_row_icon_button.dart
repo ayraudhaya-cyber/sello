@@ -64,9 +64,12 @@ class _SelloRowIconButtonState extends State<SelloRowIconButton> {
 
 /// Quiet cluster of [SelloRowIconButton]s for Hub tables.
 class SelloRowIconGroup extends StatelessWidget {
-  const SelloRowIconGroup({super.key, required this.children});
+  const SelloRowIconGroup({super.key, required this.children, this.spacing = 0});
 
   final List<Widget> children;
+
+  /// Extra space between icons. Defaults to none so existing tables stay tight.
+  final double spacing;
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +80,15 @@ class SelloRowIconGroup extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.outlineSubtle),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: children),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0 && spacing > 0) SizedBox(width: spacing),
+            children[i],
+          ],
+        ],
+      ),
     );
   }
 }

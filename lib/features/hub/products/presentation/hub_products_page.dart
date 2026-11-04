@@ -85,15 +85,9 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
   }
 
   Future<void> _openDetails(ProductSummary product) async {
-    final currency = ref.read(companySettingsProvider).currency;
-    final currencySymbol = switch (currency) {
-      'LKR' => 'Rs ',
-      'EUR' => '€',
-      'GBP' => '£',
-      'INR' => '₹',
-      'JPY' => '¥',
-      _ => '\$',
-    };
+    final currencySymbol = SelloFormatters.currencySymbol(
+      ref.read(companySettingsProvider).currency,
+    );
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -186,10 +180,9 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
     final state = ref.watch(hubProductsProvider);
     // Warm company settings so Add Product can apply inventory defaults.
     ref.watch(hubSettingsProvider);
-    final session = ref.watch(currentSessionProvider);
-    final currencySymbol = session?.company.companyCode == 'UNITECH'
-        ? '\$'
-        : '\$';
+    final currencySymbol = SelloFormatters.currencySymbol(
+      ref.watch(companySettingsProvider).currency,
+    );
 
     ref.listen<String?>(hubProductsProvider.select((s) => s.errorMessage), (
       previous,
@@ -210,8 +203,6 @@ class _HubProductsPageState extends ConsumerState<HubProductsPage>
 
     return AppPageScaffold(
       title: 'Products',
-      subtitle:
-          'Your catalog is the single source of truth for every sellable item.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(

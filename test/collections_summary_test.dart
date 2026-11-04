@@ -94,7 +94,7 @@ void main() {
         allocations: const [_orderAlloc, _openingAlloc],
       );
       expect(both.collectionTypeLabel, 'Order + Opening balance');
-      expect(both.allocationSummary, 'SO-1001, Opening balance · OB-0003');
+      expect(both.allocationSummary, 'SO-1001, OB-0003');
       expect(both.allocationCompactLabel, 'SO-1001 +1');
       expect(_payment(id: '4', amount: 50).collectionTypeLabel, 'On account');
     });

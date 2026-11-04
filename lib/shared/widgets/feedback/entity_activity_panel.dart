@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sello/core/theme/theme.dart';
 import 'package:sello/data/providers/repository_providers.dart';
 import 'package:sello/services/session/session_provider.dart';
 import 'package:sello/shared/models/app_notification.dart';
@@ -33,6 +34,7 @@ class EntityActivityPanel extends ConsumerStatefulWidget {
 class _EntityActivityPanelState extends ConsumerState<EntityActivityPanel> {
   List<CompanyActivityEvent> _events = const [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -55,7 +57,10 @@ class _EntityActivityPanelState extends ConsumerState<EntityActivityPanel> {
       setState(() => _loading = false);
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final events = await ref
           .read(notificationRepositoryProvider)
@@ -72,7 +77,10 @@ class _EntityActivityPanelState extends ConsumerState<EntityActivityPanel> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _error = 'Couldn\'t load company activity.';
+      });
     }
   }
 
@@ -87,6 +95,17 @@ class _EntityActivityPanelState extends ConsumerState<EntityActivityPanel> {
             height: 22,
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
+        ),
+      );
+    }
+    if (_error != null) {
+      return Text(
+        _error!,
+        style: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: widget.dense ? 12.5 : 13,
+          height: 1.4,
+          color: AppColors.textSecondary,
         ),
       );
     }

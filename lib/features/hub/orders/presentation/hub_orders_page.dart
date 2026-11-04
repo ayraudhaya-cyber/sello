@@ -89,6 +89,8 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
           OrderStatusFilter.draft => 'Open',
           OrderStatusFilter.openFulfillment => 'Waiting to deliver',
           OrderStatusFilter.placed => 'Placed',
+          OrderStatusFilter.readyToDeliver => 'Ready to deliver',
+          OrderStatusFilter.waitingForStock => 'Waiting for stock',
           OrderStatusFilter.partiallyDelivered => 'Partially delivered',
           OrderStatusFilter.completed => 'Completed',
           OrderStatusFilter.cancelled => 'Cancelled',
@@ -683,13 +685,13 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
   Future<void> _fulfillAll(OrderSummary order, {bool fromDraft = false}) async {
     final confirmed = await showSelloDialog(
       context: context,
-      title: fromDraft ? 'Mark as delivered?' : 'Deliver remaining?',
+      title: fromDraft ? 'Mark as delivered?' : 'Deliver all remaining?',
       message: fromDraft
           ? '${order.orderNumber} will be placed and all quantities delivered. '
                 'Stock will be reduced for every line. Payment is not settled automatically.'
           : '${order.orderNumber}: deliver every remaining unit now. '
                 'Stock will be reduced only for remaining quantities. Payment is not settled automatically.',
-      confirmLabel: fromDraft ? 'Mark as delivered' : 'Deliver remaining',
+      confirmLabel: fromDraft ? 'Mark as delivered' : 'Deliver all remaining',
       cancelLabel: 'Back',
     );
     if (confirmed != true || !mounted) return;
@@ -851,9 +853,199 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
     }
   }
 
+  List<_OrderListGroup> _orderGroups(HubOrdersState state) {
+    final filter = state.statusFilter;
+    if (filter == OrderStatusFilter.waitingForStock) {
+      final placed = [
+        for (final order in state.items)
+          if (order.status == OrderStatus.placed) order,
+      ];
+      final partial = [
+        for (final order in state.items)
+          if (order.status == OrderStatus.partiallyDelivered) order,
+      ];
+      if (placed.isNotEmpty && partial.isNotEmpty) {
+        return [
+          _OrderListGroup(
+            title: 'Placed, waiting for stock',
+            message:
+                'Nothing has been delivered yet, and there isn’t enough on hand to pack them.',
+            orders: placed,
+          ),
+          _OrderListGroup(
+            title: 'Partially delivered, waiting for stock',
+            message:
+                'Part of each order is already delivered. The rest is waiting for stock, so these are included in the same dashboard count.',
+            orders: partial,
+            paginate: true,
+          ),
+        ];
+      }
+      return [
+        _OrderListGroup(
+          title: 'Waiting for stock',
+          message:
+              'There isn’t enough on hand to pack these. Older open orders are supplied first.',
+          orders: state.items,
+          paginate: true,
+        ),
+      ];
+    }
+
+    if (state.relatedItems.isEmpty) {
+      return [
+        _OrderListGroup(orders: state.items, paginate: true),
+      ];
+    }
+
+    if (filter == OrderStatusFilter.readyToDeliver) {
+      return [
+        _OrderListGroup(
+          title: 'Ready to deliver',
+          message:
+              'These match the dashboard count. There’s enough on hand to pack them.',
+          orders: state.items,
+          paginate: true,
+        ),
+        _OrderListGroup(
+          title: 'Waiting for stock',
+          message:
+              'Also placed, but there isn’t enough on hand to pack them. They’re counted on their own dashboard row.',
+          orders: state.relatedItems,
+        ),
+      ];
+    }
+
+    return [
+      _OrderListGroup(
+        title: 'Partially delivered',
+        message:
+            'These match the dashboard count. The remaining quantity can be delivered.',
+        orders: state.items,
+        paginate: true,
+      ),
+      _OrderListGroup(
+        title: 'Waiting for stock',
+        message:
+            'A delivery already started, but the rest can’t be packed yet. They’re counted under Waiting for stock.',
+        orders: state.relatedItems,
+      ),
+    ];
+  }
+
+  DataRow _orderDataRow(OrderSummary order, String currencySymbol) {
+    final waiting = ref
+        .read(hubOrdersProvider)
+        .waitingOrderIds
+        .contains(order.id);
+    return DataRow(
+      onSelectChanged: (_) => _openDetails(order),
+      cells: [
+        DataCell(
+          SelloTableText(order.orderNumber, tone: SelloTableTone.strong),
+        ),
+        DataCell(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SelloTableText(
+                order.customerName ?? '—',
+                tone: SelloTableTone.strong,
+              ),
+              if (order.customerPhone != null) ...[
+                const SizedBox(height: 2),
+                SelloTableText(
+                  order.customerPhone!,
+                  tone: SelloTableTone.muted,
+                ),
+              ],
+            ],
+          ),
+        ),
+        DataCell(SelloTableText(order.employeeName ?? '—')),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.currency(order.total, symbol: currencySymbol),
+            tone: SelloTableTone.strong,
+            numeric: true,
+          ),
+        ),
+        DataCell(_paymentBadge(order.paymentStatus)),
+        DataCell(_statusBadge(order.status, waitingForStock: waiting)),
+        DataCell(
+          SelloTableText(
+            SelloFormatters.date(order.orderedAt),
+            tone: SelloTableTone.muted,
+          ),
+        ),
+        DataCell(
+          SelloRowIconGroup(
+            children: [
+              SelloRowIconButton(
+                tooltip: 'View order',
+                icon: Icons.visibility_outlined,
+                loading: _isBusy(order, 'view'),
+                onPressed: () => _openDetails(order),
+              ),
+              if (order.isEditable)
+                SelloRowIconButton(
+                  tooltip: 'Edit draft',
+                  icon: Icons.edit_outlined,
+                  loading: _isBusy(order, 'edit'),
+                  onPressed: () async {
+                    final detail = await _loadDetail(order, 'edit');
+                    if (detail != null && mounted) {
+                      await _openEditor(existing: detail);
+                    }
+                  },
+                ),
+              if (order.status != OrderStatus.draft &&
+                  order.status != OrderStatus.cancelled)
+                SelloRowIconButton(
+                  tooltip: 'Return items',
+                  icon: Icons.assignment_return_outlined,
+                  loading: _isBusy(order, 'return'),
+                  onPressed: () async {
+                    final detail = await _loadDetail(order, 'return');
+                    if (detail != null && mounted) {
+                      await _recordReturn(detail);
+                    }
+                  },
+                ),
+              if (order.status.canFulfill)
+                SelloRowIconButton(
+                  tooltip: 'Record delivery',
+                  icon: Icons.local_shipping_outlined,
+                  loading: _isBusy(order, 'deliver'),
+                  onPressed: () async {
+                    final detail = await _loadDetail(order, 'deliver');
+                    if (detail != null && mounted) {
+                      await _recordDelivery(detail);
+                    }
+                  },
+                ),
+              if (OrderCollectionRules.canCollect(
+                status: order.status,
+                paymentStatus: order.paymentStatus,
+                total: order.total,
+              ))
+                SelloRowIconButton(
+                  tooltip: 'Record collection',
+                  icon: Icons.payments_outlined,
+                  onPressed: () => _recordCollectionFromRow(order),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(hubOrdersProvider);
+    final orderGroups = _orderGroups(state);
     ref.watch(hubSettingsProvider);
     final currencySymbol = _currencySymbol();
     DataColumnSortCallback sortBy(OrderSort sort) =>
@@ -868,13 +1060,6 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
 
     return AppPageScaffold(
       title: 'Orders',
-      subtitle: switch (_tab) {
-        _OrdersWorkspaceTab.returns => 'Every return, newest first.',
-        _OrdersWorkspaceTab.cancelled =>
-          'Orders that were stopped. Stock and money were updated when each one was cancelled.',
-        _OrdersWorkspaceTab.orders =>
-          'Your sales workspace — create drafts, complete sales, and keep stock in sync.',
-      },
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(
@@ -991,10 +1176,35 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
               SelloFadeIn(
                 child: Column(
                   children: [
-                    for (final order in state.items) ...[
+                    for (final group in orderGroups) ...[
+                      if (group.title != null)
+                        _OrderGroupHeading(
+                          title: group.title!,
+                          message: group.message!,
+                          showRule: group != orderGroups.first,
+                        ),
+                      if (group.orders.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            'None in this group.',
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 13,
+                              height: 1.4,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        )
+                      else
+                        ...[
+                          for (final order in group.orders) ...[
                       _OrderMobileCard(
                         order: order,
                         currencySymbol: currencySymbol,
+                        waitingForStock: state.waitingOrderIds.contains(
+                          order.id,
+                        ),
                         opening: _isBusy(order, 'view'),
                         editing: _isBusy(order, 'edit'),
                         onOpen: () => _openDetails(order),
@@ -1008,7 +1218,9 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                             : null,
                       ),
                       const SizedBox(height: 10),
-                    ],
+                          ],
+                        ],
+                      if (group.paginate)
                     _OrdersPager(
                       page: state.page,
                       hasMore: state.hasMore,
@@ -1023,12 +1235,36 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                               .read(hubOrdersProvider.notifier)
                               .goToPage(state.page + 1),
                     ),
+                    ],
                   ],
                 ),
               )
             else
               SelloFadeIn(
-                child: SelloDataTable(
+                child: Column(
+                  children: [
+                    for (final group in orderGroups) ...[
+                      if (group.title != null)
+                        _OrderGroupHeading(
+                          title: group.title!,
+                          message: group.message!,
+                          showRule: group != orderGroups.first,
+                        ),
+                      if (group.orders.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            'None in this group.',
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 13,
+                              height: 1.4,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        )
+                      else
+                        SelloDataTable(
                   flexColumnIndex: 1,
                   sortColumnIndex: switch (state.sort) {
                     OrderSort.orderNumber => 0,
@@ -1057,139 +1293,29 @@ class _HubOrdersPageState extends ConsumerState<HubOrdersPage>
                     selloDataColumn('Actions'),
                   ],
                   rows: [
-                    for (final order in state.items)
-                      DataRow(
-                        cells: [
-                          DataCell(
-                            SelloTableText(
-                              order.orderNumber,
-                              tone: SelloTableTone.strong,
-                            ),
-                          ),
-                          DataCell(
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SelloTableText(
-                                  order.customerName ?? '—',
-                                  tone: SelloTableTone.strong,
-                                ),
-                                if (order.customerPhone != null) ...[
-                                  const SizedBox(height: 2),
-                                  SelloTableText(
-                                    order.customerPhone!,
-                                    tone: SelloTableTone.muted,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          DataCell(SelloTableText(order.employeeName ?? '—')),
-                          DataCell(
-                            SelloTableText(
-                              SelloFormatters.currency(
-                                order.total,
-                                symbol: currencySymbol,
-                              ),
-                              tone: SelloTableTone.strong,
-                              numeric: true,
-                            ),
-                          ),
-                          DataCell(_paymentBadge(order.paymentStatus)),
-                          DataCell(_statusBadge(order.status)),
-                          DataCell(
-                            SelloTableText(
-                              SelloFormatters.date(order.orderedAt),
-                              tone: SelloTableTone.muted,
-                            ),
-                          ),
-                          DataCell(
-                            SelloRowIconGroup(
-                              children: [
-                                SelloRowIconButton(
-                                  tooltip: 'View order',
-                                  icon: Icons.visibility_outlined,
-                                  loading: _isBusy(order, 'view'),
-                                  onPressed: () => _openDetails(order),
-                                ),
-                                if (order.isEditable)
-                                  SelloRowIconButton(
-                                    tooltip: 'Edit draft',
-                                    icon: Icons.edit_outlined,
-                                    loading: _isBusy(order, 'edit'),
-                                    onPressed: () async {
-                                      final detail = await _loadDetail(
-                                        order,
-                                        'edit',
-                                      );
-                                      if (detail != null && mounted) {
-                                        await _openEditor(existing: detail);
-                                      }
-                                    },
-                                  ),
-                                if (order.status != OrderStatus.draft &&
-                                    order.status != OrderStatus.cancelled)
-                                  SelloRowIconButton(
-                                    tooltip: 'Return items',
-                                    icon: Icons.assignment_return_outlined,
-                                    loading: _isBusy(order, 'return'),
-                                    onPressed: () async {
-                                      final detail = await _loadDetail(
-                                        order,
-                                        'return',
-                                      );
-                                      if (detail != null && mounted) {
-                                        await _recordReturn(detail);
-                                      }
-                                    },
-                                  ),
-                                if (order.status.canFulfill)
-                                  SelloRowIconButton(
-                                    tooltip: 'Record delivery',
-                                    icon: Icons.local_shipping_outlined,
-                                    loading: _isBusy(order, 'deliver'),
-                                    onPressed: () async {
-                                      final detail = await _loadDetail(
-                                        order,
-                                        'deliver',
-                                      );
-                                      if (detail != null && mounted) {
-                                        await _recordDelivery(detail);
-                                      }
-                                    },
-                                  ),
-                                if (OrderCollectionRules.canCollect(
-                                  status: order.status,
-                                  paymentStatus: order.paymentStatus,
-                                  total: order.total,
-                                ))
-                                  SelloRowIconButton(
-                                    tooltip: 'Record collection',
-                                    icon: Icons.payments_outlined,
-                                    onPressed: () =>
-                                        _recordCollectionFromRow(order),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                    for (final order in group.orders)
+                      _orderDataRow(order, currencySymbol),
                   ],
-                  footer: _OrdersPager(
-                    page: state.page,
-                    hasMore: state.hasMore,
-                    onPrev: state.page <= 0
-                        ? null
-                        : () => ref
-                            .read(hubOrdersProvider.notifier)
-                            .goToPage(state.page - 1),
-                    onNext: !state.hasMore
-                        ? null
-                        : () => ref
-                            .read(hubOrdersProvider.notifier)
-                            .goToPage(state.page + 1),
-                  ),
+                  footer: group.paginate
+                      ? _OrdersPager(
+                          page: state.page,
+                          hasMore: state.hasMore,
+                          onPrev: state.page <= 0
+                              ? null
+                              : () => ref
+                                  .read(hubOrdersProvider.notifier)
+                                  .goToPage(state.page - 1),
+                          onNext: !state.hasMore
+                              ? null
+                              : () => ref
+                                  .read(hubOrdersProvider.notifier)
+                                  .goToPage(state.page + 1),
+                        )
+                      : null,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
                 ),
               ),
           ],
@@ -1245,22 +1371,87 @@ class _OrdersTabBar extends StatelessWidget {
 
 const _allReps = '__all__';
 
-Widget _statusBadge(OrderStatus status) {
-  return SelloStatusBadge(
-    label: status.label,
-    tone: switch (status) {
-      OrderStatus.draft => SelloStatusTone.neutral,
-      OrderStatus.placed => SelloStatusTone.info,
-      OrderStatus.partiallyDelivered => SelloStatusTone.warning,
-      OrderStatus.completed => SelloStatusTone.success,
-      OrderStatus.cancelled => SelloStatusTone.danger,
-    },
+class _OrderListGroup {
+  const _OrderListGroup({
+    required this.orders,
+    this.title,
+    this.message,
+    this.paginate = false,
+  });
+
+  final String? title;
+  final String? message;
+  final List<OrderSummary> orders;
+  final bool paginate;
+}
+
+class _OrderGroupHeading extends StatelessWidget {
+  const _OrderGroupHeading({
+    required this.title,
+    required this.message,
+    this.showRule = true,
+  });
+
+  final String title;
+  final String message;
+  final bool showRule;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showRule) ...[
+            const Divider(height: 1, color: AppColors.outlinePanel),
+            const SizedBox(height: 14),
+          ],
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            style: const TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 13,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _statusBadge(OrderStatus status, {bool waitingForStock = false}) {
+  final badge = SelloStatusBadge(
+    label: waitingForStock ? 'Waiting for stock' : status.label,
+    tone: waitingForStock
+        ? SelloStatusTone.warning
+        : switch (status) {
+            OrderStatus.draft => SelloStatusTone.neutral,
+            OrderStatus.placed => SelloStatusTone.info,
+            OrderStatus.partiallyDelivered => SelloStatusTone.warning,
+            OrderStatus.completed => SelloStatusTone.success,
+            OrderStatus.cancelled => SelloStatusTone.danger,
+          },
   );
+  return badge;
 }
 
 Widget _paymentBadge(PaymentStatus status) {
   return SelloStatusBadge(
     label: status.label,
+    emphasis: SelloBadgeEmphasis.quiet,
     tone: switch (status) {
       PaymentStatus.paid => SelloStatusTone.success,
       PaymentStatus.partial => SelloStatusTone.info,
@@ -1325,6 +1516,14 @@ class _OrdersToolbar extends StatelessWidget {
           DropdownMenuItem(
             value: OrderStatusFilter.placed,
             child: Text('Placed'),
+          ),
+          DropdownMenuItem(
+            value: OrderStatusFilter.readyToDeliver,
+            child: Text('Ready to deliver'),
+          ),
+          DropdownMenuItem(
+            value: OrderStatusFilter.waitingForStock,
+            child: Text('Waiting for stock'),
           ),
           DropdownMenuItem(
             value: OrderStatusFilter.partiallyDelivered,
@@ -1508,6 +1707,7 @@ class _OrderMobileCard extends StatelessWidget {
     required this.order,
     required this.currencySymbol,
     required this.onOpen,
+    this.waitingForStock = false,
     this.onEdit,
     this.opening = false,
     this.editing = false,
@@ -1515,6 +1715,7 @@ class _OrderMobileCard extends StatelessWidget {
 
   final OrderSummary order;
   final String currencySymbol;
+  final bool waitingForStock;
   final VoidCallback onOpen;
   final VoidCallback? onEdit;
   final bool opening;
@@ -1546,7 +1747,10 @@ class _OrderMobileCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
               ],
-              _statusBadge(order.status),
+              _statusBadge(
+                order.status,
+                waitingForStock: waitingForStock,
+              ),
             ],
           ),
           const SizedBox(height: 8),

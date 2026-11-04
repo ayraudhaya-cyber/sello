@@ -265,6 +265,7 @@ class ReportDefinition {
     this.available = true,
     this.ownerOnly = false,
     this.drillRoute,
+    this.keywords = const [],
   });
 
   final String id;
@@ -279,6 +280,9 @@ class ReportDefinition {
 
   /// Optional deep link into the underlying domain workspace.
   final String? drillRoute;
+
+  /// Extra search terms that are not already in the title, question, or category.
+  final List<String> keywords;
 }
 
 enum ReportKpiTone { primary, finance, success, warning, ops, neutral }

@@ -122,7 +122,7 @@ class _OrderFulfillmentDialogState extends State<OrderFulfillmentDialog> {
     final deliveries = <({String orderItemId, num quantity})>[];
     for (final line in _openLines) {
       final raw = _controllers[line.id]?.text.trim() ?? '';
-      final qty = num.tryParse(raw) ?? 0;
+      final qty = SelloFormatters.tryParseQuantity(raw) ?? 0;
       if (qty < 0) {
         setState(() => _error = 'Quantities cannot be negative.');
         return;

@@ -4,10 +4,10 @@
   "apps": {
     "sales_rep": {
       "latest": {
-        "version": "1.0.25",
-        "build": 26,
-        "released_at": "2026-11-03",
-        "notes": "Placing an order holds the stock. What is on the shelf stays the same until the delivery is recorded\nAvailable stock is what you have on hand minus what open orders still need\nWhen stock is tight, older open orders are delivered first\nAn order can include a transportation cost, and who pays it"
+        "version": "1.0.26",
+        "build": 27,
+        "released_at": "2026-11-05",
+        "notes": "Summary amounts can show in full, in lakhs, or in millions. An order still shows the exact figure\nPrices use rupees when that is your currency\nHome totals follow the same amount style"
       },
       "minimum": {
         "version": "1.0.0",
@@ -35,10 +35,10 @@
     },
     "owner_manager": {
       "latest": {
-        "version": "1.0.25",
-        "build": 26,
-        "released_at": "2026-11-03",
-        "notes": "Placing an order holds the stock. What is on the shelf stays the same until you record the delivery\nAvailable stock is what you have on hand minus what open orders still need\nWhen stock is tight, older open orders are delivered first\nInventory has Shortage only, with reserved, on hand, and how many are short. The dashboard opens that list\nAn order can include a transportation cost, and who pays it"
+        "version": "1.0.26",
+        "build": 27,
+        "released_at": "2026-11-05",
+        "notes": "Reports shows the sales trend beside how many orders are open, completed, or cancelled\nTop sales reps, best selling products, and top customers sit together on Reports\nChoose full amounts, lakhs, or millions for summary cards. Details still show the exact figure\nProduct prices use rupees when that is your currency\nDashboard activity and tips are no longer cut off"
       },
       "minimum": {
         "version": "1.0.0",

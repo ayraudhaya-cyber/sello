@@ -117,9 +117,9 @@ class HubNeedsAttentionCard extends ConsumerWidget {
         if (!context.mounted) return;
         context.go(RoutePaths.hubInventory);
       case NeedsAttentionKind.waitingForStock:
-        await _openOrders(ref, context, OrderStatusFilter.openFulfillment);
+        await _openOrders(ref, context, OrderStatusFilter.waitingForStock);
       case NeedsAttentionKind.placedAwaitingFulfillment:
-        await _openOrders(ref, context, OrderStatusFilter.placed);
+        await _openOrders(ref, context, OrderStatusFilter.readyToDeliver);
       case NeedsAttentionKind.partiallyDelivered:
         await _openOrders(ref, context, OrderStatusFilter.partiallyDelivered);
     }
@@ -198,15 +198,43 @@ class _NeedsAttentionRowState extends State<_NeedsAttentionRow> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        widget.item.title,
-                        style: TextStyle(
-                          fontFamily: AppTypography.fontFamily,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w500,
-                          height: 1.35,
-                          color: AppColors.textPrimary,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.item.title,
+                            style: const TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              height: 1.35,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (widget.item.detail != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.item.detail!,
+                              style: const TextStyle(
+                                fontFamily: AppTypography.fontFamily,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                height: 1.3,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.item.action,
+                      style: TextStyle(
+                        fontFamily: AppTypography.fontFamily,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: context.brandAccent,
                       ),
                     ),
                     Icon(

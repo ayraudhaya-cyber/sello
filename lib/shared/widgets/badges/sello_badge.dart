@@ -4,6 +4,14 @@ import 'package:sello/core/theme/theme.dart';
 /// Semantic tone for status communication.
 enum SelloStatusTone { neutral, brand, success, warning, danger, info }
 
+/// How strongly a badge should compete with neighbouring status pills.
+///
+/// [solid] is the record state (order status, stock, employment).
+/// [quiet] is a secondary fact shown beside it, such as payment on an order.
+/// The quiet pill keeps a tone dot, and colours the label only when the tone
+/// is success, so Unpaid does not wear the same amber fill as Partially delivered.
+enum SelloBadgeEmphasis { solid, quiet }
+
 /// Status pill used for record state (Active, Shipped, Draft, Overdue...).
 ///
 /// Color is carried by a small dot and the label only; the surface stays a
@@ -13,12 +21,14 @@ class SelloStatusBadge extends StatelessWidget {
     super.key,
     required this.label,
     this.tone = SelloStatusTone.neutral,
+    this.emphasis = SelloBadgeEmphasis.solid,
     this.showDot = true,
     this.compact = false,
   });
 
   final String label;
   final SelloStatusTone tone;
+  final SelloBadgeEmphasis emphasis;
   final bool showDot;
 
   /// Smaller, lighter treatment for dense field lists.
@@ -27,6 +37,7 @@ class SelloStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.selloColors;
+    final quiet = emphasis == SelloBadgeEmphasis.quiet;
     final accent = switch (tone) {
       SelloStatusTone.neutral => colors.textSecondary,
       SelloStatusTone.brand => context.brandAccent,
@@ -35,8 +46,15 @@ class SelloStatusBadge extends StatelessWidget {
       SelloStatusTone.danger => AppColors.error,
       SelloStatusTone.info => colors.info,
     };
-    final fill = accent.withValues(alpha: compact ? 0.05 : 0.07);
-    final border = accent.withValues(alpha: compact ? 0.10 : 0.16);
+    final fill = quiet
+        ? AppColors.surface
+        : accent.withValues(alpha: compact ? 0.05 : 0.07);
+    final border = quiet
+        ? AppColors.outlinePanel
+        : accent.withValues(alpha: compact ? 0.10 : 0.16);
+    final labelColor = quiet
+        ? (tone == SelloStatusTone.success ? colors.success : colors.textSecondary)
+        : accent;
 
     return Container(
       padding: EdgeInsets.only(
@@ -64,7 +82,7 @@ class SelloStatusBadge extends StatelessWidget {
           Text(
             label,
             style: context.texts.labelSmall?.copyWith(
-              color: accent,
+              color: labelColor,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.1,
               fontSize: compact ? 10.5 : null,

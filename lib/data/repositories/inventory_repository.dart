@@ -10,10 +10,17 @@ import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class InventoryPageResult {
-  const InventoryPageResult({required this.items, required this.hasMore});
+  const InventoryPageResult({
+    required this.items,
+    required this.hasMore,
+    this.matchedCount = 0,
+  });
 
   final List<InventoryItem> items;
   final bool hasMore;
+
+  /// Parent products that match the current search and filters.
+  final int matchedCount;
 }
 
 /// Shared inventory domain — Hub manages; Sales reads availability only.
@@ -205,6 +212,7 @@ class InventoryRepository {
       return InventoryPageResult(
         items: attachCosts ? await _attachCosts(withThumbs) : withThumbs,
         hasMore: paged.hasMore,
+        matchedCount: groupInventoryItems(items).length,
       );
     } on PostgrestException catch (error) {
       // reserved_quantity may be missing before migration 020.
@@ -464,6 +472,7 @@ class InventoryRepository {
     return InventoryPageResult(
       items: await _attachCosts(await _signThumbs(paged.items)),
       hasMore: paged.hasMore,
+      matchedCount: groupInventoryItems(items).length,
     );
   }
 

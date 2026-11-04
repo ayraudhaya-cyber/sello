@@ -61,15 +61,9 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
   }
 
   String _currencySymbol() {
-    final currency = ref.read(companySettingsProvider).currency;
-    return switch (currency) {
-      'LKR' => 'Rs ',
-      'EUR' => '€',
-      'GBP' => '£',
-      'INR' => '₹',
-      'JPY' => '¥',
-      _ => '\$',
-    };
+    return SelloFormatters.currencySymbol(
+      ref.read(companySettingsProvider).currency,
+    );
   }
 
   bool _exporting = false;
@@ -402,8 +396,6 @@ class _HubCustomersPageState extends ConsumerState<HubCustomersPage>
 
     return AppPageScaffold(
       title: 'Customers',
-      subtitle:
-          'Your customer relationships — who you sell to and how you stay in touch.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(

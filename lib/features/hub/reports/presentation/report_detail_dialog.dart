@@ -12,14 +12,12 @@ class ReportDetailDialog extends StatelessWidget {
     required this.definition,
     required this.overview,
     required this.currencySymbol,
-    this.onExport,
     this.onDrillDown,
   });
 
   final ReportDefinition definition;
   final ReportsOverview overview;
   final String currencySymbol;
-  final ValueChanged<ReportExportFormat>? onExport;
   final VoidCallback? onDrillDown;
 
   @override
@@ -29,6 +27,10 @@ class ReportDetailDialog extends StatelessWidget {
         onDrillDown != null &&
         (definition.drillRoute != null ||
             definition.category != ReportCategory.notifications);
+    final period =
+        '${overview.preset.label} · ${SelloFormatters.date(overview.from)} – ${SelloFormatters.date(overview.to)}';
+    final caption =
+        ReportCatalog.fixedWindowCaption(definition.id) ?? period;
 
     return SelloFormDialog(
       title: definition.title,
@@ -39,10 +41,11 @@ class ReportDetailDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            '${overview.preset.label} · ${SelloFormatters.date(overview.from)} – ${SelloFormatters.date(overview.to)}',
+            caption,
             style: const TextStyle(
               fontFamily: AppTypography.fontFamily,
               fontSize: 12,
+              height: 1.4,
               color: AppColors.textSecondary,
             ),
           ),
@@ -60,6 +63,15 @@ class ReportDetailDialog extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 24),
+          const Text(
+            'Export isn’t available for this report yet.',
+            style: TextStyle(
+              fontFamily: AppTypography.fontFamily,
+              fontSize: 12,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 16),
           const SelloIntelligenceBanner(
             message:
                 'Sello Intelligence reuses this report’s analytics — AI '
@@ -67,45 +79,12 @@ class ReportDetailDialog extends StatelessWidget {
           ),
         ],
       ),
-      footer: SelloDialogFooter(
-        cancelLabel: 'Close',
-        onCancel: () => Navigator.of(context).pop(),
-        primaryLabel: 'Export',
-        onPrimary: onExport == null ? null : () => _showExportSheet(context),
-      ),
-    );
-  }
-
-  void _showExportSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final format in ReportExportFormat.values)
-              ListTile(
-                leading: Icon(switch (format) {
-                  ReportExportFormat.pdf => Icons.picture_as_pdf_outlined,
-                  ReportExportFormat.excel => Icons.table_chart_outlined,
-                  ReportExportFormat.csv => Icons.grid_on_outlined,
-                  ReportExportFormat.print => Icons.print_outlined,
-                }),
-                title: Text(switch (format) {
-                  ReportExportFormat.pdf => 'PDF',
-                  ReportExportFormat.excel => 'Excel',
-                  ReportExportFormat.csv => 'CSV',
-                  ReportExportFormat.print => 'Print',
-                }),
-                subtitle: const Text(
-                  'Architecture ready — PDF / Excel / CSV / scheduled email later',
-                ),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onExport?.call(format);
-                },
-              ),
-          ],
+      footer: Align(
+        alignment: Alignment.centerRight,
+        child: SelloButton(
+          label: 'Close',
+          variant: SelloButtonVariant.outline,
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ),
     );

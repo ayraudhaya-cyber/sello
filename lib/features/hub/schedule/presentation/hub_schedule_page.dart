@@ -151,8 +151,6 @@ class _HubSchedulePageState extends ConsumerState<HubSchedulePage>
 
     return AppPageScaffold(
       title: 'Schedule',
-      subtitle:
-          'Plan customer visits for your sales team — day, week, and route-ready.',
       maxWidth: AppSpacing.contentMax,
       headerSpacing: AppSpacing.lg,
       body: Column(
@@ -887,6 +885,7 @@ class _ListView extends StatelessWidget {
         rows: [
           for (final visit in visits)
             DataRow(
+              onSelectChanged: (_) => onEdit(visit),
               cells: [
                 DataCell(Text(SelloFormatters.date(visit.visitDate))),
                 DataCell(Text(visit.preferredTimeLabel ?? '—')),

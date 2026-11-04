@@ -27,6 +27,29 @@ enum CollectionApprovalMode {
   bool get requiresApproval => this == CollectionApprovalMode.approvalRequired;
 }
 
+/// How summary cards write large amounts. Detail screens always use the full figure.
+enum AmountDisplayStyle {
+  exact,
+  lakhs,
+  millions;
+
+  static AmountDisplayStyle fromDb(String? value) {
+    return switch (value) {
+      'lakhs' => AmountDisplayStyle.lakhs,
+      'millions' => AmountDisplayStyle.millions,
+      _ => AmountDisplayStyle.exact,
+    };
+  }
+
+  String get dbValue => name;
+
+  String get label => switch (this) {
+    AmountDisplayStyle.exact => 'Full amount',
+    AmountDisplayStyle.lakhs => 'Lakhs',
+    AmountDisplayStyle.millions => 'Millions',
+  };
+}
+
 enum CurrencyPosition {
   before,
   after;
@@ -87,6 +110,7 @@ class CompanySettings extends Equatable {
     required this.companyId,
     required this.currency,
     required this.currencyPosition,
+    this.amountDisplay = AmountDisplayStyle.exact,
     required this.financialYearStartMonth,
     required this.defaultTaxMode,
     required this.defaultReorderLevel,
@@ -126,6 +150,9 @@ class CompanySettings extends Equatable {
   final String companyId;
   final String currency;
   final CurrencyPosition currencyPosition;
+
+  /// Summary and KPI amounts. Order, payment, and customer details stay exact.
+  final AmountDisplayStyle amountDisplay;
   final int financialYearStartMonth;
   final TaxMode defaultTaxMode;
   final int defaultReorderLevel;
@@ -225,6 +252,7 @@ class CompanySettings extends Equatable {
     companyId: '',
     currency: 'USD',
     currencyPosition: CurrencyPosition.before,
+    amountDisplay: AmountDisplayStyle.exact,
     financialYearStartMonth: 1,
     defaultTaxMode: TaxMode.exclusive,
     defaultReorderLevel: 10,
@@ -278,6 +306,7 @@ class CompanySettings extends Equatable {
   CompanySettings copyWith({
     String? currency,
     CurrencyPosition? currencyPosition,
+    AmountDisplayStyle? amountDisplay,
     int? financialYearStartMonth,
     TaxMode? defaultTaxMode,
     int? defaultReorderLevel,
@@ -327,6 +356,7 @@ class CompanySettings extends Equatable {
       companyId: companyId,
       currency: currency ?? this.currency,
       currencyPosition: currencyPosition ?? this.currencyPosition,
+      amountDisplay: amountDisplay ?? this.amountDisplay,
       financialYearStartMonth:
           financialYearStartMonth ?? this.financialYearStartMonth,
       defaultTaxMode: defaultTaxMode ?? this.defaultTaxMode,
@@ -418,6 +448,9 @@ class CompanySettings extends Equatable {
       currencyPosition: CurrencyPosition.fromDb(
         json['currency_position'] as String?,
       ),
+      amountDisplay: AmountDisplayStyle.fromDb(
+        json['amount_display'] as String?,
+      ),
       financialYearStartMonth:
           (json['financial_year_start_month'] as num?)?.toInt() ?? 1,
       defaultTaxMode: TaxMode.fromDb(json['default_tax_mode'] as String?),
@@ -482,6 +515,7 @@ class CompanySettings extends Equatable {
     return {
       'currency': currency,
       'currency_position': currencyPosition.dbValue,
+      'amount_display': amountDisplay.dbValue,
       'financial_year_start_month': financialYearStartMonth,
       'default_tax_mode': defaultTaxMode.dbValue,
       'default_reorder_level': defaultReorderLevel,
@@ -508,6 +542,7 @@ class CompanySettings extends Equatable {
     companyId,
     currency,
     currencyPosition,
+    amountDisplay,
     financialYearStartMonth,
     defaultTaxMode,
     defaultReorderLevel,

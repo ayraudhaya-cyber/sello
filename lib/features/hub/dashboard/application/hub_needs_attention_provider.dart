@@ -33,5 +33,8 @@ final hubNeedsAttentionProvider =
         negativeStock: inventoryStats.negativeStock,
         stockShortage: shortage,
         pendingCollections: pending,
+        oldestWaiting: fulfillment.oldestWaiting,
+        oldestReadyPlaced: fulfillment.oldestReadyPlaced,
+        oldestReadyPartial: fulfillment.oldestReadyPartial,
       );
     });

@@ -363,6 +363,9 @@ class FulfillmentAttentionCounts {
     this.waitingPlaced = 0,
     this.waitingPartial = 0,
     this.waitingOrderIds = const <String>{},
+    this.oldestWaiting,
+    this.oldestReadyPlaced,
+    this.oldestReadyPartial,
   });
 
   final int placed;
@@ -372,6 +375,11 @@ class FulfillmentAttentionCounts {
 
   /// Open orders that cannot be fully packed, oldest claim first.
   final Set<String> waitingOrderIds;
+
+  /// Oldest open order in each dashboard bucket, for the attention row.
+  final DateTime? oldestWaiting;
+  final DateTime? oldestReadyPlaced;
+  final DateTime? oldestReadyPartial;
 }
 
 class SalesRepOption {

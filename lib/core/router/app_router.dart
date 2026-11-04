@@ -147,7 +147,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             RoutePaths.hubAttendance,
             const HubFeaturePage(
               title: 'Attendance',
-              description: 'Daily check-ins and field presence.',
               icon: Icons.fact_check_rounded,
               tone: AppColors.success,
               rows: [

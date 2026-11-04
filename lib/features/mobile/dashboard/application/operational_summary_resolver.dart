@@ -53,9 +53,10 @@ abstract final class OperationalSummaryResolver {
         OperationalSummaryMetric(
           kind: OperationalMetricKind.outstandingCollections,
           label: 'Collection due',
-          value: SelloFormatters.currency(
+          value: SelloFormatters.summaryAmount(
             insights.outstandingTotal,
             symbol: _symbol(settings.currency),
+            style: settings.amountDisplay,
           ),
           trendLabel: insights.outstandingDueToday > 0
               ? '${insights.outstandingDueToday} due today'
@@ -68,9 +69,10 @@ abstract final class OperationalSummaryResolver {
       OperationalSummaryMetric(
         kind: OperationalMetricKind.todaysSales,
         label: 'Today’s sales',
-        value: SelloFormatters.currency(
+        value: SelloFormatters.summaryAmount(
           insights.todaysSales,
           symbol: _symbol(settings.currency),
+          style: settings.amountDisplay,
         ),
         trendLabel: insights.ordersDueToday > 0
             ? '${insights.ordersDueToday} orders open'

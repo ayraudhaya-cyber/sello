@@ -1,6 +1,8 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +16,7 @@ import 'package:sello/features/hub/dashboard/application/hub_needs_attention_pro
 import 'package:sello/features/hub/dashboard/presentation/hub_dashboard_empty_state.dart';
 import 'package:sello/features/hub/dashboard/presentation/hub_needs_attention_card.dart';
 import 'package:sello/features/hub/customers/application/hub_customers_provider.dart';
+import 'package:sello/features/hub/settings/application/hub_settings_provider.dart';
 import 'package:sello/features/hub/inventory/application/hub_inventory_provider.dart';
 import 'package:sello/shared/models/stock_movement_type.dart';
 import 'package:sello/features/intelligence/application/intelligence_providers.dart';
@@ -89,27 +92,30 @@ class _HubDashboardPageState extends ConsumerState<HubDashboardPage> {
           SizedBox(height: gap),
           _KpiGrid(gap: gap, range: _range),
           SizedBox(height: gap),
-          SelloEqualHeightRow.natural(
+          SelloEqualHeightRow(
             gap: gap,
             flexes: const [68, 32],
             minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+            tightHeights: true,
             children: [performance, actions],
           ),
           SizedBox(height: gap),
-          SelloEqualHeightRow.natural(
+          SelloEqualHeightRow(
             key: ValueKey('dash-activity-$_range'),
             gap: gap,
             minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+            tightHeights: true,
             children: [
               _ActivityCard(range: _range),
               const _InventoryHealthCard(),
             ],
           ),
           SizedBox(height: gap),
-          SelloEqualHeightRow.natural(
+          SelloEqualHeightRow(
             key: ValueKey('dash-lists-$_range'),
             gap: gap,
             minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+            tightHeights: true,
             children: [
               _TopCustomersCard(range: _range),
               _BestSellersCard(range: _range),
@@ -371,25 +377,41 @@ class _KpiGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(hubDashboardProvider(range));
     final snap = async.valueOrNull;
-    final spark = snap?.sparkForMetric('revenue') ?? const <double>[];
-
+    final amountStyle = ref.watch(companySettingsProvider).amountDisplay;
+    final periodName = hubDashboardPreviousPeriodName(range);
+    final revenueCompare = snap == null
+        ? null
+        : hubDashboardComparison(
+            current: snap.revenue,
+            previous: snap.previousSales,
+            periodName: periodName,
+          );
+    final ordersCompare = snap == null
+        ? null
+        : hubDashboardComparison(
+            current: snap.orders,
+            previous: snap.previousOrders,
+            periodName: periodName,
+          );
     final items = <_KpiSpec>[
       _KpiSpec(
         label: hubDashboardRevenueLabel(range),
-        value: snap == null ? '—' : snap.money(snap.revenue),
-        trend: null,
-        up: true,
+        value: snap == null ? '—' : snap.summary(snap.revenue, style: amountStyle),
+        hint: 'Completed sales',
+        trend: revenueCompare,
+        up: _comparisonUp(revenueCompare),
         icon: Icons.payments_outlined,
-        spark: spark,
+        spark: snap?.sparkForMetric('revenue') ?? const [],
         route: RoutePaths.hubOrders,
       ),
       _KpiSpec(
-        label: 'Orders',
+        label: hubDashboardOrdersLabel(range),
         value: snap == null
             ? '—'
             : NumberFormat.decimalPattern().format(snap.orders),
-        trend: null,
-        up: true,
+        hint: 'Completed sales',
+        trend: ordersCompare,
+        up: _comparisonUp(ordersCompare),
         icon: Icons.shopping_cart_outlined,
         tone: AppColors.ops,
         spark: snap?.sparkForMetric('orders') ?? const [],
@@ -400,6 +422,7 @@ class _KpiGrid extends ConsumerWidget {
         value: snap == null
             ? '—'
             : NumberFormat.decimalPattern().format(snap.activeCustomers),
+        hint: 'Accounts you can sell to',
         trend: null,
         up: true,
         icon: Icons.groups_outlined,
@@ -408,8 +431,11 @@ class _KpiGrid extends ConsumerWidget {
         route: RoutePaths.hubCustomers,
       ),
       _KpiSpec(
-        label: 'Outstanding Collections',
-        value: snap == null ? '—' : snap.money(snap.outstanding),
+        label: 'Still owed',
+        value: snap == null
+            ? '—'
+            : snap.summary(snap.outstanding, style: amountStyle),
+        hint: 'Money customers still owe',
         trend: null,
         up: false,
         icon: Icons.credit_card_outlined,
@@ -420,12 +446,13 @@ class _KpiGrid extends ConsumerWidget {
             ref.read(hubCustomersProvider.notifier).setOwingOnly(true),
       ),
       _KpiSpec(
-        label: 'Low Stock Alerts',
+        label: 'Low stock',
         value: snap == null
             ? '—'
             : snap.lowStock == 1
             ? '1 item'
             : '${snap.lowStock} items',
+        hint: 'At or below reorder level',
         trend: null,
         up: false,
         icon: Icons.warning_amber_rounded,
@@ -446,6 +473,7 @@ class _KpiGrid extends ConsumerWidget {
           SelloStatCard(
             label: item.label,
             value: item.value,
+            hint: item.hint,
             icon: item.icon,
             tone: item.tone,
             trendLabel: item.trend,
@@ -482,6 +510,7 @@ class _KpiSpec {
   const _KpiSpec({
     required this.label,
     required this.value,
+    this.hint,
     required this.trend,
     required this.up,
     required this.icon,
@@ -493,8 +522,9 @@ class _KpiSpec {
 
   final String label;
   final String value;
+  final String? hint;
   final String? trend;
-  final bool up;
+  final bool? up;
   final IconData icon;
   final Color? tone;
   final List<double> spark;
@@ -505,6 +535,28 @@ class _KpiSpec {
 }
 
 // ─── Performance ───────────────────────────────────────────────────────────
+
+bool? _comparisonUp(String? label) {
+  if (label == null || label.startsWith('Same')) return null;
+  if (label.startsWith('-') || label.startsWith('−')) return false;
+  return true;
+}
+
+String _performanceCaption({
+  required String base,
+  required num current,
+  required num previous,
+  required String periodName,
+  required String Function(num value) format,
+}) {
+  if (current == 0 && previous == 0) return 'Nothing in this period';
+  if (current == 0) return 'Nothing in this period';
+  if (previous == 0) return '$base · nothing $periodName';
+  if (current >= previous) {
+    return '$base · up from ${format(previous)} $periodName';
+  }
+  return '$base · down from ${format(previous)} $periodName';
+}
 
 class _PerformanceCard extends ConsumerWidget {
   const _PerformanceCard({
@@ -522,34 +574,49 @@ class _PerformanceCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snap = ref.watch(hubDashboardProvider(range)).valueOrNull;
+    final amountStyle = ref.watch(companySettingsProvider).amountDisplay;
+    final periodName = hubDashboardPreviousPeriodName(range);
+    final series = snap?.seriesForMetric(metric) ?? const [];
+    final moneyMetric = metric != 'orders';
+    String formatPoint(num value) => moneyMetric
+        ? (snap?.money(value) ?? '—')
+        : NumberFormat.decimalPattern().format(value);
     final figure = switch (metric) {
       'orders' => (
         snap == null ? '—' : NumberFormat.decimalPattern().format(snap.orders),
-        snap == null || snap.orders == 0
-            ? 'No orders in this period'
-            : 'Completed in selected period',
+        _performanceCaption(
+          base: 'Completed sales',
+          current: snap?.orders ?? 0,
+          previous: snap?.previousOrders ?? 0,
+          periodName: periodName,
+          format: (value) => NumberFormat.decimalPattern().format(value),
+        ),
         AppColors.ops,
-        false,
       ),
       'collections' => (
-        snap == null ? '—' : snap.money(snap.collections),
-        snap == null || snap.collections == 0
-            ? 'No collections in this period'
-            : 'Collected in selected period',
+        snap == null ? '—' : snap.summary(snap.collections, style: amountStyle),
+        _performanceCaption(
+          base: 'Money collected',
+          current: snap?.collections ?? 0,
+          previous: snap?.previousCollections ?? 0,
+          periodName: periodName,
+          format: (value) => snap?.summary(value, style: amountStyle) ?? '—',
+        ),
         AppColors.finance,
-        false,
       ),
       _ => (
-        snap == null ? '—' : snap.money(snap.revenue),
-        snap == null || snap.revenue == 0
-            ? 'No sales in this period'
-            : 'Completed sales in selected period',
+        snap == null ? '—' : snap.summary(snap.revenue, style: amountStyle),
+        _performanceCaption(
+          base: 'Completed sales',
+          current: snap?.revenue ?? 0,
+          previous: snap?.previousSales ?? 0,
+          periodName: periodName,
+          format: (value) => snap?.summary(value, style: amountStyle) ?? '—',
+        ),
         context.brandAccent,
-        false,
       ),
     };
-    final spark = snap?.sparkForMetric(metric) ?? const <double>[];
-    final hasChart = spark.length >= 2;
+    final hasChart = series.any((point) => point.value > 0);
 
     return SelloCard(
       borderRadius: BorderRadius.circular(AppRadius.xl),
@@ -606,23 +673,8 @@ class _PerformanceCard extends ConsumerWidget {
               ),
             ],
           );
-          final chartAxis = Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (final label in ['Start', '', '', '', 'Now'])
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textFaint,
-                  ),
-                ),
-            ],
-          );
 
-          return Column(
+          final header = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -645,49 +697,54 @@ class _PerformanceCard extends ConsumerWidget {
                 runSpacing: 8,
                 children: [
                   _MetricChip(
-                    label: 'Revenue',
+                    label: snap == null
+                        ? 'Revenue'
+                        : 'Revenue · ${snap.summary(snap.revenue, style: amountStyle)}',
                     color: context.brandAccent,
                     selected: metric == 'revenue',
                     onTap: () => onMetric('revenue'),
                   ),
                   _MetricChip(
-                    label: 'Orders',
+                    label: snap == null
+                        ? 'Orders'
+                        : 'Orders · ${NumberFormat.decimalPattern().format(snap.orders)}',
                     color: AppColors.ops,
                     selected: metric == 'orders',
                     onTap: () => onMetric('orders'),
                   ),
                   _MetricChip(
-                    label: 'Collections',
+                    label: snap == null
+                        ? 'Collections'
+                        : 'Collections · ${snap.summary(snap.collections, style: amountStyle)}',
                     color: AppColors.finance,
                     selected: metric == 'collections',
                     onTap: () => onMetric('collections'),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: chartH,
-                width: double.infinity,
-                child: hasChart
-                    ? _AnimatedPerformanceChart(
-                        color: figure.$3,
-                        seed: Object.hash(metric, range, spark.length),
-                        points: spark,
-                      )
-                    : const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: HubDashboardEmptyState.tall(
-                          icon: Icons.show_chart_rounded,
-                          title: 'No sales yet',
-                          message:
-                              'Performance charts will appear as your business activity grows.',
-                          tone: AppColors.primary,
-                          soft: AppColors.primaryContainer,
-                        ),
-                      ),
-              ),
-              if (hasChart) ...[const SizedBox(height: 6), chartAxis],
             ],
+          );
+          final chart = hasChart
+              ? _PerformanceChart(
+                  points: series,
+                  color: figure.$3,
+                  formatValue: formatPoint,
+                )
+              : const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: HubDashboardEmptyState.tall(
+                    icon: Icons.bar_chart_rounded,
+                    title: 'No sales yet',
+                    message:
+                        'Performance charts will appear as your business activity grows.',
+                    tone: AppColors.primary,
+                    soft: AppColors.primaryContainer,
+                  ),
+                );
+          return _PerformanceBody(
+            minChartHeight: chartH,
+            header: header,
+            chart: chart,
           );
         },
       ),
@@ -912,73 +969,357 @@ class _HoverFillState extends State<_HoverFill> {
   }
 }
 
-/// Draws the performance line with a smooth left→right intro on filter change.
-class _AnimatedPerformanceChart extends StatefulWidget {
-  const _AnimatedPerformanceChart({
-    required this.color,
-    required this.seed,
-    this.points = const [],
-  });
+/// Daily performance as bars, in real units, with a day tooltip.
+/// Headline plus a plot that grows into a stretched card without a height cap.
+class _PerformanceLayout extends MultiChildRenderObjectWidget {
+  _PerformanceLayout({
+    required this.minChartHeight,
+    required Widget header,
+    required Widget chart,
+  }) : super(children: [header, chart]);
 
-  final Color color;
-  final int seed;
-  final List<double> points;
-
-  @override
-  State<_AnimatedPerformanceChart> createState() =>
-      _AnimatedPerformanceChartState();
-}
-
-class _AnimatedPerformanceChartState extends State<_AnimatedPerformanceChart>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _progress;
+  final double minChartHeight;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 920),
-    );
-    _progress = CurvedAnimation(
-      parent: _controller,
-      curve: const Cubic(0.22, 0.61, 0.36, 1),
-    );
-    _controller.forward();
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderPerformanceLayout(minChartHeight: minChartHeight);
   }
 
   @override
-  void didUpdateWidget(covariant _AnimatedPerformanceChart oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.seed != widget.seed ||
-        oldWidget.color != widget.color ||
-        oldWidget.points.length != widget.points.length) {
-      _controller.forward(from: 0);
+  void updateRenderObject(
+    BuildContext context,
+    _RenderPerformanceLayout renderObject,
+  ) {
+    renderObject.minChartHeight = minChartHeight;
+  }
+}
+
+class _PerformanceParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderPerformanceLayout extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _PerformanceParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _PerformanceParentData> {
+  _RenderPerformanceLayout({required double minChartHeight})
+    : _minChartHeight = minChartHeight;
+
+  static const _gap = 14.0;
+
+  double _minChartHeight;
+
+  double get minChartHeight => _minChartHeight;
+  set minChartHeight(double value) {
+    if (_minChartHeight == value) return;
+    _minChartHeight = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _PerformanceParentData) {
+      child.parentData = _PerformanceParentData();
     }
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void performLayout() {
+    final header = firstChild;
+    final chart = header == null ? null : childAfter(header);
+    final width = constraints.hasBoundedWidth
+        ? constraints.maxWidth
+        : constraints.minWidth;
+    if (header == null || chart == null) {
+      size = constraints.smallest;
+      return;
+    }
+
+    header.layout(BoxConstraints(maxWidth: width), parentUsesSize: true);
+    final minTotal = header.size.height + _gap + _minChartHeight;
+    final floor = constraints.minHeight.isFinite
+        ? math.max(minTotal, constraints.minHeight)
+        : minTotal;
+    final chartHeight = math.max(
+      _minChartHeight,
+      floor - header.size.height - _gap,
+    );
+    chart.layout(
+      BoxConstraints.tightFor(width: width, height: chartHeight),
+      parentUsesSize: true,
+    );
+    (header.parentData! as _PerformanceParentData).offset = Offset.zero;
+    (chart.parentData! as _PerformanceParentData).offset = Offset(
+      0,
+      header.size.height + _gap,
+    );
+    size = constraints.constrain(
+      Size(width, header.size.height + _gap + chartHeight),
+    );
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    defaultPaint(context, offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    return defaultHitTestChildren(result, position: position);
+  }
+}
+
+class _PerformanceBody extends StatelessWidget {
+  const _PerformanceBody({
+    required this.header,
+    required this.chart,
+    required this.minChartHeight,
+  });
+
+  final Widget header;
+  final Widget chart;
+  final double minChartHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PerformanceLayout(
+      minChartHeight: minChartHeight,
+      header: header,
+      chart: chart,
+    );
+  }
+}
+
+class _PerformanceChart extends StatefulWidget {
+  const _PerformanceChart({
+    required this.points,
+    required this.color,
+    required this.formatValue,
+  });
+
+  final List<({DateTime day, num value})> points;
+  final Color color;
+  final String Function(num value) formatValue;
+
+  @override
+  State<_PerformanceChart> createState() => _PerformanceChartState();
+}
+
+class _PerformanceChartState extends State<_PerformanceChart> {
+  int? _hover;
+
+  int? _indexFor(double dx, double width) {
+    final count = widget.points.length;
+    if (count == 0) return null;
+    const left = _ChartPainter.plotLeft;
+    const right = _ChartPainter.plotRight;
+    final plotWidth = math.max(1.0, width - left - right);
+    final local = dx - left;
+    if (local < 0 || local > plotWidth) return null;
+    return (local / plotWidth * count).floor().clamp(0, count - 1);
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _progress,
-      builder: (context, _) {
-        return CustomPaint(
-          painter: _ChartPainter(
-            color: widget.color,
-            seed: widget.seed,
-            progress: _progress.value,
-            values: widget.points,
-          ),
-          child: const SizedBox.expand(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hover = _hover;
+        final point = hover == null ? null : widget.points[hover];
+        final values = [
+          for (final point in widget.points) point.value.toDouble(),
+        ];
+        return Column(
+          children: [
+            Expanded(
+              child: MouseRegion(
+                onExit: (_) => setState(() => _hover = null),
+                onHover: (event) {
+                  final next = _indexFor(
+                    event.localPosition.dx,
+                    constraints.maxWidth,
+                  );
+                  if (next != _hover) setState(() => _hover = next);
+                },
+                child: Stack(
+                  children: [
+                    CustomPaint(
+                      painter: _ChartPainter(
+                        color: widget.color,
+                        values: values,
+                        hover: hover,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                    if (point != null && hover != null)
+                      _ChartTooltip(
+                        day: point.day,
+                        value: widget.formatValue(point.value),
+                        index: hover,
+                        count: widget.points.length,
+                        width: constraints.maxWidth,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            _ChartAxis(points: widget.points, width: constraints.maxWidth),
+          ],
         );
       },
+    );
+  }
+}
+
+class _ChartAxis extends StatelessWidget {
+  const _ChartAxis({required this.points, required this.width});
+
+  final List<({DateTime day, num value})> points;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    if (points.isEmpty) return const SizedBox(height: 18);
+    final indexes = _labelIndexes(points, width);
+    return SizedBox(
+      height: 18,
+      width: width,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final index in indexes)
+            Positioned(
+              left: _labelLeft(index, points.length, width),
+              width: 56,
+              top: 2,
+              child: Text(
+                _axisLabel(points[index].day, points.length),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textFaint,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static List<int> _labelIndexes(
+    List<({DateTime day, num value})> points,
+    double width,
+  ) {
+    final count = points.length;
+    if (count <= 1) return const [0];
+    final plot = math.max(
+      1.0,
+      width - _ChartPainter.plotLeft - _ChartPainter.plotRight,
+    );
+    final maxLabels = math.max(2, (plot / 56).floor());
+    if (count <= maxLabels) return [for (var i = 0; i < count; i++) i];
+    final last = count - 1;
+    final steps = maxLabels - 1;
+    final indexes = <int>{
+      for (var i = 0; i <= steps; i++) (i * last / steps).round(),
+    }.toList()..sort();
+    if (count <= 45) return indexes;
+    final months = <int>[];
+    int? seen;
+    for (final index in indexes) {
+      final day = points[index].day.toLocal();
+      final key = day.year * 12 + day.month;
+      if (key == seen) continue;
+      seen = key;
+      months.add(index);
+    }
+    return months.isEmpty ? indexes : months;
+  }
+
+  static double _labelLeft(int index, int count, double width) {
+    final plot = math.max(1.0, width - _ChartPainter.plotLeft - _ChartPainter.plotRight);
+    final center = _ChartPainter.plotLeft + plot * (index + 0.5) / count;
+    return (center - 28).clamp(0.0, math.max(0.0, width - 56));
+  }
+
+  static String _axisLabel(DateTime day, int count) {
+    final local = day.toLocal();
+    if (count <= 10) return DateFormat('EEE d').format(local);
+    if (count <= 45) return DateFormat('d MMM').format(local);
+    return DateFormat('MMM').format(local);
+  }
+}
+
+class _ChartTooltip extends StatelessWidget {
+  const _ChartTooltip({
+    required this.day,
+    required this.value,
+    required this.index,
+    required this.count,
+    required this.width,
+  });
+
+  final DateTime day;
+  final String value;
+  final int index;
+  final int count;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final plotWidth = math.max(
+      1.0,
+      width - _ChartPainter.plotLeft - _ChartPainter.plotRight,
+    );
+    final x = _ChartPainter.plotLeft + plotWidth * (index + 0.5) / count;
+    final alignRight = x > width * 0.62;
+    return Positioned(
+      left: alignRight ? null : (x + 12).clamp(8.0, math.max(8.0, width - 148)),
+      right: alignRight
+          ? (width - x + 12).clamp(8.0, math.max(8.0, width - 148))
+          : null,
+      top: 8,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                DateFormat('d MMM yyyy').format(day.toLocal()),
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFFD0D0D0),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -986,141 +1327,113 @@ class _AnimatedPerformanceChartState extends State<_AnimatedPerformanceChart>
 class _ChartPainter extends CustomPainter {
   _ChartPainter({
     required this.color,
-    required this.seed,
-    this.progress = 1,
-    this.values = const [],
+    required this.values,
+    this.hover,
   });
 
-  final Color color;
-  final int seed;
-  final double progress;
-  final List<double> values;
+  static const plotLeft = 52.0;
+  static const plotRight = 8.0;
 
-  /// Soft halo under the last-point marker (HTML `--dot-halo`).
-  Color get _halo => color.withValues(alpha: 0.14);
+  final Color color;
+  final List<double> values;
+  final int? hover;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const left = 36.0;
-    const right = 8.0;
-    const top = 8.0;
-    const bottom = 4.0;
+    const top = 12.0;
+    const bottom = 8.0;
     final plot = Rect.fromLTRB(
-      left,
+      plotLeft,
       top,
-      size.width - right,
+      size.width - plotRight,
       size.height - bottom,
     );
+    final maxValue = values.fold<double>(0, math.max);
+    final scale = maxValue <= 0 ? 1.0 : maxValue;
 
     final gridPaint = Paint()
       ..color = const Color(0xFFF0ECFA)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
-    for (var i = 0; i < 4; i++) {
-      final t = i / 3;
-      final y = plot.top + t * plot.height;
+    for (var i = 0; i < 5; i++) {
+      final y = plot.top + plot.height * i / 4;
       canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), gridPaint);
+      final label = maxValue * (1 - i / 4);
+      _paintLabel(canvas, _compactAxis(label), Offset(0, y - 6));
     }
 
-    final t = progress.clamp(0.0, 1.0);
-    if (t <= 0.001) return;
-
-    // Prefer real series; never invent random demo values.
-    final series = values.length >= 2 ? values : const <double>[];
-    if (series.length < 2) return;
-
-    final pts = <Offset>[
-      for (var i = 0; i < series.length; i++)
-        Offset(
-          plot.left + plot.width * i / (series.length - 1),
-          plot.top + plot.height * (1 - series[i].clamp(0.0, 1.0)),
+    if (values.isEmpty) return;
+    final slot = plot.width / values.length;
+    final barWidth = math.min(28.0, math.max(1.5, slot * 0.62));
+    for (var i = 0; i < values.length; i++) {
+      final center = plot.left + slot * (i + 0.5);
+      if (hover == i) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: Offset(center, plot.center.dy),
+              width: math.min(slot - 1, barWidth + 10),
+              height: plot.height,
+            ),
+            const Radius.circular(6),
+          ),
+          Paint()..color = color.withValues(alpha: 0.08),
+        );
+      }
+      if (values[i] <= 0) continue;
+      final barHeight = math.max(2.0, plot.height * (values[i] / scale));
+      final rect = Rect.fromLTWH(
+        center - barWidth / 2,
+        plot.bottom - barHeight,
+        barWidth,
+        barHeight,
+      );
+      final radius = math.min(6.0, math.min(barWidth / 2, barHeight / 2));
+      canvas.drawRRect(
+        RRect.fromRectAndCorners(
+          rect,
+          topLeft: Radius.circular(radius),
+          topRight: Radius.circular(radius),
         ),
-    ];
-
-    final fullPath = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (var i = 1; i < pts.length; i++) {
-      final p0 = pts[i - 1];
-      final p1 = pts[i];
-      final mid = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
-      fullPath.quadraticBezierTo(p0.dx, p0.dy, mid.dx, mid.dy);
-    }
-    fullPath.lineTo(pts.last.dx, pts.last.dy);
-
-    // Reveal the stroke left → right.
-    final metrics = fullPath.computeMetrics().toList();
-    final totalLen = metrics.fold<double>(0, (sum, m) => sum + m.length);
-    var remaining = totalLen * t;
-    final drawn = Path();
-    Offset? tip;
-    for (final metric in metrics) {
-      if (remaining <= 0) break;
-      final take = math.min(metric.length, remaining);
-      drawn.addPath(metric.extractPath(0, take), Offset.zero);
-      tip = metric.getTangentForOffset(take)?.position;
-      remaining -= take;
-    }
-
-    final topY = pts.map((p) => p.dy).reduce(math.min);
-    final fillProgress = Curves.easeOut.transform(t);
-    final fill = Path.from(drawn)
-      ..lineTo((tip ?? pts.last).dx, plot.bottom)
-      ..lineTo(pts.first.dx, plot.bottom)
-      ..close();
-
-    canvas.drawPath(
-      fill,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.28 * fillProgress),
-            color.withValues(alpha: 0.08 * fillProgress),
-            color.withValues(alpha: 0.0),
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(Rect.fromLTRB(plot.left, topY, plot.right, plot.bottom)),
-    );
-
-    canvas.drawPath(
-      drawn,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    // End marker blooms in near the finish of the draw.
-    if (t > 0.86) {
-      final bloom = Curves.easeOutCubic.transform(
-        ((t - 0.86) / 0.14).clamp(0.0, 1.0),
-      );
-      final last = tip ?? pts.last;
-      canvas.drawCircle(
-        last,
-        9 * bloom,
-        Paint()..color = _halo.withValues(alpha: 0.14 * bloom),
-      );
-      canvas.drawCircle(
-        last,
-        7 * bloom,
-        Paint()..color = Colors.white.withValues(alpha: bloom),
-      );
-      canvas.drawCircle(
-        last,
-        4.5 * bloom,
-        Paint()..color = color.withValues(alpha: bloom),
+        Paint()..color = hover == null || hover == i
+            ? color
+            : color.withValues(alpha: 0.72),
       );
     }
   }
 
+  void _paintLabel(Canvas canvas, String text, Offset offset) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textFaint,
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout(maxWidth: plotLeft - 6);
+    painter.paint(canvas, offset);
+  }
+
+  String _compactAxis(num value) {
+    final abs = value.abs();
+    if (abs >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(abs >= 10000000 ? 0 : 1)}M';
+    }
+    if (abs >= 1000) {
+      return '${(value / 1000).toStringAsFixed(abs >= 10000 ? 0 : 1)}k';
+    }
+    if (abs == abs.roundToDouble()) return abs.round().toString();
+    return abs.toStringAsFixed(0);
+  }
+
   @override
   bool shouldRepaint(covariant _ChartPainter oldDelegate) =>
-      oldDelegate.seed != seed ||
       oldDelegate.color != color ||
-      oldDelegate.progress != progress ||
+      oldDelegate.hover != hover ||
       oldDelegate.values != values;
 }
 
@@ -1137,6 +1450,7 @@ class _ActionCenterCard extends ConsumerWidget {
     return intel.when(
       data: (snap) {
         final items = snap.insights;
+        final visible = items.take(5).toList();
         if (items.isEmpty) {
           final dash = ref.watch(hubDashboardProvider('month')).valueOrNull;
           final hasBusinessSignal =
@@ -1186,17 +1500,18 @@ class _ActionCenterCard extends ConsumerWidget {
             onTap: () => context.go(RoutePaths.hubReports),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = 0; i < items.length; i++)
+              for (var i = 0; i < visible.length; i++)
                 _ActionRow(
-                  title: items[i].title,
-                  subtitle: items[i].message,
-                  cta: items[i].actionLabel,
-                  tone: _toneFor(items[i].category),
-                  soft: _softFor(items[i].category),
-                  icon: _iconFor(items[i].category),
-                  onTap: () => context.go(items[i].routeFor(role)),
-                  showDivider: i < items.length - 1,
+                  title: visible[i].title,
+                  subtitle: visible[i].message,
+                  cta: visible[i].actionLabel,
+                  tone: _toneFor(visible[i].category),
+                  soft: _softFor(visible[i].category),
+                  icon: _iconFor(visible[i].category),
+                  onTap: () => context.go(visible[i].routeFor(role)),
+                  showDivider: i < visible.length - 1,
                 ),
             ],
           ),
@@ -1327,6 +1642,8 @@ class _ActionRowState extends State<_ActionRow> {
               children: [
                 Text(
                   widget.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontFamily: AppTypography.fontFamily,
                     fontSize: 13.5,
@@ -1336,43 +1653,53 @@ class _ActionRowState extends State<_ActionRow> {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  widget.subtitle,
-                  style: const TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: AppColors.textTertiary,
+                Tooltip(
+                  message: widget.subtitle,
+                  child: Text(
+                    widget.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12.5,
+                      height: 1.45,
+                      color: AppColors.textTertiary,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          MouseRegion(
-            onEnter: (_) => setState(() => _ctaHovered = true),
-            onExit: (_) => setState(() => _ctaHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: widget.onTap,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: _ctaHovered
-                      ? context.brandAccent
-                      : context.brandAccentContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  widget.cta,
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: _ctaHovered ? Colors.white : context.brandAccent,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 148),
+            child: MouseRegion(
+              onEnter: (_) => setState(() => _ctaHovered = true),
+              onExit: (_) => setState(() => _ctaHovered = false),
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: widget.onTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _ctaHovered
+                        ? context.brandAccent
+                        : context.brandAccentContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    widget.cta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _ctaHovered ? Colors.white : context.brandAccent,
+                    ),
                   ),
                 ),
               ),
@@ -1395,7 +1722,9 @@ class _ActivityCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(hubDashboardProvider(range));
     final snap = async.valueOrNull;
-    final events = snap?.activity ?? const <CompanyActivityEvent>[];
+    final events = (snap?.activity ?? const <CompanyActivityEvent>[])
+        .take(6)
+        .toList();
 
     return SelloDashboardCard(
       title: 'Business Activity',
@@ -1414,6 +1743,7 @@ class _ActivityCard extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 24),
             )
           : Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 for (var i = 0; i < events.length; i++)
                   IntrinsicHeight(
@@ -1603,7 +1933,13 @@ class _InventoryHealthCard extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
       onTap: () => context.go(RoutePaths.hubInventory),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -1708,41 +2044,51 @@ class _InventoryHealthCard extends ConsumerWidget {
                   ],
                 );
               },
-            ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.outlineSubtle),
-          const SizedBox(height: 12),
-          Text.rich(
-            TextSpan(
-              style: TextStyle(
-                fontFamily: AppTypography.fontFamily,
-                fontSize: 12.5,
-                height: 1.5,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textTertiary,
               ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextSpan(
-                  text: emptyInventory
-                      ? 'Add products and stock to see inventory health. '
-                      : attention == 0
-                      ? 'Inventory looks healthy. '
-                      : attention == 1
-                      ? '1 product needs attention. '
-                      : '$attention products need attention. ',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                const Divider(height: 1, color: AppColors.outlineSubtle),
+                const SizedBox(height: 12),
+                Text.rich(
+                  TextSpan(
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 12.5,
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textTertiary,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: emptyInventory
+                            ? 'Add products and stock to see inventory health. '
+                            : attention == 0
+                            ? 'Inventory looks healthy. '
+                            : attention == 1
+                            ? '1 product needs attention. '
+                            : '$attention products need attention. ',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      TextSpan(
+                        text: emptyInventory
+                            ? 'Open Inventory when you are ready to start.'
+                            : 'Open Inventory to adjust stock or review movements.',
+                      ),
+                    ],
                   ),
-                ),
-                TextSpan(
-                  text: emptyInventory
-                      ? 'Open Inventory when you are ready to start.'
-                      : 'Open Inventory to adjust stock or review movements.',
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -1863,6 +2209,7 @@ class _TopCustomersCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(hubDashboardProvider(range));
     final snap = async.valueOrNull;
+    final amountStyle = ref.watch(companySettingsProvider).amountDisplay;
     final customers = snap?.overview.topCustomers.take(5).toList() ?? const [];
 
     return SelloDashboardCard(
@@ -1891,7 +2238,10 @@ class _TopCustomersCard extends ConsumerWidget {
                         (customers[i].count == null
                             ? 'Sales in period'
                             : '${customers[i].count} orders'),
-                    amount: snap!.moneyCompact(customers[i].value),
+                    amount: snap!.summary(
+                      customers[i].value,
+                      style: amountStyle,
+                    ),
                     outstanding: '',
                     owed: false,
                     avatarFrom: _avatarPairs[i % _avatarPairs.length].$1,
@@ -2064,14 +2414,15 @@ class _RankCustomerRow extends StatelessWidget {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-              Text(
-                outstanding,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 10,
-                  color: owed ? AppColors.finance : AppColors.textFaint,
+              if (outstanding.isNotEmpty)
+                Text(
+                  outstanding,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 10,
+                    color: owed ? AppColors.finance : AppColors.textFaint,
+                  ),
                 ),
-              ),
             ],
           ),
         ],
@@ -2089,7 +2440,8 @@ class _BestSellersCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(hubDashboardProvider(range));
     final snap = async.valueOrNull;
-    final products = snap?.overview.topProducts.take(4).toList() ?? const [];
+    final amountStyle = ref.watch(companySettingsProvider).amountDisplay;
+    final products = snap?.overview.topProducts.take(5).toList() ?? const [];
     final tones = [
       context.brandAccent,
       AppColors.success,
@@ -2115,8 +2467,8 @@ class _BestSellersCard extends ConsumerWidget {
                     emoji: '•',
                     name: products[i].name,
                     subtitle: products[i].count == null
-                        ? snap!.moneyCompact(products[i].value)
-                        : '${products[i].count} units · ${snap!.moneyCompact(products[i].value)}',
+                        ? snap!.summary(products[i].value, style: amountStyle)
+                        : '${products[i].count} units · ${snap!.summary(products[i].value, style: amountStyle)}',
                     sparkColor: tones[i % tones.length],
                     spark: const [],
                     showDivider: i < products.length - 1,
@@ -2332,9 +2684,10 @@ class _InsightsSection extends ConsumerWidget {
       children: [
         head,
         const SizedBox(height: 18),
-        SelloEqualHeightRow.natural(
+        SelloEqualHeightRow(
           gap: AppSpacing.gap,
           minChildWidth: ResponsiveLayout.sectionCardMinWidth,
+          tightHeights: true,
           flexes: cards.length == 1
               ? const [1]
               : cards.length == 2
@@ -2375,12 +2728,13 @@ class _InsightCard extends StatelessWidget {
         large ? AppRadius.xl : AppRadius.card,
       ),
       padding: EdgeInsets.all(large ? 26 : 22),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final stretch =
-              constraints.hasBoundedHeight &&
-              constraints.maxHeight < double.infinity;
-          return Column(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
@@ -2410,20 +2764,27 @@ class _InsightCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              Text(
-                body,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 14,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
+              Tooltip(
+                message: body,
+                child: Text(
+                  body,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: 14,
+                    height: 1.5,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
-              if (stretch) const Spacer() else const SizedBox(height: 16),
-              SelloViewAllLink(label: cta, onTap: onTap),
             ],
-          );
-        },
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: SelloViewAllLink(label: cta, onTap: onTap),
+          ),
+        ],
       ),
     );
   }

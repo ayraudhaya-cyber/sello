@@ -161,12 +161,25 @@ class OrderRepository {
     bool ascending = false,
     int page = 0,
     int pageSize = 20,
+    Set<String>? onlyIds,
+    Set<String>? excludeIds,
   }) async {
     try {
+      if (onlyIds != null && onlyIds.isEmpty) {
+        return const OrderPageResult(items: [], hasMore: false);
+      }
+
       var query = _client
           .from('orders')
           .select(_listSelect)
           .isFilter('deleted_at', null);
+
+      if (onlyIds != null) {
+        query = query.inFilter('id', onlyIds.toList());
+      }
+      if (excludeIds != null && excludeIds.isNotEmpty) {
+        query = query.not('id', 'in', '(${excludeIds.join(',')})');
+      }
 
       if (statuses != null && statuses.isNotEmpty) {
         query = query.inFilter(
@@ -447,7 +460,8 @@ class OrderRepository {
       }
 
       if (variantIds.isEmpty) {
-        return FulfillmentAttentionCounts(
+        return _openOrdersWithoutDemand(
+          orderMeta,
           placed: placed,
           partiallyDelivered: partiallyDelivered,
         );
@@ -488,6 +502,10 @@ class OrderRepository {
         partiallyDelivered: partiallyDelivered,
         statusByOrder: {
           for (final entry in orderMeta.entries) entry.key: entry.value.status,
+        },
+        orderedAtByOrder: {
+          for (final entry in orderMeta.entries)
+            entry.key: entry.value.orderedAt,
         },
         demands: demands,
         onHandByKey: onHand,
@@ -549,13 +567,13 @@ class OrderRepository {
     final itemRows = await _client
         .from('order_items')
         .select(
-          'order_id, product_id, quantity, delivered_quantity, cancelled_quantity',
+          'order_id, product_id, variant_id, quantity, delivered_quantity, cancelled_quantity',
         )
         .inFilter('order_id', orderMeta.keys.toList());
 
     final productIds = <String>{};
     final remainingByOrder =
-        <String, List<({String productId, num remaining})>>{};
+        <String, List<({String unitId, num remaining})>>{};
 
     for (final raw in itemRows as List) {
       final map = Map<String, dynamic>.from(raw as Map);
@@ -569,14 +587,19 @@ class OrderRepository {
       final remaining = ordered - delivered - cancelled;
       if (remaining <= 0) continue;
       productIds.add(productId);
+      final variantId = (map['variant_id'] as String?)?.trim();
+      final unitId = variantId != null && variantId.isNotEmpty
+          ? variantId
+          : productId;
       remainingByOrder.putIfAbsent(orderId, () => []).add((
-        productId: productId,
+        unitId: unitId,
         remaining: remaining,
       ));
     }
 
     if (productIds.isEmpty) {
-      return FulfillmentAttentionCounts(
+      return _openOrdersWithoutDemand(
+        orderMeta,
         placed: placed,
         partiallyDelivered: partiallyDelivered,
       );
@@ -584,7 +607,7 @@ class OrderRepository {
 
     final invRows = await _client
         .from('inventory')
-        .select('branch_id, product_id, quantity')
+        .select('branch_id, product_id, variant_id, quantity')
         .inFilter('product_id', productIds.toList());
 
     final onHand = <String, num>{};
@@ -593,7 +616,26 @@ class OrderRepository {
       final branchId = map['branch_id'] as String?;
       final productId = map['product_id'] as String?;
       if (branchId == null || productId == null) continue;
-      onHand['$branchId|$productId'] = _asNum(map['quantity']);
+      final quantity = _asNum(map['quantity']);
+      final variantId = (map['variant_id'] as String?)?.trim();
+      if (variantId != null && variantId.isNotEmpty) {
+        OrderStockAllocation.addOnHand(
+          onHand,
+          key: OrderStockAllocation.stockKey(
+            branchId: branchId,
+            unitId: variantId,
+          ),
+          quantity: quantity,
+        );
+      }
+      OrderStockAllocation.addOnHand(
+        onHand,
+        key: OrderStockAllocation.stockKey(
+          branchId: branchId,
+          unitId: productId,
+        ),
+        quantity: quantity,
+      );
     }
 
     final demands = <OpenOrderStockDemand>[
@@ -605,7 +647,10 @@ class OrderRepository {
             lines: [
               for (final line in remainingByOrder[entry.key]!)
                 OpenOrderStockLine(
-                  stockKey: '${entry.value.branchId}|${line.productId}',
+                  stockKey: OrderStockAllocation.stockKey(
+                    branchId: entry.value.branchId,
+                    unitId: line.unitId,
+                  ),
                   remaining: line.remaining,
                 ),
             ],
@@ -618,8 +663,56 @@ class OrderRepository {
       statusByOrder: {
         for (final entry in orderMeta.entries) entry.key: entry.value.status,
       },
+      orderedAtByOrder: {
+        for (final entry in orderMeta.entries)
+          entry.key: entry.value.orderedAt,
+      },
       demands: demands,
       onHandByKey: onHand,
+    );
+  }
+
+  FulfillmentAttentionCounts _openOrdersWithoutDemand(
+    Map<String, ({String branchId, OrderStatus status, DateTime orderedAt})>
+    orderMeta, {
+    required int placed,
+    required int partiallyDelivered,
+  }) {
+    final ages = _attentionAges(orderMeta, const {});
+    return FulfillmentAttentionCounts(
+      placed: placed,
+      partiallyDelivered: partiallyDelivered,
+      oldestReadyPlaced: ages.readyPlaced,
+      oldestReadyPartial: ages.readyPartial,
+    );
+  }
+
+  ({DateTime? waiting, DateTime? readyPlaced, DateTime? readyPartial})
+  _attentionAges(
+    Map<String, ({String branchId, OrderStatus status, DateTime orderedAt})>
+    orderMeta,
+    Set<String> waiting,
+  ) {
+    DateTime? pick(bool Function(String id, OrderStatus status) test) {
+      DateTime? best;
+      for (final entry in orderMeta.entries) {
+        if (!test(entry.key, entry.value.status)) continue;
+        final at = entry.value.orderedAt;
+        if (best == null || at.isBefore(best)) best = at;
+      }
+      return best;
+    }
+
+    return (
+      waiting: pick((id, _) => waiting.contains(id)),
+      readyPlaced: pick(
+        (id, status) =>
+            status == OrderStatus.placed && !waiting.contains(id),
+      ),
+      readyPartial: pick(
+        (id, status) =>
+            status == OrderStatus.partiallyDelivered && !waiting.contains(id),
+      ),
     );
   }
 
@@ -627,6 +720,7 @@ class OrderRepository {
     required int placed,
     required int partiallyDelivered,
     required Map<String, OrderStatus> statusByOrder,
+    required Map<String, DateTime> orderedAtByOrder,
     required List<OpenOrderStockDemand> demands,
     required Map<String, num> onHandByKey,
   }) {
@@ -649,12 +743,29 @@ class OrderRepository {
           break;
       }
     }
+    DateTime? oldest(bool Function(String id, OrderStatus? status) test) {
+      DateTime? best;
+      for (final entry in orderedAtByOrder.entries) {
+        if (!test(entry.key, statusByOrder[entry.key])) continue;
+        if (best == null || entry.value.isBefore(best)) best = entry.value;
+      }
+      return best;
+    }
+
     return FulfillmentAttentionCounts(
       placed: placed,
       partiallyDelivered: partiallyDelivered,
       waitingPlaced: waitingPlaced,
       waitingPartial: waitingPartial,
       waitingOrderIds: short,
+      oldestWaiting: oldest((id, _) => short.contains(id)),
+      oldestReadyPlaced: oldest(
+        (id, status) => status == OrderStatus.placed && !short.contains(id),
+      ),
+      oldestReadyPartial: oldest(
+        (id, status) =>
+            status == OrderStatus.partiallyDelivered && !short.contains(id),
+      ),
     );
   }
 
@@ -773,7 +884,7 @@ class OrderRepository {
         at: order.orderedAt,
         detail: order.employeeName == null
             ? null
-            : 'Opened by ${order.employeeName}',
+            : 'Assigned sales rep: ${order.employeeName}',
       ),
     ];
 
@@ -797,7 +908,6 @@ class OrderRepository {
           kind: OrderTimelineKind.cancelled,
           title: 'Order cancelled',
           at: order.cancelledAt!,
-          detail: 'No inventory movement',
         ),
       );
     }

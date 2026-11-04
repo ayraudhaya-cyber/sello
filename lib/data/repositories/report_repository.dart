@@ -553,6 +553,133 @@ class ReportRepository {
     return total;
   }
 
+  /// Previous-period headline for the dashboard. Aggregates only, so it does
+  /// not download the order list a second time.
+  Future<({num sales, int orders, num collections})> fetchPeriodHeadline({
+    required DateTime from,
+    required DateTime to,
+    String? branchId,
+  }) async {
+    final fromIso = from.toIso8601String();
+    final toIso = to.toIso8601String();
+    final salesFuture = _sumCompletedOrderHeadline(
+      fromIso: fromIso,
+      toIso: toIso,
+      branchId: branchId,
+    );
+    final returnsFuture = _sumReturnValue(
+      fromIso: fromIso,
+      toIso: toIso,
+      branchId: branchId,
+    );
+    final collectionsFuture = _fetchCollectionsTotal(from: from, to: to);
+    final sales = await salesFuture;
+    final returns = await returnsFuture;
+    final collections = await collectionsFuture;
+    final net = sales.total - returns;
+    return (
+      sales: net < 0 ? 0 : net,
+      orders: sales.count,
+      collections: collections,
+    );
+  }
+
+  /// Completed collection amounts grouped by UTC day, for the performance chart.
+  Future<Map<DateTime, num>> fetchCollectionAmountsByDay({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final totals = <DateTime, num>{};
+    const pageSize = 1000;
+    try {
+      for (var offset = 0; offset < 20000; offset += pageSize) {
+        final page = await _client
+            .from('payments')
+            .select('amount, received_at')
+            .isFilter('deleted_at', null)
+            .eq('status', 'completed')
+            .gte('received_at', from.toIso8601String())
+            .lte('received_at', to.toIso8601String())
+            .order('received_at', ascending: true)
+            .range(offset, offset + pageSize - 1);
+        final list = page as List;
+        for (final raw in list) {
+          final map = Map<String, dynamic>.from(raw as Map);
+          final at = _asDate(map['received_at']);
+          if (at == null) continue;
+          final day = DateTime.utc(at.toUtc().year, at.toUtc().month, at.toUtc().day);
+          totals[day] = (totals[day] ?? 0) + _asNum(map['amount']);
+        }
+        if (list.length < pageSize) break;
+      }
+    } catch (_) {
+      return const {};
+    }
+    return totals;
+  }
+
+  Future<({num total, int count})> _sumCompletedOrderHeadline({
+    required String fromIso,
+    required String toIso,
+    String? branchId,
+  }) async {
+    try {
+      var query = _client
+          .from('orders')
+          .select('sales:total.sum(), orders:id.count()')
+          .eq('status', OrderStatus.completed.dbValue)
+          .isFilter('deleted_at', null)
+          .gte('ordered_at', fromIso)
+          .lte('ordered_at', toIso);
+      if (branchId != null && branchId.isNotEmpty) {
+        query = query.eq('branch_id', branchId);
+      }
+      final rows = await query as List;
+      if (rows.isNotEmpty) {
+        final row = Map<String, dynamic>.from(rows.first as Map);
+        if (row.containsKey('sales') && row.containsKey('orders')) {
+          return (total: _asNum(row['sales']), count: _asNum(row['orders']).round());
+        }
+      }
+    } on PostgrestException {
+      // Aggregates unavailable — fall through.
+    }
+
+    final orders = await _fetchCompletedOrders(
+      from: DateTime.parse(fromIso),
+      to: DateTime.parse(toIso),
+      branchId: branchId,
+    );
+    return (
+      total: orders.fold<num>(0, (sum, order) => sum + order.total),
+      count: orders.length,
+    );
+  }
+
+  Future<num> _sumReturnValue({
+    required String fromIso,
+    required String toIso,
+    String? branchId,
+  }) async {
+    try {
+      var query = _client
+          .from('order_returns')
+          .select('total:return_value.sum()')
+          .isFilter('deleted_at', null)
+          .gte('returned_at', fromIso)
+          .lte('returned_at', toIso);
+      if (branchId != null && branchId.isNotEmpty) {
+        query = query.eq('branch_id', branchId);
+      }
+      final rows = await query;
+      final summed = _readAggregate(rows, 'total');
+      if (summed != null) return summed;
+    } catch (_) {
+      return 0;
+    }
+    return 0;
+  }
+
   Future<num> _fetchOpeningBalanceSum() async {
     try {
       final rows = await _client

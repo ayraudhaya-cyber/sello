@@ -18,6 +18,7 @@ import 'package:sello/shared/models/product_field.dart';
 import 'package:sello/shared/utils/country_catalog.dart';
 import 'package:sello/shared/utils/formatters.dart';
 import 'package:sello/shared/widgets/badges/sello_badge.dart';
+import 'package:sello/shared/widgets/layout/sello_equal_height_row.dart';
 import 'package:sello/shared/widgets/buttons/sello_button.dart';
 import 'package:sello/shared/widgets/dialogs/sello_form_dialog.dart';
 import 'package:sello/shared/widgets/feedback/entity_activity_panel.dart';
@@ -1062,34 +1063,23 @@ class _InfoGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final blocks = <_InfoBlock>[customer, order, ?delivery];
+    if (blocks.length == 1) {
+      return _InfoBlockView(block: blocks.first);
+    }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide =
-            constraints.maxWidth >= _OrderGrid.wideBreakpoint &&
-            blocks.length > 1;
-        if (!wide) {
-    return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-              for (var i = 0; i < blocks.length; i++) ...[
-                if (i > 0) const SizedBox(height: _OrderGrid.colGutter),
-                _InfoBlockView(block: blocks[i]),
-              ],
-            ],
-          );
-        }
+    // The dialog body scrolls, so this row has no height limit. A stretched
+    // Row there expands without bound and hides everything under the banner
+    // in a release build. Equal-height measurement keeps the cards level.
+    final minChildWidth =
+        (_OrderGrid.wideBreakpoint -
+            _OrderGrid.colGutter * (blocks.length - 1)) /
+        blocks.length;
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < blocks.length; i++) ...[
-              if (i > 0) const SizedBox(width: _OrderGrid.colGutter),
-              Expanded(child: _InfoBlockView(block: blocks[i])),
-            ],
-          ],
-        );
-      },
+    return SelloEqualHeightRow(
+      gap: _OrderGrid.colGutter,
+      minChildWidth: minChildWidth,
+      tightHeights: true,
+      children: [for (final block in blocks) _InfoBlockView(block: block)],
     );
   }
 }

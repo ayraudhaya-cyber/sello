@@ -101,7 +101,6 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
 
   @override
   Widget build(BuildContext context) {
-    final motion = !MediaQuery.disableAnimationsOf(context);
     return Title(
       title: 'Sello — Business Operations',
       color: AppColors.primary,
@@ -138,6 +137,7 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
                         onSignIn: _signIn,
                         onEmail: () => _open('mailto:$_email'),
                         onPhone: () => _open(_phoneUri),
+                        onOpen: _open,
                         email: _email,
                         phoneLabel: _phoneLabel,
                       ),
@@ -145,6 +145,23 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
                   ),
                 ),
               ),
+              if (_menuOpen && MediaQuery.sizeOf(context).width < 980)
+                Positioned.fill(
+                  child: _V2MobileMenu(
+                    key: const ValueKey('v2-menu'),
+                    onFeatures: () => _scrollTo(_featuresKey),
+                    onFaq: () => _scrollTo(_faqKey),
+                    onPricing: () {},
+                    onContact: _showContact,
+                    onV1: _toTop,
+                    onSignIn: _signIn,
+                    onGetStarted: _getStarted,
+                    email: _email,
+                    phoneLabel: _phoneLabel,
+                    phoneUri: _phoneUri,
+                    onOpen: _open,
+                  ),
+                ),
               Positioned(
                 top: 18,
                 left: 0,
@@ -154,41 +171,17 @@ class _MarketingV2PageState extends State<MarketingV2Page> {
                     final inset = _v2ContentLeft(constraints.maxWidth);
                     return Padding(
                       padding: EdgeInsets.symmetric(horizontal: inset),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _V2Nav(
-                            menuOpen: _menuOpen,
-                            onToggleMenu: () =>
-                                setState(() => _menuOpen = !_menuOpen),
-                            onFeatures: () => _scrollTo(_featuresKey),
-                            onFaq: () => _scrollTo(_faqKey),
-                            onPricing: () {},
-                            onContact: _showContact,
-                            onV1: _toTop,
-                            onSignIn: _signIn,
-                            onGetStarted: _getStarted,
-                          ),
-                          AnimatedSwitcher(
-                            duration: motion
-                                ? AppDurations.normal
-                                : Duration.zero,
-                            child: _menuOpen
-                                ? _V2MobileMenu(
-                                    key: const ValueKey('v2-menu'),
-                                    onFeatures: () => _scrollTo(_featuresKey),
-                                    onFaq: () => _scrollTo(_faqKey),
-                                    onPricing: () {},
-                                    onContact: _showContact,
-                                    onV1: _toTop,
-                                    onSignIn: _signIn,
-                                    onGetStarted: _getStarted,
-                                  )
-                                : const SizedBox.shrink(
-                                    key: ValueKey('v2-closed'),
-                                  ),
-                          ),
-                        ],
+                      child: _V2Nav(
+                        menuOpen: _menuOpen,
+                        onToggleMenu: () =>
+                            setState(() => _menuOpen = !_menuOpen),
+                        onFeatures: () => _scrollTo(_featuresKey),
+                        onFaq: () => _scrollTo(_faqKey),
+                        onPricing: () {},
+                        onContact: _showContact,
+                        onV1: _toTop,
+                        onSignIn: _signIn,
+                        onGetStarted: _getStarted,
                       ),
                     );
                   },
@@ -330,58 +323,70 @@ class _V2Nav extends StatelessWidget {
               child: ColoredBox(
                 color: const Color(0x8C1C1630),
                 child: SizedBox(
-            height: 56,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 6, 6, 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: _V2Wordmark(onPressed: onV1, height: wide ? 30 : 26),
-                  ),
-                  if (wide) ...[
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _V2NavLink(label: 'Features', onPressed: onFeatures),
-                          const SizedBox(width: 18),
-                          _V2NavLink(label: 'FAQ', onPressed: onFaq),
-                          const SizedBox(width: 18),
-                          _V2NavLink(label: 'Contact', onPressed: onContact),
+                  height: 56,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 6, 6, 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: _V2Wordmark(
+                            onPressed: onV1,
+                            height: wide ? 30 : 26,
+                          ),
+                        ),
+                        if (wide) ...[
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _V2NavLink(
+                                  label: 'Features',
+                                  onPressed: onFeatures,
+                                ),
+                                const SizedBox(width: 18),
+                                _V2NavLink(label: 'FAQ', onPressed: onFaq),
+                                const SizedBox(width: 18),
+                                _V2NavLink(
+                                  label: 'Contact',
+                                  onPressed: onContact,
+                                ),
+                              ],
+                            ),
+                          ),
+                          _V2NavLink(label: 'Sign in', onPressed: onSignIn),
+                          const SizedBox(width: 8),
+                          _V2PillButton(
+                            label: 'Get started',
+                            onPressed: onGetStarted,
+                          ),
+                        ] else ...[
+                          const Spacer(),
+                          _V2PillButton(
+                            label: 'Get started',
+                            onPressed: onGetStarted,
+                          ),
+                          const SizedBox(width: 2),
+                          IconButton(
+                            tooltip: menuOpen ? 'Close menu' : 'Open menu',
+                            color: Colors.white,
+                            visualDensity: VisualDensity.compact,
+                            style: IconButton.styleFrom(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              minimumSize: const Size(40, 40),
+                            ),
+                            onPressed: onToggleMenu,
+                            icon: Icon(
+                              menuOpen
+                                  ? Icons.close_rounded
+                                  : Icons.menu_rounded,
+                            ),
+                          ),
                         ],
-                      ),
+                      ],
                     ),
-                    _V2NavLink(label: 'Sign in', onPressed: onSignIn),
-                    const SizedBox(width: 8),
-                    _V2PillButton(
-                      label: 'Get started',
-                      onPressed: onGetStarted,
-                    ),
-                  ] else ...[
-                    const Spacer(),
-                    IconButton(
-                      tooltip: menuOpen ? 'Close menu' : 'Open menu',
-                      color: Colors.white,
-                      visualDensity: VisualDensity.compact,
-                      style: IconButton.styleFrom(
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        minimumSize: const Size(40, 40),
-                      ),
-                      onPressed: onToggleMenu,
-                      icon: Icon(
-                        menuOpen ? Icons.close_rounded : Icons.menu_rounded,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    _V2PillButton(
-                      label: 'Get started',
-                      onPressed: onGetStarted,
-                    ),
-                  ],
-                ],
-              ),
-            ),
+                  ),
                 ),
               ),
             ),
@@ -430,6 +435,10 @@ class _V2MobileMenu extends StatelessWidget {
     required this.onV1,
     required this.onSignIn,
     required this.onGetStarted,
+    required this.email,
+    required this.phoneLabel,
+    required this.phoneUri,
+    required this.onOpen,
   });
 
   final VoidCallback onFeatures;
@@ -439,74 +448,252 @@ class _V2MobileMenu extends StatelessWidget {
   final VoidCallback onV1;
   final VoidCallback onSignIn;
   final VoidCallback onGetStarted;
+  final String email;
+  final String phoneLabel;
+  final String phoneUri;
+  final Future<void> Function(String uri) onOpen;
+
+  static const _address = '207 Saranankara Road, Dehiwala';
+  static const _detailStyle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 13,
+    height: 1.7,
+    fontWeight: FontWeight.w400,
+    color: Color(0xFFB7B0C8),
+  );
 
   @override
   Widget build(BuildContext context) {
     assert(onPricing.hashCode >= 0 && onV1.hashCode >= 0);
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Material(
-            color: const Color(0xF2120C1E),
-            elevation: 8,
-            shadowColor: Colors.black,
-            borderRadius: BorderRadius.circular(22),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Column(
-                children: [
-                  for (final item in [
-                    ('Features', onFeatures),
-                    ('FAQ', onFaq),
-                    ('Contact', onContact),
-                  ])
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: TextButton(
-                        onPressed: item.$2,
-                        style: TextButton.styleFrom(
-                          alignment: Alignment.centerLeft,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Text(item.$1),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: onSignIn,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
-                        minimumSize: const Size.fromHeight(48),
-                      ),
-                      child: const Text('Sign in'),
-                    ),
+    return ColoredBox(
+      color: const Color(0xFF120C1E),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 96, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final item in [
+              ('Features', onFeatures),
+              ('FAQ', onFaq),
+              ('Contact', onContact),
+            ])
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: TextButton(
+                  onPressed: item.$2,
+                  style: TextButton.styleFrom(
+                    alignment: Alignment.center,
+                    foregroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _V2GlowButton(
-                      label: 'Get started',
-                      onPressed: onGetStarted,
-                      expanded: true,
-                    ),
-                  ),
-                ],
+                  child: Text(item.$1),
+                ),
+              ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onSignIn,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: const Text('Sign in'),
               ),
             ),
-          ),
+            const SizedBox(height: 8),
+            _V2GlowButton(
+              label: 'Get started',
+              onPressed: onGetStarted,
+              expanded: true,
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => onOpen('mailto:$email'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFB7B0C8),
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: _detailStyle,
+              ),
+              child: Text(email),
+            ),
+            TextButton(
+              onPressed: () => onOpen(phoneUri),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFB7B0C8),
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: _detailStyle,
+              ),
+              child: Text(phoneLabel),
+            ),
+            const Text(_address, textAlign: TextAlign.center, style: _detailStyle),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _MenuSocialButton(
+                  label: 'Facebook',
+                  onPressed: () =>
+                      onOpen('https://facebook.com/unitechsolutions.pro'),
+                  painter: const _FacebookMarkPainter(),
+                ),
+                const SizedBox(width: 14),
+                _MenuSocialButton(
+                  label: 'Instagram',
+                  onPressed: () => onOpen(
+                    'https://www.instagram.com/unitech_solutions_it',
+                  ),
+                  painter: const _InstagramMarkPainter(),
+                ),
+                const SizedBox(width: 14),
+                _MenuSocialButton(
+                  label: 'LinkedIn',
+                  onPressed: () => onOpen(
+                    'https://www.linkedin.com/company/unitech-solutions-it',
+                  ),
+                  painter: const _LinkedInMarkPainter(),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _MenuSocialButton extends StatelessWidget {
+  const _MenuSocialButton({
+    required this.label,
+    required this.onPressed,
+    required this.painter,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final CustomPainter painter;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.white.withValues(alpha: 0.08),
+        fixedSize: const Size(42, 42),
+        shape: const CircleBorder(),
+      ),
+      icon: CustomPaint(size: const Size(16, 16), painter: painter),
+    );
+  }
+}
+
+class _FacebookMarkPainter extends CustomPainter {
+  const _FacebookMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final side = size.shortestSide;
+    canvas.save();
+    canvas.translate((size.width - side) / 2, (size.height - side) / 2);
+    canvas.scale(side / 22);
+    final path = Path()
+      ..moveTo(15.2, 1.2)
+      ..lineTo(11.4, 1.2)
+      ..cubicTo(8.0, 1.2, 6.6, 3.2, 6.6, 6.4)
+      ..lineTo(6.6, 8.6)
+      ..lineTo(4.2, 8.6)
+      ..lineTo(4.2, 11.6)
+      ..lineTo(6.6, 11.6)
+      ..lineTo(6.6, 20.6)
+      ..lineTo(10.2, 20.6)
+      ..lineTo(10.2, 11.6)
+      ..lineTo(13.0, 11.6)
+      ..lineTo(13.6, 8.6)
+      ..lineTo(10.2, 8.6)
+      ..lineTo(10.2, 6.8)
+      ..cubicTo(10.2, 5.8, 10.5, 5.0, 11.8, 5.0)
+      ..lineTo(15.2, 5.0)
+      ..close();
+    canvas.drawPath(path, Paint()..color = Colors.white);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _FacebookMarkPainter oldDelegate) => false;
+}
+
+class _InstagramMarkPainter extends CustomPainter {
+  const _InstagramMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(rect, paint);
+    canvas.drawCircle(size.center(Offset.zero), size.width * 0.22, paint);
+    canvas.drawCircle(
+      Offset(size.width * 0.74, size.height * 0.26),
+      1.1,
+      Paint()..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _InstagramMarkPainter oldDelegate) => false;
+}
+
+class _LinkedInMarkPainter extends CustomPainter {
+  const _LinkedInMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
+        const Radius.circular(2),
+      ),
+      paint,
+    );
+    final text = TextPainter(
+      text: const TextSpan(
+        text: 'in',
+        style: TextStyle(
+          fontFamily: AppTypography.fontFamily,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    text.paint(
+      canvas,
+      Offset((size.width - text.width) / 2, (size.height - text.height) / 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LinkedInMarkPainter oldDelegate) => false;
 }
 
 class _V2NavLink extends StatelessWidget {
@@ -524,6 +711,7 @@ class _V2NavLink extends StatelessWidget {
         minimumSize: const Size(44, 36),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: const StadiumBorder(),
         textStyle: const TextStyle(
           fontFamily: AppTypography.fontFamily,
           fontWeight: FontWeight.w400,
@@ -680,15 +868,17 @@ class _V2Hero extends StatelessWidget {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 460),
                     child: Text(
-                      'Manage orders, inventory, customers and payments,\nand your team, with a dedicated Sales Rep App.',
+                      sideBySide
+                          ? 'Manage orders, inventory, customers and payments,\nand your team, with a dedicated Sales Rep App.'
+                          : 'Manage orders, inventory,\ncustomers and payments, and your team,\nwith a dedicated Sales Rep App.',
                       textAlign: sideBySide
                           ? TextAlign.start
                           : TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: AppTypography.fontFamily,
-                        fontSize: 18,
+                        fontSize: sideBySide ? 18 : 15,
                         height: 1.5,
-                        color: Color(0xFFDDD6F2),
+                        color: const Color(0xFFDDD6F2),
                       ),
                     ),
                   ),
@@ -705,8 +895,8 @@ class _V2Hero extends StatelessWidget {
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF16141F),
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          minimumSize: const Size(0, 56),
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
                           shape: const StadiumBorder(),
                           textStyle: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
@@ -721,8 +911,8 @@ class _V2Hero extends StatelessWidget {
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF5B3AD6),
                           foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          minimumSize: const Size(0, 56),
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
                           shape: const StadiumBorder(),
                           textStyle: const TextStyle(
                             fontFamily: AppTypography.fontFamily,
@@ -737,7 +927,10 @@ class _V2Hero extends StatelessWidget {
                 ],
               );
 
-              final phone = V2HeroShowcase(width: sideBySide ? 320 : 270);
+              final phone = V2HeroShowcase(
+                width: sideBySide ? 320 : 270,
+                compact: !sideBySide,
+              );
 
               return ClipRRect(
                 borderRadius: BorderRadius.circular(28),
@@ -798,9 +991,9 @@ class _V2Hero extends StatelessWidget {
                       Padding(
                         padding: EdgeInsets.fromLTRB(
                           inner,
-                          sideBySide ? 156 : 108,
+                          sideBySide ? 156 : 112,
                           inner,
-                          sideBySide ? 168 : 56,
+                          sideBySide ? 168 : 72,
                         ),
                         child: sideBySide
                             ? Row(
@@ -820,7 +1013,7 @@ class _V2Hero extends StatelessWidget {
                             : Column(
                                 children: [
                                   copy,
-                                  const SizedBox(height: 28),
+                                  const SizedBox(height: 56),
                                   phone,
                                 ],
                               ),
@@ -928,10 +1121,7 @@ class _V2LogoMarqueeState extends State<_V2LogoMarquee>
       key: key,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final logo in _logos) ...[
-          logo,
-          const SizedBox(width: 88),
-        ],
+        for (final logo in _logos) ...[logo, const SizedBox(width: 88)],
       ],
     );
   }
@@ -1189,10 +1379,7 @@ class _MarkWordLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const CustomPaint(
-          size: Size(18, 18),
-          painter: _NorthlaneMarkPainter(),
-        ),
+        const CustomPaint(size: Size(18, 18), painter: _NorthlaneMarkPainter()),
         const SizedBox(width: 8),
         Text(
           label,
@@ -1332,7 +1519,11 @@ class _V2Why extends StatelessWidget {
               const gap = 18.0;
               return Column(
                 children: [
-                  for (var start = 0; start < _items.length; start += columns) ...[
+                  for (
+                    var start = 0;
+                    start < _items.length;
+                    start += columns
+                  ) ...[
                     if (start > 0) const SizedBox(height: gap),
                     IntrinsicHeight(
                       child: Row(
@@ -1368,7 +1559,7 @@ class _V2Why extends StatelessWidget {
   }
 }
 
-class _WhyCard extends StatelessWidget {
+class _WhyCard extends StatefulWidget {
   const _WhyCard({
     required this.kind,
     required this.icon,
@@ -1383,67 +1574,90 @@ class _WhyCard extends StatelessWidget {
   final String body;
   final int tone;
 
+  @override
+  State<_WhyCard> createState() => _WhyCardState();
+}
+
+class _WhyCardState extends State<_WhyCard> {
+  bool _hovered = false;
+
+  /// First card is the previous purple shifted slightly toward magenta.
+  /// Last card is unchanged. The four cards between them step through that range.
   static const _gradients = [
-    [Color(0xFFC4A2FF), Color(0xFFB08CF8)],
-    [Color(0xFFA484F2), Color(0xFF9470E8)],
-    [Color(0xFF8A6CE4), Color(0xFF7858D6)],
-    [Color(0xFF7058D0), Color(0xFF5E44C2)],
-    [Color(0xFF5844B8), Color(0xFF4634A4)],
+    [Color(0xFF9E64DA), Color(0xFF8C50CC)],
+    [Color(0xFF8C5ACE), Color(0xFF7945BD)],
+    [Color(0xFF7B4FC3), Color(0xFF663AAD)],
+    [Color(0xFF6945B7), Color(0xFF522E9E)],
+    [Color(0xFF583AAC), Color(0xFF3F238E)],
     [Color(0xFF4630A0), Color(0xFF2C187F)],
   ];
 
+  List<Color> get _colors {
+    final base = _gradients[widget.tone.clamp(0, _gradients.length - 1)];
+    if (!_hovered) return base;
+    return [
+      for (final color in base)
+        Color.lerp(color, const Color(0xFF120A28), 0.16)!,
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    assert(icon.codePoint > 0);
-    final colors = _gradients[tone.clamp(0, _gradients.length - 1)];
-    return Container(
-      padding: const EdgeInsets.all(36),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: colors,
+    assert(widget.icon.codePoint > 0);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.all(36),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: _colors,
+          ),
+          borderRadius: BorderRadius.circular(14),
         ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 84,
-            height: 84,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: Color(0x12000000),
-              shape: BoxShape.circle,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 84,
+              height: 84,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Color(0x12000000),
+                shape: BoxShape.circle,
+              ),
+              child: V2GlassIcon(
+                kind: widget.kind,
+                size: widget.kind == V2GlassIconKind.team ? 70 : 46,
+              ),
             ),
-            child: V2GlassIcon(
-              kind: kind,
-              size: kind == V2GlassIconKind.team ? 70 : 46,
+            const SizedBox(height: 28),
+            Text(
+              widget.title,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 26,
+                height: 1.25,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
             ),
-          ),
-          const SizedBox(height: 28),
-          Text(
-            title,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 26,
-              height: 1.25,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
+            const SizedBox(height: 8),
+            Text(
+              widget.body,
+              style: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
+                fontSize: 18,
+                height: 1.4,
+                color: Color(0xFFE4DCF8),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            style: const TextStyle(
-              fontFamily: AppTypography.fontFamily,
-              fontSize: 18,
-              height: 1.4,
-              color: Color(0xFFE4DCF8),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1466,33 +1680,33 @@ class _V2Audiences extends StatelessWidget {
             _V2Inset(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 112),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _AudienceHeading(),
-                      SizedBox(height: 16),
-                      ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: 640),
-                        child: Text(
-                          'Sello supports businesses that manage products, customer orders, inventory and collections every day.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontSize: 16,
-                            height: 1.5,
-                            color: Color(0xFFF3EEFF),
-                          ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _AudienceHeading(),
+                    SizedBox(height: 16),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: 640),
+                      child: Text(
+                        'Sello supports businesses that manage products, customer orders, inventory and collections every day.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 16,
+                          height: 1.5,
+                          color: Color(0xFFF3EEFF),
                         ),
                       ),
-                      const SizedBox(height: 52),
-                      const _AudienceGrid(),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 52),
+                    const _AudienceGrid(),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
     );
   }
 }
@@ -1617,52 +1831,52 @@ class _AudienceTile extends StatelessWidget {
               border: Border.all(color: Colors.white.withValues(alpha: 0.42)),
             ),
             child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final height = (constraints.maxWidth * 0.86).clamp(
-                  196.0,
-                  268.0,
-                );
-                return SizedBox(
-                  height: height,
-                  child: CustomPaint(
-                    painter: _AudienceArtPainter(kind),
-                    child: const SizedBox.expand(),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final height = (constraints.maxWidth * 0.86).clamp(
+                      196.0,
+                      268.0,
+                    );
+                    return SizedBox(
+                      height: height,
+                      child: CustomPaint(
+                        painter: _AudienceArtPainter(kind),
+                        child: const SizedBox.expand(),
+                      ),
+                    );
+                  },
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 2, 22, 26),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tone.title,
+                        style: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 18,
+                          height: 1.25,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        tone.body,
+                        style: const TextStyle(
+                          fontFamily: AppTypography.fontFamily,
+                          fontSize: 15,
+                          height: 1.45,
+                          color: Color(0xFFD5CEE6),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 2, 22, 26),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tone.title,
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 18,
-                      height: 1.25,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    tone.body,
-                    style: const TextStyle(
-                      fontFamily: AppTypography.fontFamily,
-                      fontSize: 15,
-                      height: 1.45,
-                      color: Color(0xFFD5CEE6),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
             ),
           ),
         ),
@@ -1855,11 +2069,7 @@ class _AudienceArtPainter extends CustomPainter {
     canvas.rotate(-0.12);
     _rrect(
       canvas,
-      Rect.fromCenter(
-        center: Offset.zero,
-        width: w * 0.42,
-        height: h * 0.46,
-      ),
+      Rect.fromCenter(center: Offset.zero, width: w * 0.42, height: h * 0.46),
       14,
       tone.base,
     );
@@ -1933,11 +2143,7 @@ class _AudienceArtPainter extends CustomPainter {
     canvas.rotate(0.08);
     _rrect(
       canvas,
-      Rect.fromCenter(
-        center: Offset.zero,
-        width: w * 0.34,
-        height: h * 0.40,
-      ),
+      Rect.fromCenter(center: Offset.zero, width: w * 0.34, height: h * 0.40),
       12,
       tone.soft.withValues(alpha: 0.98),
     );
@@ -1983,11 +2189,7 @@ class _AudienceArtPainter extends CustomPainter {
 
   void _wheel(Canvas canvas, Offset center, double radius, _AudienceTone tone) {
     canvas.drawCircle(center, radius, Paint()..color = tone.ink);
-    canvas.drawCircle(
-      center,
-      radius * 0.42,
-      Paint()..color = tone.soft,
-    );
+    canvas.drawCircle(center, radius * 0.42, Paint()..color = tone.soft);
   }
 
   void _rrect(Canvas canvas, Rect rect, double radius, Color color) {
@@ -2017,47 +2219,81 @@ class _V2Team extends StatelessWidget {
         ),
       ),
       child: _V2Shell(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 900;
-          final gap = 16.0;
-          final topHeight = wide ? 500.0 : 540.0;
-          final bottomHeight = wide ? 440.0 : 500.0;
-          final bento = wide
-              ? SizedBox(
-                  height: topHeight + gap + bottomHeight,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 900;
+            final gap = 16.0;
+            final topHeight = wide ? 500.0 : 540.0;
+            final bottomHeight = wide ? 440.0 : 500.0;
+            final bento = wide
+                ? SizedBox(
+                    height: topHeight + gap + bottomHeight,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 12,
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                height: topHeight,
+                                child: const _TeamPhotoCard(
+                                  asset: 'assets/brand/v2_team_owners.jpg',
+                                  title: 'Owner & Manager',
+                                  body:
+                                      'See the whole business at once, and keep day-to-day\noperations, people and performance in view.',
+                                ),
+                              ),
+                              SizedBox(height: gap),
+                              SizedBox(
+                                height: bottomHeight,
+                                child: const _TeamPurpleCard(
+                                  asset: 'assets/brand/v2_team_store.png',
+                                  title: 'Store & Sales In-charge',
+                                  body:
+                                      'Run daily sales, stock and the shop floor, and\nkeep inventory responsibilities clear for the team.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: gap),
+                        const Expanded(
+                          flex: 11,
+                          child: _TeamPortraitCard(
+                            asset: 'assets/brand/v2_team_sales.jpg',
+                            title: 'Sales Representative',
+                            body:
+                                'Handle customer visits, order taking and collections,\nwhile staying connected to the business.',
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
                     children: [
-                      Expanded(
-                        flex: 12,
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: topHeight,
-                              child: const _TeamPhotoCard(
-                                asset: 'assets/brand/v2_team_owners.jpg',
-                                title: 'Owner & Manager',
-                                body:
-                                    'See the whole business at once, and keep day-to-day\noperations, people and performance in view.',
-                              ),
-                            ),
-                            SizedBox(height: gap),
-                            SizedBox(
-                              height: bottomHeight,
-                              child: const _TeamPurpleCard(
-                                asset: 'assets/brand/v2_team_store.png',
-                                title: 'Store & Sales In-charge',
-                                body:
-                                    'Run daily sales, stock and the shop floor, and\nkeep inventory responsibilities clear for the team.',
-                              ),
-                            ),
-                          ],
+                      SizedBox(
+                        height: topHeight,
+                        child: const _TeamPhotoCard(
+                          asset: 'assets/brand/v2_team_owners.jpg',
+                          title: 'Owner & Manager',
+                          body:
+                              'See the whole business at once, and keep day-to-day\noperations, people and performance in view.',
                         ),
                       ),
-                      SizedBox(width: gap),
-                      const Expanded(
-                        flex: 11,
+                      SizedBox(height: gap),
+                      SizedBox(
+                        height: bottomHeight,
+                        child: const _TeamPurpleCard(
+                          asset: 'assets/brand/v2_team_store.png',
+                          title: 'Store & Sales In-charge',
+                          body:
+                              'Run daily sales, stock and the shop floor, and\nkeep inventory responsibilities clear for the team.',
+                        ),
+                      ),
+                      SizedBox(height: gap),
+                      const SizedBox(
+                        height: 640,
                         child: _TeamPortraitCard(
                           asset: 'assets/brand/v2_team_sales.jpg',
                           title: 'Sales Representative',
@@ -2066,79 +2302,47 @@ class _V2Team extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    SizedBox(
-                      height: topHeight,
-                      child: const _TeamPhotoCard(
-                        asset: 'assets/brand/v2_team_owners.jpg',
-                        title: 'Owner & Manager',
-                        body:
-                            'See the whole business at once, and keep day-to-day\noperations, people and performance in view.',
-                      ),
-                    ),
-                    SizedBox(height: gap),
-                    SizedBox(
-                      height: bottomHeight,
-                      child: const _TeamPurpleCard(
-                        asset: 'assets/brand/v2_team_store.png',
-                        title: 'Store & Sales In-charge',
-                        body: 'Run daily sales, stock and the shop floor, and\nkeep inventory responsibilities clear for the team.',
-                      ),
-                    ),
-                    SizedBox(height: gap),
-                    const SizedBox(
-                      height: 640,
-                      child: _TeamPortraitCard(
-                        asset: 'assets/brand/v2_team_sales.jpg',
-                        title: 'Sales Representative',
-                        body: 'Handle customer visits, order taking and collections,\nwhile staying connected to the business.',
-                      ),
-                    ),
-                  ],
-                );
-          return Column(
-            children: [
-              const Text(
-                'THE TEAM',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: 12,
-                  height: 1.2,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.8,
-                  color: Color(0xFFB9A6FF),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Your entire team, working in sync.',
-                textAlign: TextAlign.center,
-                style: _v2Heading2.copyWith(fontSize: wide ? 48 : 34),
-              ),
-              const SizedBox(height: 14),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: const Text(
-                  'Give everyone the access and tools they need to do their job, while keeping business operations connected.',
+                  );
+            return Column(
+              children: [
+                const Text(
+                  'THE TEAM',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontFamily: AppTypography.fontFamily,
-                    fontSize: 16,
-                    height: 1.5,
-                    color: Color(0xFFC4BDD6),
+                    fontSize: 12,
+                    height: 1.2,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 1.8,
+                    color: Color(0xFFB9A6FF),
                   ),
                 ),
-              ),
-              const SizedBox(height: 48),
-              bento,
-            ],
-          );
-        },
-      ),
+                const SizedBox(height: 16),
+                Text(
+                  'Your entire team, working in sync.',
+                  textAlign: TextAlign.center,
+                  style: _v2Heading2.copyWith(fontSize: wide ? 48 : 34),
+                ),
+                const SizedBox(height: 14),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: const Text(
+                    'Give everyone the access and tools they need to do their job, while keeping business operations connected.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTypography.fontFamily,
+                      fontSize: 16,
+                      height: 1.5,
+                      color: Color(0xFFC4BDD6),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 48),
+                bento,
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -2166,9 +2370,8 @@ class _TeamPhotoCard extends StatelessWidget {
             asset,
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
-            errorBuilder: (_, _, _) => const ColoredBox(
-              color: Color(0xFF241C3A),
-            ),
+            errorBuilder: (_, _, _) =>
+                const ColoredBox(color: Color(0xFF241C3A)),
           ),
           const DecoratedBox(
             decoration: BoxDecoration(
@@ -2555,97 +2758,97 @@ class _V2Closing extends StatelessWidget {
   Widget build(BuildContext context) {
     return _V2Shell(
       padding: const EdgeInsets.fromLTRB(0, 72, 0, 28),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 720;
-            return SizedBox(
-              width: constraints.maxWidth,
-              child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: Stack(
-              children: [
-                const Positioned.fill(
-                  child: CustomPaint(painter: _ClosingAtmospherePainter()),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    wide ? 64 : 24,
-                    wide ? 112 : 72,
-                    wide ? 64 : 24,
-                    wide ? 108 : 68,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 720;
+          return SizedBox(
+            width: constraints.maxWidth,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Stack(
+                children: [
+                  const Positioned.fill(
+                    child: CustomPaint(painter: _ClosingAtmospherePainter()),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          'Bring your business operations together.',
-                          textAlign: TextAlign.center,
-                          style: _v2Heading2.copyWith(
-                            fontSize: wide ? 48 : 34,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const SizedBox(
-                        width: double.infinity,
-                        child: Text(
-                          'Manage products, customers, orders and your team — all in one place with Sello.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: AppTypography.fontFamily,
-                            fontSize: 16,
-                            height: 1.5,
-                            fontWeight: FontWeight.w400,
-                            color: Color(0xFFE4DCF8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          _V2GlowButton(
-                            label: 'Get started with Sello',
-                            onPressed: onGetStarted,
-                            height: 54,
-                          ),
-                          OutlinedButton(
-                            onPressed: onTalk,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.04,
-                              ),
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.28),
-                              ),
-                              minimumSize: const Size(48, 54),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              shape: const StadiumBorder(),
-                              textStyle: const TextStyle(
-                                fontFamily: AppTypography.fontFamily,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 14,
-                              ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      wide ? 64 : 24,
+                      wide ? 112 : 72,
+                      wide ? 64 : 24,
+                      wide ? 108 : 68,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            'Bring your business operations together.',
+                            textAlign: TextAlign.center,
+                            style: _v2Heading2.copyWith(
+                              fontSize: wide ? 48 : 34,
                             ),
-                            child: const Text('Talk to our team'),
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(height: 16),
+                        const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'Manage products, customers, orders and your team — all in one place with Sello.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontFamily: AppTypography.fontFamily,
+                              fontSize: 16,
+                              height: 1.5,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFFE4DCF8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _V2GlowButton(
+                              label: 'Get started with Sello',
+                              onPressed: onGetStarted,
+                              height: 54,
+                            ),
+                            OutlinedButton(
+                              onPressed: onTalk,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.04,
+                                ),
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.28),
+                                ),
+                                minimumSize: const Size(48, 54),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                shape: const StadiumBorder(),
+                                textStyle: const TextStyle(
+                                  fontFamily: AppTypography.fontFamily,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              child: const Text('Talk to our team'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-            );
+          );
         },
       ),
     );
@@ -2730,6 +2933,7 @@ class _V2Footer extends StatelessWidget {
     required this.onSignIn,
     required this.onEmail,
     required this.onPhone,
+    required this.onOpen,
     required this.email,
     required this.phoneLabel,
   });
@@ -2743,6 +2947,7 @@ class _V2Footer extends StatelessWidget {
   final VoidCallback onSignIn;
   final VoidCallback onEmail;
   final VoidCallback onPhone;
+  final Future<void> Function(String uri) onOpen;
   final String email;
   final String phoneLabel;
 
@@ -2785,6 +2990,7 @@ class _V2Footer extends StatelessWidget {
                 ),
               ],
             );
+            final socials = _FooterSocials(onOpen: onOpen);
             final explore = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2799,30 +3005,10 @@ class _V2Footer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const _FooterLabel('Contact'),
-                const Text(
-                  'Sello by Unitech Solutions',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 16,
-                    height: 2,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFFE6E1F4),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                const _FooterLine('Sello by Unitech Solutions'),
                 _FooterLink(label: email, onPressed: onEmail),
                 _FooterLink(label: phoneLabel, onPressed: onPhone),
-                const SizedBox(height: 8),
-                const Text(
-                  '207 Saranankara Road, Dehiwala.',
-                  style: TextStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 16,
-                    height: 2,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFFE6E1F4),
-                  ),
-                ),
+                const _FooterLine('207 Saranankara Road, Dehiwala.'),
               ],
             );
             final columns = stacked
@@ -2830,28 +3016,40 @@ class _V2Footer extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       brand,
+                      const SizedBox(height: 20),
+                      socials,
                       const SizedBox(height: 40),
                       explore,
                       const SizedBox(height: 40),
                       contact,
                     ],
                   )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 5, child: brand),
-                      const SizedBox(width: 32),
-                      Expanded(flex: 3, child: explore),
-                      const SizedBox(width: 32),
-                      Expanded(flex: 4, child: contact),
-                    ],
+                : IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: Stack(
+                            children: [
+                              brand,
+                              Positioned(left: 0, bottom: 0, child: socials),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 32),
+                        Expanded(flex: 3, child: explore),
+                        const SizedBox(width: 32),
+                        Expanded(flex: 4, child: contact),
+                      ],
+                    ),
                   );
             return Column(
               children: [
                 Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 880),
+                    constraints: const BoxConstraints(maxWidth: _v2Max * 8 / 12),
                     child: columns,
                   ),
                 ),
@@ -2881,6 +3079,74 @@ class _V2Footer extends StatelessWidget {
   }
 }
 
+class _FooterSocials extends StatelessWidget {
+  const _FooterSocials({required this.onOpen});
+
+  final Future<void> Function(String uri) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _FooterLink.height,
+      child: Row(
+        children: [
+          _FooterSocialButton(
+            label: 'Facebook',
+            onPressed: () => onOpen('https://facebook.com/unitechsolutions.pro'),
+            painter: const _FacebookMarkPainter(),
+          ),
+          const SizedBox(width: 10),
+          _FooterSocialButton(
+            label: 'Instagram',
+            onPressed: () =>
+                onOpen('https://www.instagram.com/unitech_solutions_it'),
+            painter: const _InstagramMarkPainter(),
+          ),
+          const SizedBox(width: 10),
+          _FooterSocialButton(
+            label: 'LinkedIn',
+            onPressed: () =>
+                onOpen('https://www.linkedin.com/company/unitech-solutions-it'),
+            painter: const _LinkedInMarkPainter(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FooterSocialButton extends StatelessWidget {
+  const _FooterSocialButton({
+    required this.label,
+    required this.onPressed,
+    required this.painter,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final CustomPainter painter;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.white.withValues(alpha: 0.08),
+        fixedSize: const Size(32, 32),
+        minimumSize: const Size(32, 32),
+        maximumSize: const Size(32, 32),
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        shape: const CircleBorder(),
+      ),
+      icon: CustomPaint(size: const Size(14, 14), painter: painter),
+    );
+  }
+}
+
 class _FooterLabel extends StatelessWidget {
   const _FooterLabel(this.label);
 
@@ -2904,32 +3170,57 @@ class _FooterLabel extends StatelessWidget {
   }
 }
 
+class _FooterLine extends StatelessWidget {
+  const _FooterLine(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _FooterLink.height,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(label, style: _FooterLink.textStyle),
+      ),
+    );
+  }
+}
+
 class _FooterLink extends StatelessWidget {
   const _FooterLink({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
 
+  static const height = 40.0;
+  static const textStyle = TextStyle(
+    fontFamily: AppTypography.fontFamily,
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+    height: 1.2,
+    color: Color(0xFFE6E1F4),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFFC9C3D6),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          minimumSize: const Size(44, 36),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          alignment: Alignment.centerLeft,
-          textStyle: const TextStyle(
-            fontFamily: AppTypography.fontFamily,
-            fontSize: 16,
-            fontWeight: FontWeight.w400,
-            height: 2,
-          ),
+    return SizedBox(
+      height: height,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFFC9C3D6),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(0, height),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            alignment: Alignment.centerLeft,
+            overlayColor: Colors.transparent,
+            textStyle: textStyle.copyWith(color: const Color(0xFFC9C3D6)),
+          ).copyWith(splashFactory: NoSplash.splashFactory),
+          child: Text(label),
         ),
-        child: Text(label),
       ),
     );
   }

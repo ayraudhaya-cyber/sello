@@ -8,9 +8,12 @@ import 'package:sello/features/marketing/presentation/marketing_v2_glass_icons.d
 
 /// Light phone mock used in the hero, styled like a device screenshot.
 class V2HeroShowcase extends StatelessWidget {
-  const V2HeroShowcase({super.key, this.width = 286});
+  const V2HeroShowcase({super.key, this.width = 286, this.compact = false});
 
   final double width;
+
+  /// Tighter device corners for the stacked phone layout.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -53,14 +56,17 @@ class V2HeroShowcase extends StatelessWidget {
                       top: desktopTop,
                       width: desktopW,
                       height: desktopH,
-                      child: V2DashboardFrame(height: desktopH),
+                      child: V2DashboardFrame(
+                        height: desktopH,
+                        compact: compact,
+                      ),
                     ),
                     Positioned(
                       right: 0,
                       top: 0,
                       width: phoneW,
                       height: phoneH,
-                      child: _V2HeroPhone(width: phoneW),
+                      child: _V2HeroPhone(width: phoneW, compact: compact),
                     ),
                     Positioned(
                       left: desktopW * 0.62,
@@ -88,7 +94,7 @@ class V2HeroShowcase extends StatelessWidget {
                       ),
                     ),
                     Positioned(
-                      right: -64,
+                      right: compact ? 12 : -64,
                       top: phoneH * 0.66,
                       child: const _HeroGlassChip(
                         'Stock & Orders',
@@ -215,9 +221,10 @@ class _HeroGlassChipState extends State<_HeroGlassChip>
 }
 
 class _V2HeroPhone extends StatelessWidget {
-  const _V2HeroPhone({required this.width});
+  const _V2HeroPhone({required this.width, this.compact = false});
 
   final double width;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -227,11 +234,14 @@ class _V2HeroPhone extends StatelessWidget {
       child: Container(
         width: width,
         height: width * 18 / 9,
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.all(compact ? 4 : 8),
         decoration: BoxDecoration(
           color: const Color(0xFF0A0A0C),
-          borderRadius: BorderRadius.circular(36),
-          border: Border.all(color: const Color(0xFF2A2A30), width: 1.5),
+          borderRadius: BorderRadius.circular(compact ? 14 : 36),
+          border: Border.all(
+            color: const Color(0xFF2A2A30),
+            width: compact ? 1 : 1.5,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
@@ -241,7 +251,7 @@ class _V2HeroPhone extends StatelessWidget {
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(compact ? 10 : 28),
           child: ColoredBox(
             color: const Color(0xFFF7F6FB),
             child: Padding(
@@ -808,9 +818,10 @@ class _NavItem extends StatelessWidget {
 }
 
 class V2DashboardFrame extends StatelessWidget {
-  const V2DashboardFrame({super.key, this.height = 420});
+  const V2DashboardFrame({super.key, this.height = 420, this.compact = false});
 
   final double height;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -819,7 +830,7 @@ class V2DashboardFrame extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A0C),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(compact ? 8 : 22),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.28),
@@ -829,7 +840,7 @@ class V2DashboardFrame extends StatelessWidget {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(compact ? 5 : 14),
         child: const FittedBox(
           fit: BoxFit.cover,
           alignment: Alignment.topLeft,
